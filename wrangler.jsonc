@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "xivix-ai-core",
+  "compatibility_date": "2026-01-21",
+  "pages_build_output_dir": "./dist",
+  "compatibility_flags": ["nodejs_compat"],
+  
+  // Environment variables (secrets should be set via wrangler secret)
+  "vars": {
+    "XIVIX_VERSION": "1.0.0",
+    "AI_MODEL": "gemini-2.5-flash"
+  },
+
+  // D1 Database for users, stores, logs
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "xivix-production",
+      "database_id": "placeholder-replace-after-creation"
+    }
+  ],
+
+  // KV Namespace for session & conversation context
+  "kv_namespaces": [
+    {
+      "binding": "KV",
+      "id": "placeholder-kv-id"
+    }
+  ],
+
+  // R2 Bucket for image storage
+  "r2_buckets": [
+    {
+      "binding": "R2",
+      "bucket_name": "xivix-images"
+    }
+  ]
+}
