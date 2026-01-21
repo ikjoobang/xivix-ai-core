@@ -50,6 +50,20 @@ app.use('*', async (c, next) => {
 // Static files from public/static
 app.use('/static/*', serveStatic({ root: './' }));
 
+// Favicon
+app.get('/favicon.svg', (c) => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="#D4AF37"/><text x="50" y="65" font-size="50" font-weight="bold" font-family="Arial" fill="#000" text-anchor="middle">X</text></svg>`;
+  return c.body(svg, 200, {
+    'Content-Type': 'image/svg+xml',
+    'Cache-Control': 'public, max-age=86400'
+  });
+});
+
+app.get('/favicon.ico', (c) => {
+  // Redirect to SVG favicon
+  return c.redirect('/favicon.svg', 301);
+});
+
 // ============ Routes ============
 
 // Mount webhook routes (네이버 톡톡)
