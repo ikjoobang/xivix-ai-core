@@ -456,6 +456,7 @@ api.post('/onboarding/request', async (c) => {
     owner_name: string;
     owner_phone: string;
     business_type?: string;
+    naver_talktalk_id?: string;
   };
   
   if (!data.store_name || !data.owner_name || !data.owner_phone) {
@@ -468,19 +469,31 @@ api.post('/onboarding/request', async (c) => {
   
   try {
     const result = await c.env.DB.prepare(`
-      INSERT INTO xivix_stores (user_id, store_name, owner_name, owner_phone, business_type, onboarding_status, is_active)
-      VALUES (1, ?, ?, ?, ?, 'pending', 0)
+      INSERT INTO xivix_stores (user_id, store_name, owner_name, owner_phone, business_type, naver_talktalk_id, onboarding_status, is_active)
+      VALUES (1, ?, ?, ?, ?, ?, 'pending', 0)
     `).bind(
       data.store_name,
       data.owner_name,
       data.owner_phone,
-      data.business_type || '기타'
+      data.business_type || '기타',
+      data.naver_talktalk_id || null
     ).run();
     
     const storeId = result.meta.last_row_id;
     
-    // TODO: 카카오톡 알림 발송 (솔라피)
-    // await sendKakaoNotification(...)
+    // 마스터에게 카카오톡 알림 발송 (솔라피)
+    try {
+      await sendNotificationToMaster(c.env, {
+        store_id: storeId as number,
+        store_name: data.store_name,
+        owner_name: data.owner_name,
+        owner_phone: data.owner_phone,
+        naver_talktalk_id: data.naver_talktalk_id || '-'
+      });
+    } catch (notifyError) {
+      // 알림 실패해도 요청은 성공 처리
+      console.error('Notification failed:', notifyError);
+    }
     
     return c.json<ApiResponse>({
       success: true,
@@ -498,6 +511,125 @@ api.post('/onboarding/request', async (c) => {
     }, 500);
   }
 });
+
+// 마스터에게 알림 발송 헬퍼 함수
+async function sendNotificationToMaster(env: Env, data: {
+  store_id: number;
+  store_name: string;
+  owner_name: string;
+  owner_phone: string;
+  naver_talktalk_id: string;
+}) {
+  // 알림 설정에서 마스터 연락처 조회
+  const setting = await env.DB.prepare(
+    'SELECT setting_value FROM xivix_notification_settings WHERE setting_key = ?'
+  ).bind('master_phone').first<{ setting_value: string }>();
+  
+  if (!setting?.setting_value) {
+    // 마스터 연락처 미설정 시 로그만 기록
+    await env.DB.prepare(`
+      INSERT INTO xivix_notification_logs (store_id, notification_type, recipient_phone, recipient_type, content, status)
+      VALUES (?, 'onboarding_request', 'NOT_SET', 'master', ?, 'failed')
+    `).bind(data.store_id, JSON.stringify(data)).run();
+    return;
+  }
+  
+  // 솔라피 API 키 조회
+  const apiKey = await env.DB.prepare(
+    'SELECT setting_value FROM xivix_notification_settings WHERE setting_key = ?'
+  ).bind('solapi_api_key').first<{ setting_value: string }>();
+  
+  const apiSecret = await env.DB.prepare(
+    'SELECT setting_value FROM xivix_notification_settings WHERE setting_key = ?'
+  ).bind('solapi_api_secret').first<{ setting_value: string }>();
+  
+  if (!apiKey?.setting_value || !apiSecret?.setting_value) {
+    // 솔라피 설정 미완료 시 로그만 기록
+    await env.DB.prepare(`
+      INSERT INTO xivix_notification_logs (store_id, notification_type, recipient_phone, recipient_type, content, status, error_message)
+      VALUES (?, 'onboarding_request', ?, 'master', ?, 'failed', 'Solapi API not configured')
+    `).bind(data.store_id, setting.setting_value, JSON.stringify(data)).run();
+    return;
+  }
+  
+  // 메시지 내용 구성
+  const message = `🔔 새로운 연동 요청!
+
+매장: ${data.store_name}
+사장님: ${data.owner_name}
+연락처: ${data.owner_phone}
+톡톡ID: @${data.naver_talktalk_id}
+요청시간: ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
+
+▶ https://xivix-ai-core.pages.dev/master`;
+
+  try {
+    // 솔라피 API 호출 (카카오 알림톡 또는 SMS)
+    const timestamp = Date.now().toString();
+    const signature = await generateSolapiSignature(apiKey.setting_value, apiSecret.setting_value, timestamp);
+    
+    const response = await fetch('https://api.solapi.com/messages/v4/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `HMAC-SHA256 apiKey=${apiKey.setting_value}, date=${timestamp}, salt=${signature.salt}, signature=${signature.signature}`
+      },
+      body: JSON.stringify({
+        message: {
+          to: setting.setting_value.replace(/-/g, ''),
+          from: setting.setting_value.replace(/-/g, ''), // 발신번호 (설정에서 가져오거나 기본값)
+          text: message,
+          type: 'SMS'
+        }
+      })
+    });
+    
+    const result = await response.json() as { groupId?: string; errorCode?: string };
+    
+    // 발송 로그 기록
+    await env.DB.prepare(`
+      INSERT INTO xivix_notification_logs (store_id, notification_type, recipient_phone, recipient_type, content, status, provider_message_id, sent_at)
+      VALUES (?, 'onboarding_request', ?, 'master', ?, ?, ?, CURRENT_TIMESTAMP)
+    `).bind(
+      data.store_id, 
+      setting.setting_value, 
+      message,
+      result.groupId ? 'sent' : 'failed',
+      result.groupId || null
+    ).run();
+    
+  } catch (error) {
+    // 발송 실패 로그
+    await env.DB.prepare(`
+      INSERT INTO xivix_notification_logs (store_id, notification_type, recipient_phone, recipient_type, content, status, error_message)
+      VALUES (?, 'onboarding_request', ?, 'master', ?, 'failed', ?)
+    `).bind(data.store_id, setting.setting_value, message, String(error)).run();
+  }
+}
+
+// 솔라피 서명 생성
+async function generateSolapiSignature(apiKey: string, apiSecret: string, timestamp: string) {
+  const salt = crypto.randomUUID();
+  const message = timestamp + salt;
+  
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(apiSecret);
+  const messageData = encoder.encode(message);
+  
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+  const signatureArray = Array.from(new Uint8Array(signature));
+  const signatureHex = signatureArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  
+  return { salt, signature: signatureHex };
+}
 
 // ============ Master Admin API ============
 
@@ -597,6 +729,132 @@ api.post('/master/activate/:id', async (c) => {
     return c.json<ApiResponse>({
       success: false,
       error: '활성화 처리 중 오류가 발생했습니다',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 사장님에게 카카오톡 알림 발송
+api.post('/master/notify/:id', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  const { notification_type, message } = await c.req.json() as {
+    notification_type: string;
+    message: string;
+  };
+  
+  try {
+    // 매장 정보 조회
+    const store = await c.env.DB.prepare(
+      'SELECT * FROM xivix_stores WHERE id = ?'
+    ).bind(storeId).first<Store>();
+    
+    if (!store) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '매장을 찾을 수 없습니다',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    if (!store.owner_phone) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '사장님 연락처가 없습니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // 솔라피 API 설정 조회
+    const apiKey = await c.env.DB.prepare(
+      'SELECT setting_value FROM xivix_notification_settings WHERE setting_key = ?'
+    ).bind('solapi_api_key').first<{ setting_value: string }>();
+    
+    const apiSecret = await c.env.DB.prepare(
+      'SELECT setting_value FROM xivix_notification_settings WHERE setting_key = ?'
+    ).bind('solapi_api_secret').first<{ setting_value: string }>();
+    
+    const senderNumber = await c.env.DB.prepare(
+      'SELECT setting_value FROM xivix_notification_settings WHERE setting_key = ?'
+    ).bind('sender_number').first<{ setting_value: string }>();
+    
+    if (!apiKey?.setting_value || !apiSecret?.setting_value) {
+      // 솔라피 미설정 시 로그만 기록
+      await c.env.DB.prepare(`
+        INSERT INTO xivix_notification_logs (store_id, notification_type, recipient_phone, recipient_type, content, status, error_message)
+        VALUES (?, ?, ?, 'owner', ?, 'failed', 'Solapi API not configured')
+      `).bind(storeId, notification_type, store.owner_phone, message).run();
+      
+      return c.json<ApiResponse>({
+        success: false,
+        error: '솔라피 API가 설정되지 않았습니다. 알림 설정에서 API 키를 등록해주세요.',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // 솔라피 API 호출
+    try {
+      const timestamp = Date.now().toString();
+      const signature = await generateSolapiSignature(apiKey.setting_value, apiSecret.setting_value, timestamp);
+      
+      const response = await fetch('https://api.solapi.com/messages/v4/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `HMAC-SHA256 apiKey=${apiKey.setting_value}, date=${timestamp}, salt=${signature.salt}, signature=${signature.signature}`
+        },
+        body: JSON.stringify({
+          message: {
+            to: store.owner_phone.replace(/-/g, ''),
+            from: (senderNumber?.setting_value || store.owner_phone).replace(/-/g, ''),
+            text: message,
+            type: 'SMS'
+          }
+        })
+      });
+      
+      const result = await response.json() as { groupId?: string; errorCode?: string; errorMessage?: string };
+      
+      // 발송 로그 기록
+      await c.env.DB.prepare(`
+        INSERT INTO xivix_notification_logs (store_id, notification_type, recipient_phone, recipient_type, content, status, provider_message_id, sent_at)
+        VALUES (?, ?, ?, 'owner', ?, ?, ?, CURRENT_TIMESTAMP)
+      `).bind(
+        storeId, 
+        notification_type, 
+        store.owner_phone, 
+        message,
+        result.groupId ? 'sent' : 'failed',
+        result.groupId || null
+      ).run();
+      
+      if (result.groupId) {
+        return c.json<ApiResponse>({
+          success: true,
+          data: { message: '알림이 발송되었습니다', groupId: result.groupId },
+          timestamp: Date.now()
+        });
+      } else {
+        return c.json<ApiResponse>({
+          success: false,
+          error: result.errorMessage || '발송 실패',
+          timestamp: Date.now()
+        }, 400);
+      }
+      
+    } catch (sendError) {
+      // 발송 실패 로그
+      await c.env.DB.prepare(`
+        INSERT INTO xivix_notification_logs (store_id, notification_type, recipient_phone, recipient_type, content, status, error_message)
+        VALUES (?, ?, ?, 'owner', ?, 'failed', ?)
+      `).bind(storeId, notification_type, store.owner_phone, message, String(sendError)).run();
+      
+      throw sendError;
+    }
+    
+  } catch (error) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '알림 발송 중 오류가 발생했습니다',
       timestamp: Date.now()
     }, 500);
   }

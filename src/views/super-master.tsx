@@ -289,6 +289,10 @@ export function renderSuperMasterDashboard(): string {
                   <p class="text-white/40">요청일</p>
                   <p id="modal-created-at">-</p>
                 </div>
+                <div>
+                  <p class="text-white/40">톡톡 ID</p>
+                  <p id="modal-talktalk-id" class="font-mono gold">-</p>
+                </div>
               </div>
             </div>
             
@@ -338,6 +342,25 @@ export function renderSuperMasterDashboard(): string {
                     <option value="professional">전문적이고 신뢰감있는</option>
                     <option value="casual">편안하고 캐주얼한</option>
                   </select>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 카카오톡 알림 발송 -->
+            <div class="glass rounded-xl p-4 border border-yellow-500/30 bg-yellow-500/5">
+              <h4 class="font-medium mb-3 flex items-center gap-2">
+                <i class="fab fa-facebook-messenger text-yellow-400"></i>
+                사장님께 카카오톡 알림 발송
+              </h4>
+              <div class="space-y-3">
+                <p class="text-sm text-white/60">세팅 완료 후 사장님께 알림을 보내주세요</p>
+                <div class="grid grid-cols-2 gap-2">
+                  <button onclick="sendNotification('setup_complete')" class="py-2 px-3 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-sm hover:bg-emerald-500/30 transition-all">
+                    <i class="fas fa-check-circle mr-1"></i>세팅완료 알림
+                  </button>
+                  <button onclick="sendNotification('custom')" class="py-2 px-3 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg text-sm hover:bg-blue-500/30 transition-all">
+                    <i class="fas fa-edit mr-1"></i>직접 작성
+                  </button>
                 </div>
               </div>
             </div>
@@ -408,7 +431,7 @@ export function renderSuperMasterDashboard(): string {
                   </div>
                   <span class="status-pending text-xs px-3 py-1 rounded-full">대기중</span>
                 </div>
-                <div class="grid grid-cols-3 gap-4 text-sm">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div>
                     <p class="text-white/40">연락처</p>
                     <p>\${store.owner_phone || '-'}</p>
@@ -416,6 +439,10 @@ export function renderSuperMasterDashboard(): string {
                   <div>
                     <p class="text-white/40">업종</p>
                     <p>\${store.business_type || '-'}</p>
+                  </div>
+                  <div>
+                    <p class="text-white/40">톡톡 ID</p>
+                    <p class="font-mono gold">@\${store.naver_talktalk_id || '-'}</p>
                   </div>
                   <div>
                     <p class="text-white/40">요청일</p>
@@ -492,9 +519,10 @@ export function renderSuperMasterDashboard(): string {
         document.getElementById('modal-owner-phone').textContent = store.owner_phone || '-';
         document.getElementById('modal-business-type').textContent = store.business_type || '-';
         document.getElementById('modal-created-at').textContent = new Date(store.created_at).toLocaleDateString('ko-KR');
+        document.getElementById('modal-talktalk-id').textContent = '@' + (store.naver_talktalk_id || '-');
         document.getElementById('modal-webhook').value = 'https://xivix-ai-core.pages.dev/v1/naver/callback/' + storeId;
         document.getElementById('modal-ai-role').value = store.ai_persona || '';
-        document.getElementById('modal-ai-features').value = '';
+        document.getElementById('modal-ai-features').value = store.ai_features || '';
         document.getElementById('modal-ai-tone').value = store.ai_tone || 'professional';
       }
       
@@ -549,6 +577,54 @@ export function renderSuperMasterDashboard(): string {
     
     async function refreshData() {
       await Promise.all([loadPendingStores(), loadAllStores()]);
+    }
+    
+    // 카카오톡 알림 발송
+    async function sendNotification(type) {
+      if (!currentStoreId) {
+        alert('매장을 선택해주세요');
+        return;
+      }
+      
+      const store = stores.find(s => s.id === currentStoreId);
+      if (!store) return;
+      
+      let message = '';
+      
+      if (type === 'setup_complete') {
+        message = \`🎉 AI 지배인 세팅 완료!
+
+\${store.owner_name || '사장'}님,
+\${store.store_name}에 AI 상담사가 배치되었습니다.
+
+지금부터 네이버 톡톡으로 들어오는 문의에 AI가 자동 응답합니다.
+
+문의: XIVIX 고객센터\`;
+      } else if (type === 'custom') {
+        message = prompt('발송할 메시지를 입력하세요:', \`\${store.owner_name || '사장'}님, XIVIX입니다.\`);
+        if (!message) return;
+      }
+      
+      try {
+        const res = await fetch('/api/master/notify/' + currentStoreId, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            notification_type: type === 'setup_complete' ? 'onboarding_complete' : 'custom',
+            message: message
+          })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          alert('알림이 발송되었습니다!');
+        } else {
+          alert('발송 실패: ' + (data.error || '알림 설정을 확인해주세요'));
+        }
+      } catch (e) {
+        alert('네트워크 오류');
+      }
     }
     
     // Initialize
