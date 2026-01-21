@@ -66,7 +66,7 @@ export function renderClientOnboarding(storeId?: number): string {
     }
     .industry-dropdown {
       position: absolute;
-      bottom: 100%; /* 위로 펼침 */
+      bottom: 100%;
       left: 0;
       right: 0;
       max-height: 250px;
@@ -74,7 +74,10 @@ export function renderClientOnboarding(storeId?: number): string {
       z-index: 100;
       display: none;
       margin-bottom: 8px;
-      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+      background: #0a0a0a; /* 불투명 배경 */
+      border: 1px solid rgba(212, 175, 55, 0.3);
+      border-radius: 12px;
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.8);
     }
     .industry-dropdown.show {
       display: block;
