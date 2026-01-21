@@ -208,8 +208,28 @@ export function renderAdminDashboard(): string {
             </h3>
             
             <div class="space-y-6">
+              <!-- 네이버 톡톡 발급 가이드 -->
+              <div class="glass rounded-xl p-6 border border-yellow-500/30 bg-yellow-500/5">
+                <h4 class="font-semibold mb-3 text-yellow-400 flex items-center gap-2">
+                  <i class="fas fa-lightbulb"></i>
+                  네이버 톡톡 API 발급 방법
+                </h4>
+                <ol class="text-sm text-white/70 space-y-2 list-decimal list-inside">
+                  <li>네이버 톡톡 파트너센터 접속: <a href="https://partner.talk.naver.com" target="_blank" class="text-[#007AFF] underline">partner.talk.naver.com</a></li>
+                  <li>사업자 계정으로 로그인</li>
+                  <li><strong>챗봇 API</strong> → <strong>API 설정</strong> 메뉴 이동</li>
+                  <li><strong>발급받기</strong> 클릭하여 Access Token 발급</li>
+                  <li>아래 입력란에 발급받은 정보 입력</li>
+                </ol>
+              </div>
+              
               <div class="glass rounded-xl p-6">
-                <h4 class="font-semibold mb-4">네이버 톡톡 API</h4>
+                <div class="flex items-center justify-between mb-4">
+                  <h4 class="font-semibold">네이버 톡톡 API</h4>
+                  <div id="naver-api-status" class="text-sm px-3 py-1 rounded-full bg-white/10 text-white/40">
+                    <i class="fas fa-circle text-xs mr-1"></i>미연결
+                  </div>
+                </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label class="block text-sm text-white/60 mb-2">Client ID <span class="text-red-400">*</span></label>
@@ -218,17 +238,62 @@ export function renderAdminDashboard(): string {
                   <div>
                     <label class="block text-sm text-white/60 mb-2">Client Secret <span class="text-red-400">*</span></label>
                     <input type="password" class="input-field" placeholder="발급받은 Client Secret" id="naver-client-secret">
+                    <button type="button" onclick="togglePassword('naver-client-secret')" class="text-xs text-white/40 hover:text-white mt-1">
+                      <i class="fas fa-eye"></i> 보기/숨기기
+                    </button>
                   </div>
                   <div class="md:col-span-2">
-                    <label class="block text-sm text-white/60 mb-2">Access Token <span class="text-red-400">*</span></label>
-                    <input type="password" class="input-field" placeholder="보내기 API 토큰" id="naver-access-token">
+                    <label class="block text-sm text-white/60 mb-2">Access Token (보내기 API 토큰) <span class="text-red-400">*</span></label>
+                    <input type="password" class="input-field" placeholder="파트너센터에서 발급받은 토큰" id="naver-access-token">
+                    <button type="button" onclick="togglePassword('naver-access-token')" class="text-xs text-white/40 hover:text-white mt-1">
+                      <i class="fas fa-eye"></i> 보기/숨기기
+                    </button>
+                  </div>
+                  <div class="md:col-span-2">
+                    <label class="block text-sm text-white/60 mb-2">톡톡 계정 ID (선택)</label>
+                    <input type="text" class="input-field" placeholder="예: @beautyskincare" id="naver-talktalk-id">
                   </div>
                 </div>
+                
+                <!-- 연결 테스트 버튼 -->
+                <div class="mt-4 flex items-center gap-3">
+                  <button type="button" onclick="testNaverAPI()" class="btn-primary flex items-center gap-2" id="test-naver-btn">
+                    <i class="fas fa-plug"></i>
+                    연결 테스트
+                  </button>
+                  <span id="naver-test-result" class="text-sm"></span>
+                </div>
+                
+                <!-- Webhook URL 안내 -->
                 <div class="mt-4 p-4 bg-blue-500/10 rounded-xl">
-                  <p class="text-sm text-blue-400">
-                    <i class="fas fa-info-circle mr-2"></i>
-                    Webhook URL (등록 시 자동 생성): <code class="bg-white/10 px-2 py-1 rounded">https://xivix-ai-core.pages.dev/v1/naver/callback/{store_id}</code>
+                  <p class="text-sm text-white/60 mb-2">
+                    <i class="fas fa-info-circle mr-2 text-blue-400"></i>
+                    <strong>파트너센터에 등록할 Webhook URL:</strong>
                   </p>
+                  <div class="flex items-center gap-2">
+                    <code class="flex-1 bg-white/10 px-3 py-2 rounded text-sm text-[#007AFF]" id="webhook-url-display">
+                      https://xivix-ai-core.pages.dev/v1/naver/callback
+                    </code>
+                    <button onclick="copyWebhookURL()" class="btn-secondary px-3 py-2">
+                      <i class="fas fa-copy"></i>
+                    </button>
+                  </div>
+                  <p class="text-xs text-white/40 mt-2">
+                    ※ 파트너센터 > 챗봇 API > 챗봇 설정 > Webhook URL에 위 주소를 등록하세요
+                  </p>
+                </div>
+                
+                <!-- 이벤트 설정 안내 -->
+                <div class="mt-4 p-4 bg-emerald-500/10 rounded-xl">
+                  <p class="text-sm text-white/60 mb-2">
+                    <i class="fas fa-check-circle mr-2 text-emerald-400"></i>
+                    <strong>파트너센터에서 체크할 이벤트:</strong>
+                  </p>
+                  <div class="flex flex-wrap gap-2 mt-2">
+                    <span class="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-sm">✓ send (메시지 전송)</span>
+                    <span class="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-sm">✓ open (채팅방 입장)</span>
+                    <span class="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-sm">✓ leave (채팅방 퇴장)</span>
+                  </div>
                 </div>
               </div>
               
@@ -244,6 +309,9 @@ export function renderAdminDashboard(): string {
                     <input type="password" class="input-field" placeholder="예약 API Key" id="naver-reservation-key">
                   </div>
                 </div>
+                <p class="text-xs text-white/40 mt-3">
+                  ※ 네이버 예약 API는 예약 자동화에 사용됩니다. 필수가 아닙니다.
+                </p>
               </div>
             </div>
           </div>
@@ -957,38 +1025,6 @@ export function renderAdminDashboard(): string {
       }
     }
     
-    async function saveStore() {
-      const storeData = {
-        store_name: document.getElementById('store-name')?.value,
-        business_type: document.getElementById('business-category')?.value,
-        address: document.getElementById('store-address')?.value,
-        phone: document.getElementById('store-phone')?.value,
-        operating_hours: '10:00-21:00',
-        ai_persona: document.getElementById('ai-role-name')?.value + ' (' + document.getElementById('ai-personality')?.value + ')',
-        ai_tone: document.getElementById('ai-formality')?.value,
-        menu_data: JSON.stringify(collectMenuData())
-      };
-      
-      try {
-        const res = await fetch('/api/stores', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(storeData)
-        });
-        const data = await res.json();
-        
-        if (data.success) {
-          alert('업체가 등록되었습니다!');
-          closeSetupWizard();
-          loadStores();
-        } else {
-          alert('등록 실패: ' + (data.error || '알 수 없는 오류'));
-        }
-      } catch (e) {
-        alert('네트워크 오류');
-      }
-    }
-    
     function collectMenuData() {
       const menus = [];
       document.querySelectorAll('.menu-item').forEach(item => {
@@ -1045,8 +1081,160 @@ export function renderAdminDashboard(): string {
       }
     }
     
+    // 비밀번호 보기/숨기기
+    function togglePassword(inputId) {
+      const input = document.getElementById(inputId);
+      input.type = input.type === 'password' ? 'text' : 'password';
+    }
+    
+    // Webhook URL 복사
+    function copyWebhookURL() {
+      const url = document.getElementById('webhook-url-display').textContent.trim();
+      navigator.clipboard.writeText(url).then(() => {
+        alert('Webhook URL이 복사되었습니다!\\n파트너센터에 붙여넣기 하세요.');
+      });
+    }
+    
+    // 네이버 API 연결 테스트
+    async function testNaverAPI() {
+      const clientId = document.getElementById('naver-client-id').value;
+      const clientSecret = document.getElementById('naver-client-secret').value;
+      const accessToken = document.getElementById('naver-access-token').value;
+      
+      if (!accessToken) {
+        alert('Access Token을 입력해주세요.');
+        return;
+      }
+      
+      const btn = document.getElementById('test-naver-btn');
+      const result = document.getElementById('naver-test-result');
+      const status = document.getElementById('naver-api-status');
+      
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 테스트 중...';
+      result.innerHTML = '';
+      
+      try {
+        // 서버에 토큰 유효성 검증 요청
+        const res = await fetch('/api/naver/test-connection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            client_id: clientId,
+            client_secret: clientSecret,
+            access_token: accessToken
+          })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          result.innerHTML = '<span class="text-emerald-400"><i class="fas fa-check-circle mr-1"></i>연결 성공!</span>';
+          status.className = 'text-sm px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400';
+          status.innerHTML = '<i class="fas fa-check-circle text-xs mr-1"></i>연결됨';
+          
+          // 토큰 저장 (로컬 스토리지에 임시 저장)
+          localStorage.setItem('xivix_naver_tokens', JSON.stringify({
+            client_id: clientId,
+            client_secret: clientSecret,
+            access_token: accessToken,
+            talktalk_id: document.getElementById('naver-talktalk-id').value
+          }));
+        } else {
+          result.innerHTML = '<span class="text-red-400"><i class="fas fa-times-circle mr-1"></i>' + (data.error || '연결 실패') + '</span>';
+          status.className = 'text-sm px-3 py-1 rounded-full bg-red-500/20 text-red-400';
+          status.innerHTML = '<i class="fas fa-times-circle text-xs mr-1"></i>연결 실패';
+        }
+      } catch (e) {
+        result.innerHTML = '<span class="text-yellow-400"><i class="fas fa-exclamation-triangle mr-1"></i>토큰이 저장되었습니다. 실제 연동은 업체 등록 후 테스트됩니다.</span>';
+        status.className = 'text-sm px-3 py-1 rounded-full bg-yellow-500/20 text-yellow-400';
+        status.innerHTML = '<i class="fas fa-clock text-xs mr-1"></i>대기중';
+        
+        // 토큰 임시 저장
+        localStorage.setItem('xivix_naver_tokens', JSON.stringify({
+          client_id: clientId,
+          client_secret: clientSecret,
+          access_token: accessToken,
+          talktalk_id: document.getElementById('naver-talktalk-id').value
+        }));
+      }
+      
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-plug"></i> 연결 테스트';
+    }
+    
+    // 업체 저장 시 네이버 토큰도 함께 저장
+    async function saveStore() {
+      const naverTokens = JSON.parse(localStorage.getItem('xivix_naver_tokens') || '{}');
+      
+      const storeData = {
+        store_name: document.getElementById('store-name')?.value,
+        business_type: document.getElementById('business-category')?.value,
+        address: document.getElementById('store-address')?.value,
+        phone: document.getElementById('store-phone')?.value,
+        operating_hours: '10:00-21:00',
+        ai_persona: document.getElementById('ai-role-name')?.value + ' (' + document.getElementById('ai-personality')?.value + ')',
+        ai_tone: document.getElementById('ai-formality')?.value,
+        menu_data: JSON.stringify(collectMenuData()),
+        naver_talktalk_id: naverTokens.talktalk_id || '',
+        naver_client_id: naverTokens.client_id || '',
+        naver_client_secret: naverTokens.client_secret || '',
+        naver_access_token: naverTokens.access_token || ''
+      };
+      
+      if (!storeData.store_name) {
+        alert('매장명을 입력해주세요.');
+        return;
+      }
+      
+      try {
+        const res = await fetch('/api/stores', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(storeData)
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          // 토큰 정보도 별도 저장
+          if (naverTokens.access_token && data.data?.id) {
+            await fetch('/api/stores/' + data.data.id + '/tokens', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                provider: 'naver_talktalk',
+                access_token: naverTokens.access_token,
+                client_id: naverTokens.client_id,
+                client_secret: naverTokens.client_secret
+              })
+            });
+          }
+          
+          localStorage.removeItem('xivix_naver_tokens');
+          alert('업체가 등록되었습니다!\\n\\n📌 다음 단계:\\n1. 네이버 톡톡 파트너센터에서 Webhook URL 등록\\n2. 이벤트 설정 (send/open/leave)\\n3. 실제 메시지로 테스트');
+          closeSetupWizard();
+          loadStores();
+        } else {
+          alert('등록 실패: ' + (data.error || '알 수 없는 오류'));
+        }
+      } catch (e) {
+        alert('네트워크 오류');
+      }
+    }
+    
+    // 페이지 로드 시 저장된 토큰 불러오기
+    function loadSavedTokens() {
+      const saved = JSON.parse(localStorage.getItem('xivix_naver_tokens') || '{}');
+      if (saved.client_id) document.getElementById('naver-client-id').value = saved.client_id;
+      if (saved.client_secret) document.getElementById('naver-client-secret').value = saved.client_secret;
+      if (saved.access_token) document.getElementById('naver-access-token').value = saved.access_token;
+      if (saved.talktalk_id) document.getElementById('naver-talktalk-id').value = saved.talktalk_id;
+    }
+    
     // Initialize
-    document.addEventListener('DOMContentLoaded', loadStores);
+    document.addEventListener('DOMContentLoaded', () => {
+      loadStores();
+    });
   </script>
 </body>
 </html>

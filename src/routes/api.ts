@@ -321,6 +321,132 @@ api.post('/maintenance/cleanup-images', async (c) => {
   });
 });
 
+// ============ 네이버 API 연동 ============
+
+// 네이버 API 연결 테스트
+api.post('/naver/test-connection', async (c) => {
+  const { client_id, client_secret, access_token } = await c.req.json() as {
+    client_id?: string;
+    client_secret?: string;
+    access_token?: string;
+  };
+  
+  if (!access_token) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: 'Access Token이 필요합니다',
+      timestamp: Date.now()
+    }, 400);
+  }
+  
+  try {
+    // 네이버 톡톡 API로 테스트 요청 (실제 메시지 발송 없이 토큰 검증)
+    // 참고: 실제 검증 API가 없으므로 토큰 형식만 확인
+    const isValidFormat = access_token.length > 20;
+    
+    if (isValidFormat) {
+      return c.json<ApiResponse>({
+        success: true,
+        data: {
+          message: '토큰 형식이 유효합니다. 실제 연동은 메시지 발송 시 확인됩니다.',
+          token_length: access_token.length
+        },
+        timestamp: Date.now()
+      });
+    } else {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '토큰 형식이 올바르지 않습니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+  } catch (error) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '연결 테스트 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 매장별 API 토큰 저장
+api.post('/stores/:id/tokens', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  const { provider, access_token, client_id, client_secret, refresh_token, expires_at } = await c.req.json() as {
+    provider: string;
+    access_token?: string;
+    client_id?: string;
+    client_secret?: string;
+    refresh_token?: string;
+    expires_at?: string;
+  };
+  
+  if (!provider || !access_token) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: 'provider와 access_token이 필요합니다',
+      timestamp: Date.now()
+    }, 400);
+  }
+  
+  try {
+    // 기존 토큰이 있으면 업데이트, 없으면 삽입
+    const existing = await c.env.DB.prepare(
+      'SELECT id FROM xivix_api_tokens WHERE store_id = ? AND provider = ?'
+    ).bind(storeId, provider).first();
+    
+    if (existing) {
+      await c.env.DB.prepare(`
+        UPDATE xivix_api_tokens SET
+          access_token = ?,
+          refresh_token = ?,
+          expires_at = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE store_id = ? AND provider = ?
+      `).bind(access_token, refresh_token || null, expires_at || null, storeId, provider).run();
+    } else {
+      await c.env.DB.prepare(`
+        INSERT INTO xivix_api_tokens (store_id, provider, access_token, refresh_token, expires_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).bind(storeId, provider, access_token, refresh_token || null, expires_at || null).run();
+    }
+    
+    // 매장 테이블에도 톡톡 ID 업데이트 (있으면)
+    if (provider === 'naver_talktalk' && client_id) {
+      await c.env.DB.prepare(`
+        UPDATE xivix_stores SET naver_talktalk_id = ? WHERE id = ?
+      `).bind(client_id, storeId).run();
+    }
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: { message: '토큰이 저장되었습니다' },
+      timestamp: Date.now()
+    });
+  } catch (error) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '토큰 저장 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 매장별 API 토큰 조회
+api.get('/stores/:id/tokens', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  const results = await c.env.DB.prepare(
+    'SELECT provider, created_at, updated_at, expires_at FROM xivix_api_tokens WHERE store_id = ?'
+  ).bind(storeId).all();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: results.results,
+    timestamp: Date.now()
+  });
+});
+
 // ============ System Info ============
 
 api.get('/system/info', async (c) => {
