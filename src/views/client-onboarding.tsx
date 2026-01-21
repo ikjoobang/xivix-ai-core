@@ -809,8 +809,128 @@ export function renderClientOnboarding(storeId?: number): string {
               <i class="fas fa-phone mr-2"></i>010-4845-3065
             </a>
           </div>
+          
+          <!-- 사용 설명서 버튼 추가 -->
+          <button onclick="showUserManual()" class="w-full mt-4 py-3 glass rounded-xl text-white/80 hover:bg-white/10 transition-all border border-white/10">
+            <i class="fas fa-book-open mr-2 gold"></i> AI 지배인 200% 활용 가이드 보기
+          </button>
         </div>
       \`;
+      
+      // 100% 완료 시 자동으로 사용 설명서 모달 표시
+      setTimeout(() => {
+        showUserManual();
+      }, 1500);
+    }
+    
+    // 사용 설명서 모달 표시 함수
+    function showUserManual() {
+      // 기존 모달이 있으면 제거
+      const existingModal = document.getElementById('user-manual-modal');
+      if (existingModal) existingModal.remove();
+      
+      const modal = document.createElement('div');
+      modal.id = 'user-manual-modal';
+      modal.className = 'fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto';
+      modal.innerHTML = \`
+        <div class="w-full max-w-lg glass rounded-2xl overflow-hidden animate-fade-in" style="animation: fadeIn 0.3s ease;">
+          <!-- 모달 헤더 -->
+          <div class="px-6 py-4 border-b border-white/10 flex items-center justify-between gold-bg">
+            <div class="flex items-center gap-3">
+              <i class="fas fa-crown text-black text-xl"></i>
+              <h3 class="font-bold text-black text-lg">AI 지배인 200% 활용 가이드</h3>
+            </div>
+            <button onclick="closeUserManual()" class="w-8 h-8 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/30 text-black">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          
+          <!-- 모달 내용 -->
+          <div class="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+            
+            <!-- 핵심 기능 1 -->
+            <div class="glass rounded-xl p-4 border border-emerald-500/30">
+              <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
+                  <i class="fas fa-bolt text-emerald-400"></i>
+                </div>
+                <div>
+                  <h4 class="font-semibold text-emerald-400 mb-1">24/7 초고속 자동 응대</h4>
+                  <p class="text-sm text-white/70">사장님이 주무시는 시간에도 Gemini 2.5 Flash 엔진이 <strong class="gold">1초 내</strong>에 고객 상담을 시작합니다. 단순 문의는 AI가 해결하고 사장님은 예약만 확인하세요.</p>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 핵심 기능 2 -->
+            <div class="glass rounded-xl p-4 border border-blue-500/30">
+              <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+                  <i class="fas fa-camera text-blue-400"></i>
+                </div>
+                <div>
+                  <h4 class="font-semibold text-blue-400 mb-1">이미지 정밀 분석</h4>
+                  <p class="text-sm text-white/70">고객이 보낸 피부, 헤어, 제품 사진을 AI가 <strong class="gold">즉시 판독</strong>합니다. 사진 한 장으로 전문가급 상담이 가능해집니다.</p>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 핵심 기능 3 -->
+            <div class="glass rounded-xl p-4 border border-yellow-500/30">
+              <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center shrink-0">
+                  <i class="fas fa-calendar-check text-yellow-400"></i>
+                </div>
+                <div>
+                  <h4 class="font-semibold text-yellow-400 mb-1">예약 클로징 기술</h4>
+                  <p class="text-sm text-white/70">상담의 끝은 항상 <strong class="gold">'네이버 예약'</strong>입니다. 단순 질문으로 끝날 고객을 실질적인 방문 고객으로 전환합니다.</p>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 핵심 기능 4 -->
+            <div class="glass rounded-xl p-4 border border-purple-500/30">
+              <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center shrink-0">
+                  <i class="fas fa-eye text-purple-400"></i>
+                </div>
+                <div>
+                  <h4 class="font-semibold text-purple-400 mb-1">실시간 개입 모니터링</h4>
+                  <p class="text-sm text-white/70">AI와 고객의 대화가 이상하다면 사장님이 <strong class="gold">언제든 톡톡 앱</strong>에서 직접 대화에 끼어들 수 있습니다.</p>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 안내 메시지 -->
+            <div class="text-center pt-4 border-t border-white/10">
+              <p class="text-sm text-white/50 mb-2">
+                <i class="fas fa-info-circle mr-1"></i>
+                지금부터 AI 지배인이 고객 상담을 시작합니다!
+              </p>
+              <p class="text-xs text-white/30">문의: 010-4845-3065 | © 2026 XIVIX</p>
+            </div>
+          </div>
+          
+          <!-- 모달 푸터 -->
+          <div class="px-6 py-4 border-t border-white/10">
+            <button onclick="closeUserManual()" class="w-full py-3 gold-bg text-black rounded-xl font-bold hover:opacity-90 transition-all">
+              <i class="fas fa-rocket mr-2"></i> 확인했습니다, 시작하기!
+            </button>
+          </div>
+        </div>
+      \`;
+      
+      document.body.appendChild(modal);
+      
+      // 배경 클릭 시 닫기
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeUserManual();
+      });
+    }
+    
+    // 사용 설명서 모달 닫기
+    function closeUserManual() {
+      const modal = document.getElementById('user-manual-modal');
+      if (modal) modal.remove();
     }
     
     // 페이지 떠날 때 폴링 정리
