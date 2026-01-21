@@ -16,7 +16,7 @@
     {
       "binding": "DB",
       "database_name": "xivix-production",
-      "database_id": "placeholder-replace-after-creation"
+      "database_id": "cc1216aa-39ea-47d7-9489-4c2eceb678a2"
     }
   ],
 
@@ -24,7 +24,7 @@
   "kv_namespaces": [
     {
       "binding": "KV",
-      "id": "placeholder-kv-id"
+      "id": "062f582257c24e4cb21da6d5188017b2"
     }
   ],
 
@@ -32,7 +32,7 @@
   "r2_buckets": [
     {
       "binding": "R2",
-      "bucket_name": "xivix-images"
+      "bucket_name": "xivix-final"
     }
   ]
 }
