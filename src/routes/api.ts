@@ -568,38 +568,52 @@ async function sendNotificationToMaster(env: Env, data: {
 ▶ https://xivix-ai-core.pages.dev/master`;
 
   try {
-    // 솔라피 API 호출 (카카오 알림톡 또는 SMS)
-    const timestamp = Date.now().toString();
-    const signature = await generateSolapiSignature(apiKey.setting_value, apiSecret.setting_value, timestamp);
+    // 발신번호 조회
+    const senderNumber = await env.DB.prepare(
+      'SELECT setting_value FROM xivix_notification_settings WHERE setting_key = ?'
+    ).bind('sender_number').first<{ setting_value: string }>();
+    
+    const fromNumber = (senderNumber?.setting_value || '01039880124').replace(/-/g, '');
+    const toNumber = setting.setting_value.replace(/-/g, '');
+    
+    // 솔라피 API 호출 (SMS)
+    const dateISO = new Date().toISOString();
+    const signature = await generateSolapiSignature(apiKey.setting_value, apiSecret.setting_value, dateISO);
+    
+    console.log('Solapi Request:', { from: fromNumber, to: toNumber, date: dateISO });
     
     const response = await fetch('https://api.solapi.com/messages/v4/send', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `HMAC-SHA256 apiKey=${apiKey.setting_value}, date=${timestamp}, salt=${signature.salt}, signature=${signature.signature}`
+        'Authorization': `HMAC-SHA256 apiKey=${apiKey.setting_value}, date=${dateISO}, salt=${signature.salt}, signature=${signature.signature}`
       },
       body: JSON.stringify({
         message: {
-          to: setting.setting_value.replace(/-/g, ''),
-          from: setting.setting_value.replace(/-/g, ''), // 발신번호 (설정에서 가져오거나 기본값)
+          to: toNumber,
+          from: fromNumber,
           text: message,
-          type: 'SMS'
+          type: 'LMS',  // SMS 90byte 제한 → LMS 2000byte
+          subject: '[XIVIX] 새 연동 요청'
         }
       })
     });
     
-    const result = await response.json() as { groupId?: string; errorCode?: string };
+    const result = await response.json() as { groupId?: string; errorCode?: string; errorMessage?: string };
+    
+    console.log('Solapi Response:', JSON.stringify(result));
     
     // 발송 로그 기록
     await env.DB.prepare(`
-      INSERT INTO xivix_notification_logs (store_id, notification_type, recipient_phone, recipient_type, content, status, provider_message_id, sent_at)
-      VALUES (?, 'onboarding_request', ?, 'master', ?, ?, ?, CURRENT_TIMESTAMP)
+      INSERT INTO xivix_notification_logs (store_id, notification_type, recipient_phone, recipient_type, content, status, provider_message_id, error_message, sent_at)
+      VALUES (?, 'onboarding_request', ?, 'master', ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `).bind(
       data.store_id, 
       setting.setting_value, 
       message,
       result.groupId ? 'sent' : 'failed',
-      result.groupId || null
+      result.groupId || null,
+      result.errorMessage || null
     ).run();
     
   } catch (error) {
@@ -612,9 +626,9 @@ async function sendNotificationToMaster(env: Env, data: {
 }
 
 // 솔라피 서명 생성
-async function generateSolapiSignature(apiKey: string, apiSecret: string, timestamp: string) {
+async function generateSolapiSignature(apiKey: string, apiSecret: string, dateISO: string) {
   const salt = crypto.randomUUID();
-  const message = timestamp + salt;
+  const message = dateISO + salt;
   
   const encoder = new TextEncoder();
   const keyData = encoder.encode(apiSecret);

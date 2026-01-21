@@ -437,8 +437,8 @@ export function renderClientOnboarding(storeId?: number): string {
           
           <div class="glass rounded-xl p-4">
             <p class="text-sm text-white/60 mb-2">문의가 필요하시면</p>
-            <a href="tel:010-0000-0000" class="text-lg gold font-medium">
-              <i class="fas fa-phone mr-2"></i>010-0000-0000
+            <a href="tel:010-3988-0124" class="text-lg gold font-medium">
+              <i class="fas fa-phone mr-2"></i>010-3988-0124
             </a>
           </div>
         </div>
