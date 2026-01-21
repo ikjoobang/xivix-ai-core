@@ -497,10 +497,20 @@ export function renderSuperMasterDashboard(): string {
                 </div>
                 \` : ''}
                 <div class="text-xs text-white/30">요청일: \${new Date(store.created_at).toLocaleDateString('ko-KR')}</div>
-                <div class="mt-4 pt-4 border-t border-white/5 flex justify-end">
-                  <button class="px-4 py-2 gold-bg text-black rounded-lg text-sm font-medium hover:opacity-90">
-                    <i class="fas fa-cog mr-1"></i>세팅하기
-                  </button>
+                <div class="mt-4 pt-4 border-t border-white/5 flex justify-between items-center">
+                  <span class="text-xs text-white/40">
+                    상태: <span class="\${store.onboarding_status === 'processing' ? 'text-blue-400' : 'text-yellow-400'}">\${store.onboarding_status === 'processing' ? '세팅 중 75%' : '대기 중 40%'}</span>
+                  </span>
+                  <div class="flex gap-2">
+                    \${store.onboarding_status === 'pending' ? \`
+                      <button onclick="event.stopPropagation(); startProcessing(\${store.id})" class="px-3 py-2 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg text-sm font-medium hover:bg-blue-500/30 transition-all">
+                        <i class="fas fa-play mr-1"></i>세팅 시작
+                      </button>
+                    \` : ''}
+                    <button onclick="event.stopPropagation(); openSetupModal(\${store.id})" class="px-4 py-2 gold-bg text-black rounded-lg text-sm font-medium hover:opacity-90">
+                      <i class="fas fa-cog mr-1"></i>세팅 완료
+                    </button>
+                  </div>
                 </div>
               </div>
             \`).join('');
@@ -757,6 +767,36 @@ export function renderSuperMasterDashboard(): string {
           alert('알림이 발송되었습니다!');
         } else {
           alert('발송 실패: ' + (data.error || '알림 설정을 확인해주세요'));
+        }
+      } catch (e) {
+        alert('네트워크 오류');
+      }
+    }
+    
+    // 세팅 시작 (pending → processing)
+    async function startProcessing(storeId) {
+      try {
+        const res = await fetch('/api/master/status/' + storeId, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'processing' })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          // 성공 애니메이션
+          const btn = event.currentTarget;
+          btn.innerHTML = '<i class="fas fa-check mr-1"></i>진행 중!';
+          btn.classList.add('bg-emerald-500/20', 'text-emerald-400', 'border-emerald-500/30');
+          btn.classList.remove('bg-blue-500/20', 'text-blue-400', 'border-blue-500/30');
+          
+          // 1초 후 새로고침
+          setTimeout(() => {
+            refreshData();
+          }, 1000);
+        } else {
+          alert('상태 변경 실패: ' + (data.error || '알 수 없는 오류'));
         }
       } catch (e) {
         alert('네트워크 오류');

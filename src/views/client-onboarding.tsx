@@ -437,8 +437,8 @@ export function renderClientOnboarding(storeId?: number): string {
           
           <div class="glass rounded-xl p-4">
             <p class="text-sm text-white/60 mb-2">문의가 필요하시면</p>
-            <a href="tel:010-3988-0124" class="text-lg gold font-medium">
-              <i class="fas fa-phone mr-2"></i>010-3988-0124
+            <a href="tel:010-4845-3065" class="text-lg gold font-medium">
+              <i class="fas fa-phone mr-2"></i>010-4845-3065
             </a>
           </div>
         </div>
@@ -700,8 +700,8 @@ export function renderClientOnboarding(storeId?: number): string {
           document.querySelectorAll('.step-content').forEach(el => el.classList.add('hidden'));
           document.getElementById('step-4').classList.remove('hidden');
           
-          // Simulate progress
-          simulateProgress();
+          // 실시간 상태 폴링 시작 (가짜 게이지 대신)
+          startStatusPolling(result.data.id);
         } else {
           alert('요청 실패: ' + (result.error || '잠시 후 다시 시도해주세요'));
           btn.disabled = false;
@@ -714,25 +714,111 @@ export function renderClientOnboarding(storeId?: number): string {
       }
     }
     
-    function simulateProgress() {
-      const steps = [
-        { progress: 20, text: '요청 접수', detail: 'XIVIX 전문가에게 알림을 보냈습니다...' },
-        { progress: 30, text: '확인 중', detail: 'XIVIX 전문가가 요청을 확인하고 있습니다...' },
-        { progress: 40, text: '준비 중', detail: '업종에 맞는 AI 페르소나를 준비 중...' },
-      ];
+    // 실시간 상태 폴링 (3초마다)
+    let currentStoreId = null;
+    let pollingInterval = null;
+    
+    function startStatusPolling(storeId) {
+      currentStoreId = storeId;
       
-      let i = 0;
-      const interval = setInterval(() => {
-        if (i < steps.length) {
-          document.getElementById('progress-bar').style.width = steps[i].progress + '%';
-          document.getElementById('status-text').textContent = steps[i].text;
-          document.getElementById('status-detail').textContent = steps[i].detail;
-          i++;
-        } else {
-          clearInterval(interval);
+      // 초기 상태 표시
+      updateProgressUI(20, '요청 접수', 'XIVIX 전문가에게 알림을 보냈습니다...');
+      
+      // 3초마다 상태 체크
+      pollingInterval = setInterval(async () => {
+        try {
+          const res = await fetch('/api/onboarding/status/' + storeId);
+          const result = await res.json();
+          
+          if (result.success && result.data) {
+            const { progress, statusText, statusDetail, status, is_active, naver_talktalk_id } = result.data;
+            
+            updateProgressUI(progress, statusText, statusDetail);
+            
+            // 완료 시 폴링 중지 및 완료 UI 표시
+            if (status === 'active' || is_active) {
+              clearInterval(pollingInterval);
+              pollingInterval = null;
+              showCompletionUI(naver_talktalk_id);
+            }
+          }
+        } catch (e) {
+          console.error('Status polling error:', e);
         }
       }, 3000);
     }
+    
+    function updateProgressUI(progress, statusText, statusDetail) {
+      const progressBar = document.getElementById('progress-bar');
+      const statusTextEl = document.getElementById('status-text');
+      const statusDetailEl = document.getElementById('status-detail');
+      
+      if (progressBar) progressBar.style.width = progress + '%';
+      if (statusTextEl) statusTextEl.textContent = statusText;
+      if (statusDetailEl) statusDetailEl.textContent = statusDetail;
+    }
+    
+    function showCompletionUI(talktalkId) {
+      const step4 = document.getElementById('step-4');
+      if (!step4) return;
+      
+      // 축하 애니메이션 및 완료 UI
+      step4.innerHTML = \`
+        <div class="text-center py-8">
+          <div class="inline-flex items-center justify-center w-24 h-24 rounded-full bg-emerald-500/20 mb-6 animate-bounce">
+            <i class="fas fa-check-circle text-5xl text-emerald-400"></i>
+          </div>
+          <h2 class="text-3xl font-bold mb-3 gold">🎉 연동 완료!</h2>
+          <p class="text-white/80 mb-6">AI 지배인이 매장에 배치되었습니다!</p>
+          
+          <!-- 완료 상태 -->
+          <div class="glass rounded-xl p-4 mb-6">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm text-white/60">진행 상태</span>
+              <span class="text-sm text-emerald-400 font-bold">✅ 완료!</span>
+            </div>
+            <div class="w-full h-3 bg-white/10 rounded-full overflow-hidden">
+              <div class="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full" style="width: 100%"></div>
+            </div>
+            <p class="text-sm text-emerald-400 mt-2">AI 지배인이 고객 상담을 시작합니다! 🚀</p>
+          </div>
+          
+          <!-- 네이버 톡톡 바로가기 버튼 -->
+          <a href="https://talk.naver.com/ct/\${talktalkId || ''}" target="_blank" 
+             class="block w-full py-4 gold-bg text-black rounded-xl font-bold text-lg hover:opacity-90 transition-all mb-4">
+            <i class="fas fa-comment-dots mr-2"></i> 네이버 톡톡 상담 바로가기
+          </a>
+          
+          <div class="glass rounded-xl p-4 text-left">
+            <p class="text-sm text-white/60 mb-3">다음 단계</p>
+            <div class="space-y-2 text-sm">
+              <div class="flex items-center gap-2 text-white/70">
+                <i class="fas fa-check text-emerald-400"></i>
+                <span>톡톡으로 테스트 메시지를 보내보세요</span>
+              </div>
+              <div class="flex items-center gap-2 text-white/70">
+                <i class="fas fa-check text-emerald-400"></i>
+                <span>AI가 업종에 맞게 자동 응답합니다</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="glass rounded-xl p-4 mt-4">
+            <p class="text-sm text-white/60 mb-2">문의가 필요하시면</p>
+            <a href="tel:010-4845-3065" class="text-lg gold font-medium">
+              <i class="fas fa-phone mr-2"></i>010-4845-3065
+            </a>
+          </div>
+        </div>
+      \`;
+    }
+    
+    // 페이지 떠날 때 폴링 정리
+    window.addEventListener('beforeunload', () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    });
     
     // 페이지 외부 클릭 시 드롭다운 닫기
     document.addEventListener('click', function(e) {

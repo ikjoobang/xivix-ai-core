@@ -471,8 +471,8 @@ api.post('/onboarding/request', async (c) => {
   
   try {
     const result = await c.env.DB.prepare(`
-      INSERT INTO xivix_stores (user_id, store_name, owner_name, owner_phone, business_type, business_type_name, business_specialty, naver_talktalk_id, onboarding_status, is_active)
-      VALUES (1, ?, ?, ?, ?, ?, ?, ?, 'pending', 0)
+      INSERT INTO xivix_stores (user_id, store_name, owner_name, owner_phone, business_type, business_type_name, business_specialty, naver_talktalk_id, onboarding_status, onboarding_progress, is_active)
+      VALUES (1, ?, ?, ?, ?, ?, ?, ?, 'pending', 40, 0)
     `).bind(
       data.store_name,
       data.owner_name,
@@ -511,6 +511,155 @@ api.post('/onboarding/request', async (c) => {
     return c.json<ApiResponse>({
       success: false,
       error: '요청 처리 중 오류가 발생했습니다',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// ============ 온보딩 상태 조회 API (실시간 폴링용) ============
+api.get('/onboarding/status/:storeId', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  
+  if (!storeId || isNaN(storeId)) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '유효하지 않은 매장 ID',
+      timestamp: Date.now()
+    }, 400);
+  }
+  
+  try {
+    const store = await c.env.DB.prepare(`
+      SELECT id, store_name, onboarding_status, onboarding_progress, is_active, naver_talktalk_id, 
+             activated_at, ai_persona, business_type_name
+      FROM xivix_stores WHERE id = ?
+    `).bind(storeId).first<{
+      id: number;
+      store_name: string;
+      onboarding_status: string;
+      onboarding_progress: number | null;
+      is_active: number;
+      naver_talktalk_id: string | null;
+      activated_at: string | null;
+      ai_persona: string | null;
+      business_type_name: string | null;
+    }>();
+    
+    if (!store) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '매장을 찾을 수 없습니다',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    // onboarding_progress 컬럼에서 직접 진행률 사용
+    const progress = store.onboarding_progress || 10;
+    let statusText = '대기 중';
+    let statusDetail = 'XIVIX 전문가에게 알림이 전송되었습니다...';
+    let effectiveStatus = store.onboarding_status;
+    
+    // 진행률에 따른 상태 텍스트 결정
+    if (progress >= 100 || store.onboarding_status === 'active') {
+      statusText = '완료!';
+      statusDetail = `AI 지배인이 ${store.business_type_name || '매장'}을 위해 준비되었습니다! 🎉`;
+      effectiveStatus = 'active';
+    } else if (progress >= 60) {
+      statusText = '세팅 중';
+      statusDetail = 'AI 지배인 설정을 진행하고 있습니다. 곧 완료됩니다!';
+      effectiveStatus = 'processing';
+    } else if (progress >= 20) {
+      statusText = '준비 중';
+      statusDetail = 'XIVIX 전문가가 업종에 맞는 AI 페르소나를 준비하고 있습니다...';
+      effectiveStatus = 'pending';
+    } else {
+      statusText = '접수됨';
+      statusDetail = '연동 요청이 접수되었습니다.';
+      effectiveStatus = 'pending';
+    }
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        id: store.id,
+        store_name: store.store_name,
+        status: effectiveStatus,
+        is_active: store.is_active === 1,
+        progress: Math.min(progress, 100),
+        statusText,
+        statusDetail,
+        naver_talktalk_id: store.naver_talktalk_id,
+        activated_at: store.activated_at
+      },
+      timestamp: Date.now()
+    });
+  } catch (error) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '상태 조회 중 오류가 발생했습니다',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// ============ 마스터: 온보딩 진행률 업데이트 API ============
+api.post('/master/status/:id', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  const { status, progress } = await c.req.json() as { 
+    status?: 'pending' | 'processing' | 'active';
+    progress?: number;
+  };
+  
+  try {
+    // 진행률 기반 업데이트 (DB CHECK 제약 우회)
+    // status는 pending/active만 DB에 저장, processing은 progress로 표현
+    let dbStatus = 'pending';
+    let dbProgress = 40;
+    let isActive = 0;
+    
+    if (status === 'processing' || progress === 75) {
+      // processing = pending 상태 + 75% 진행률
+      dbStatus = 'pending';
+      dbProgress = 75;
+      isActive = 0;
+    } else if (status === 'active' || progress === 100) {
+      dbStatus = 'active';
+      dbProgress = 100;
+      isActive = 1;
+    } else if (status === 'pending') {
+      dbStatus = 'pending';
+      dbProgress = progress || 40;
+      isActive = 0;
+    }
+    
+    await c.env.DB.prepare(`
+      UPDATE xivix_stores SET
+        onboarding_status = ?,
+        onboarding_progress = ?,
+        is_active = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).bind(dbStatus, dbProgress, isActive, storeId).run();
+    
+    // 관리자 로그 기록
+    await c.env.DB.prepare(`
+      INSERT INTO xivix_admin_logs (admin_id, action, target_store_id, details)
+      VALUES ('master', 'progress_update', ?, ?)
+    `).bind(storeId, JSON.stringify({ status, progress: dbProgress })).run();
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: { 
+        message: `진행률이 ${dbProgress}%로 업데이트되었습니다`,
+        progress: dbProgress
+      },
+      timestamp: Date.now()
+    });
+  } catch (error) {
+    console.error('Status update error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: '상태 업데이트 중 오류가 발생했습니다: ' + String(error),
       timestamp: Date.now()
     }, 500);
   }
@@ -692,10 +841,11 @@ api.post('/master/activate/:id', async (c) => {
   };
   
   try {
-    // 매장 정보 업데이트
+    // 매장 정보 업데이트 (onboarding_progress = 100 포함)
     await c.env.DB.prepare(`
       UPDATE xivix_stores SET
         onboarding_status = 'active',
+        onboarding_progress = 100,
         is_active = 1,
         ai_persona = ?,
         ai_features = ?,
