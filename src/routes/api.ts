@@ -27,13 +27,13 @@ api.get('/dashboard/stats/:storeId', async (c) => {
   const today = new Date().toISOString().split('T')[0];
   
   const [totalResult, todayResult, conversionResult, avgTimeResult] = await Promise.all([
-    c.env.DB.prepare('SELECT COUNT(*) as count FROM conversation_logs WHERE store_id = ?')
+    c.env.DB.prepare('SELECT COUNT(*) as count FROM xivix_conversation_logs WHERE store_id = ?')
       .bind(storeId).first<{ count: number }>(),
-    c.env.DB.prepare('SELECT COUNT(*) as count FROM conversation_logs WHERE store_id = ? AND DATE(created_at) = ?')
+    c.env.DB.prepare('SELECT COUNT(*) as count FROM xivix_conversation_logs WHERE store_id = ? AND DATE(created_at) = ?')
       .bind(storeId, today).first<{ count: number }>(),
-    c.env.DB.prepare('SELECT AVG(CASE WHEN converted_to_reservation = 1 THEN 100.0 ELSE 0 END) as rate FROM conversation_logs WHERE store_id = ?')
+    c.env.DB.prepare('SELECT AVG(CASE WHEN converted_to_reservation = 1 THEN 100.0 ELSE 0 END) as rate FROM xivix_conversation_logs WHERE store_id = ?')
       .bind(storeId).first<{ rate: number }>(),
-    c.env.DB.prepare('SELECT AVG(response_time_ms) as avg_time FROM conversation_logs WHERE store_id = ?')
+    c.env.DB.prepare('SELECT AVG(response_time_ms) as avg_time FROM xivix_conversation_logs WHERE store_id = ?')
       .bind(storeId).first<{ avg_time: number }>()
   ]);
   
@@ -48,9 +48,9 @@ api.get('/dashboard/stats/:storeId', async (c) => {
   
   // Get reservation stats
   const [totalResResult, todayResResult] = await Promise.all([
-    c.env.DB.prepare('SELECT COUNT(*) as count FROM reservations WHERE store_id = ?')
+    c.env.DB.prepare('SELECT COUNT(*) as count FROM xivix_reservations WHERE store_id = ?')
       .bind(storeId).first<{ count: number }>(),
-    c.env.DB.prepare('SELECT COUNT(*) as count FROM reservations WHERE store_id = ? AND DATE(created_at) = ?')
+    c.env.DB.prepare('SELECT COUNT(*) as count FROM xivix_reservations WHERE store_id = ? AND DATE(created_at) = ?')
       .bind(storeId, today).first<{ count: number }>()
   ]);
   
@@ -71,7 +71,7 @@ api.get('/dashboard/stats/:storeId', async (c) => {
 
 api.get('/stores', async (c) => {
   const results = await c.env.DB.prepare(
-    'SELECT id, store_name, business_type, is_active, created_at FROM stores ORDER BY id DESC'
+    'SELECT id, store_name, business_type, is_active, created_at FROM xivix_stores ORDER BY id DESC'
   ).all<Store>();
   
   return c.json<ApiResponse<Store[]>>({
@@ -83,7 +83,7 @@ api.get('/stores', async (c) => {
 
 api.get('/stores/:id', async (c) => {
   const id = parseInt(c.req.param('id'), 10);
-  const store = await c.env.DB.prepare('SELECT * FROM stores WHERE id = ?')
+  const store = await c.env.DB.prepare('SELECT * FROM xivix_stores WHERE id = ?')
     .bind(id).first<Store>();
   
   if (!store) {
@@ -101,7 +101,7 @@ api.post('/stores', async (c) => {
   const data = await c.req.json() as Partial<Store>;
   
   const result = await c.env.DB.prepare(`
-    INSERT INTO stores (user_id, store_name, business_type, address, phone, operating_hours, menu_data, ai_persona, ai_tone, is_active)
+    INSERT INTO xivix_stores (user_id, store_name, business_type, address, phone, operating_hours, menu_data, ai_persona, ai_tone, is_active)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
   `).bind(
     data.user_id || 1,
@@ -127,7 +127,7 @@ api.put('/stores/:id', async (c) => {
   const data = await c.req.json() as Partial<Store>;
   
   await c.env.DB.prepare(`
-    UPDATE stores SET
+    UPDATE xivix_stores SET
       store_name = COALESCE(?, store_name),
       business_type = COALESCE(?, business_type),
       address = COALESCE(?, address),
@@ -163,7 +163,7 @@ api.get('/logs/:storeId', async (c) => {
   const offset = parseInt(c.req.query('offset') || '0', 10);
   
   const results = await c.env.DB.prepare(`
-    SELECT * FROM conversation_logs 
+    SELECT * FROM xivix_conversation_logs 
     WHERE store_id = ? 
     ORDER BY created_at DESC 
     LIMIT ? OFFSET ?
@@ -186,7 +186,7 @@ api.get('/logs/:storeId/realtime', async (c) => {
       
       // Initial data
       const results = await c.env.DB.prepare(`
-        SELECT * FROM conversation_logs 
+        SELECT * FROM xivix_conversation_logs 
         WHERE store_id = ? 
         ORDER BY created_at DESC 
         LIMIT 10
@@ -223,7 +223,7 @@ api.get('/reservations/:storeId', async (c) => {
   const status = c.req.query('status');
   const date = c.req.query('date');
   
-  let query = 'SELECT * FROM reservations WHERE store_id = ?';
+  let query = 'SELECT * FROM xivix_reservations WHERE store_id = ?';
   const params: (string | number)[] = [storeId];
   
   if (status) {
@@ -252,7 +252,7 @@ api.post('/reservations', async (c) => {
   const data = await c.req.json() as Partial<Reservation>;
   
   const result = await c.env.DB.prepare(`
-    INSERT INTO reservations 
+    INSERT INTO xivix_reservations 
     (store_id, customer_id, customer_name, customer_phone, service_name, reservation_date, reservation_time, status, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
   `).bind(
@@ -278,7 +278,7 @@ api.put('/reservations/:id/status', async (c) => {
   const { status } = await c.req.json() as { status: string };
   
   await c.env.DB.prepare(`
-    UPDATE reservations SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    UPDATE xivix_reservations SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
   `).bind(status, id).run();
   
   return c.json<ApiResponse>({ success: true, timestamp: Date.now() });

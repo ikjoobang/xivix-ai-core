@@ -74,7 +74,7 @@ webhook.post('/v1/naver/callback', async (c) => {
     
     // 매장 정보 조회 (기본 매장 사용 - 실제로는 톡톡 ID로 매핑)
     const storeResult = await env.DB.prepare(
-      'SELECT * FROM stores WHERE is_active = 1 LIMIT 1'
+      'SELECT * FROM xivix_stores WHERE is_active = 1 LIMIT 1'
     ).first<Store>();
     
     const storeId = storeResult?.id || 1;
@@ -163,7 +163,7 @@ webhook.post('/v1/naver/callback', async (c) => {
     // 로그 저장
     const responseTime = Date.now() - startTime;
     await env.DB.prepare(`
-      INSERT INTO conversation_logs 
+      INSERT INTO xivix_conversation_logs 
       (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
       VALUES (?, ?, ?, ?, ?, ?, 0)
     `).bind(
@@ -204,7 +204,7 @@ webhook.post('/v1/test/chat', async (c) => {
     
     // 기본 매장 정보
     const storeResult = await env.DB.prepare(
-      'SELECT * FROM stores WHERE is_active = 1 LIMIT 1'
+      'SELECT * FROM xivix_stores WHERE is_active = 1 LIMIT 1'
     ).first<Store>();
     
     const storeId = storeResult?.id || 1;
