@@ -11,6 +11,7 @@ export interface Env {
   NAVER_ACCESS_TOKEN?: string;
   XIVIX_VERSION: string;
   AI_MODEL: string;
+  IS_TEST_MODE?: string; // 테스트 모드 (true일 때 솔라피 API 호출 차단)
 }
 
 // Database Models

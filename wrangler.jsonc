@@ -8,7 +8,8 @@
   // Environment variables (secrets should be set via wrangler secret)
   "vars": {
     "XIVIX_VERSION": "1.0.0",
-    "AI_MODEL": "gemini-2.5-flash"
+    "AI_MODEL": "gemini-2.5-flash",
+    "IS_TEST_MODE": "true"
   },
 
   // D1 Database for users, stores, logs

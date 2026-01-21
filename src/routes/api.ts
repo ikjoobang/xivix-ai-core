@@ -725,6 +725,29 @@ async function sendNotificationToMaster(env: Env, data: {
     const fromNumber = (senderNumber?.setting_value || '01039880124').replace(/-/g, '');
     const toNumber = setting.setting_value.replace(/-/g, '');
     
+    // ============ 테스트 모드 체크 (추가) ============
+    // IS_TEST_MODE가 true이면 실제 API 호출 안 함 (비용 절감)
+    const isTestMode = env.IS_TEST_MODE === 'true';
+    
+    if (isTestMode) {
+      console.log('[TEST_MODE] 솔라피 API 호출 차단됨 - 실제 문자 발송 안 함');
+      console.log('[MOCK_MSG]', { 
+        to: toNumber, 
+        from: fromNumber, 
+        message: message.substring(0, 100) + '...',
+        timestamp: new Date().toISOString()
+      });
+      
+      // 테스트 모드 로그 기록
+      await env.DB.prepare(`
+        INSERT INTO xivix_notification_logs (store_id, notification_type, recipient_phone, recipient_type, content, status, error_message, sent_at)
+        VALUES (?, 'onboarding_request', ?, 'master', ?, 'test_mode', 'TEST_MODE: 실제 발송 차단됨', CURRENT_TIMESTAMP)
+      `).bind(data.store_id, setting.setting_value, message).run();
+      
+      return; // 테스트 모드에서는 여기서 종료
+    }
+    // ============ 테스트 모드 체크 끝 ============
+    
     // 솔라피 API 호출 (SMS)
     const dateISO = new Date().toISOString();
     const signature = await generateSolapiSignature(apiKey.setting_value, apiSecret.setting_value, dateISO);
