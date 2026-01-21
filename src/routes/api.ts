@@ -456,6 +456,8 @@ api.post('/onboarding/request', async (c) => {
     owner_name: string;
     owner_phone: string;
     business_type?: string;
+    business_type_name?: string;
+    business_specialty?: string;
     naver_talktalk_id?: string;
   };
   
@@ -469,13 +471,15 @@ api.post('/onboarding/request', async (c) => {
   
   try {
     const result = await c.env.DB.prepare(`
-      INSERT INTO xivix_stores (user_id, store_name, owner_name, owner_phone, business_type, naver_talktalk_id, onboarding_status, is_active)
-      VALUES (1, ?, ?, ?, ?, ?, 'pending', 0)
+      INSERT INTO xivix_stores (user_id, store_name, owner_name, owner_phone, business_type, business_type_name, business_specialty, naver_talktalk_id, onboarding_status, is_active)
+      VALUES (1, ?, ?, ?, ?, ?, ?, ?, 'pending', 0)
     `).bind(
       data.store_name,
       data.owner_name,
       data.owner_phone,
-      data.business_type || '기타',
+      data.business_type || 'OTHER',
+      data.business_type_name || '기타',
+      data.business_specialty || '',
       data.naver_talktalk_id || null
     ).run();
     

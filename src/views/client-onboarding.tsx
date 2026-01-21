@@ -1,8 +1,35 @@
 // XIVIX AI Core V1.0 - 고객용 30초 연동 페이지
 // Zero-Touch Onboarding: 사장님은 클릭 한 번만!
-// 최종 설계서 v2026.01.21 반영
+// 범용 업종 확장 시스템 v2026.01.21
+
+// 업종 데이터베이스 (Master Logic)
+const INDUSTRY_DATABASE = [
+  { id: 'BEAUTY_HAIR', name: '미용실/헤어숍', icon: 'fa-cut', specialty: '스타일 추천, 시술 소요시간 안내, 디자이너 매칭' },
+  { id: 'BEAUTY_SKIN', name: '피부관리/에스테틱', icon: 'fa-spa', specialty: '피부 타입 분석, 홈케어 가이드, 코스별 효능 안내' },
+  { id: 'BEAUTY_NAIL', name: '네일아트/속눈썹', icon: 'fa-hand-sparkles', specialty: '디자인 추천, 관리 팁, 예약 안내' },
+  { id: 'RESTAURANT', name: '일반 식당/카페', icon: 'fa-utensils', specialty: '메뉴 추천, 주차 안내, 단체 예약, 알레르기 정보' },
+  { id: 'FITNESS', name: '피트니스/요가/PT', icon: 'fa-dumbbell', specialty: '프로그램 안내, 트레이너 매칭, 회원권 상담' },
+  { id: 'MEDICAL', name: '병원/의원/치과', icon: 'fa-hospital', specialty: '진료 안내, 보험 상담, 예약 관리' },
+  { id: 'PROFESSIONAL_LEGAL', name: '법률/세무/보험', icon: 'fa-balance-scale', specialty: '서류 요약, 상담 예약, 기초 법률/보험 상식 안내' },
+  { id: 'EDUCATION', name: '학원/교육/과외', icon: 'fa-graduation-cap', specialty: '수강료 안내, 커리큘럼 상담, 레벨 테스트 예약' },
+  { id: 'PET_SERVICE', name: '애견/반려동물', icon: 'fa-paw', specialty: '미용 예약, 호텔 예약, 건강 상담' },
+  { id: 'REAL_ESTATE', name: '부동산/인테리어', icon: 'fa-home', specialty: '매물 안내, 상담 예약, 시공 문의' },
+  { id: 'AUTO_SERVICE', name: '자동차 정비/세차', icon: 'fa-car', specialty: '정비 예약, 견적 안내, 부품 상담' },
+  { id: 'PHOTOGRAPHY', name: '사진관/스튜디오', icon: 'fa-camera', specialty: '촬영 예약, 패키지 안내, 포트폴리오 상담' },
+  { id: 'CUSTOM_SECTOR', name: '직접 입력 (기타)', icon: 'fa-pencil-alt', specialty: '사장님이 정의한 특정 비즈니스 로직에 맞춤 최적화' }
+];
 
 export function renderClientOnboarding(storeId?: number): string {
+  const industryOptionsHtml = INDUSTRY_DATABASE.map(ind => 
+    `<div class="industry-option" data-id="${ind.id}" data-name="${ind.name}" data-specialty="${ind.specialty}" onclick="selectIndustry('${ind.id}')">
+      <i class="fas ${ind.icon} text-lg"></i>
+      <div class="flex-1">
+        <p class="font-medium">${ind.name}</p>
+        <p class="text-xs text-white/40">${ind.specialty}</p>
+      </div>
+    </div>`
+  ).join('');
+
   return `
 <!DOCTYPE html>
 <html lang="ko">
@@ -27,18 +54,60 @@ export function renderClientOnboarding(storeId?: number): string {
       50% { box-shadow: 0 0 0 15px rgba(212, 175, 55, 0); }
     }
     .step-card { transition: all 0.3s ease; }
-    .step-card:hover { transform: translateY(-2px); }
-    .step-card.active { border-color: #D4AF37; background: rgba(212, 175, 55, 0.05); }
-    .step-card.completed { border-color: #10B981; background: rgba(16, 185, 129, 0.05); }
     .progress-bar { transition: width 0.5s ease; }
-    .guide-image { 
-      border: 2px solid rgba(212, 175, 55, 0.3); 
-      border-radius: 12px; 
-      background: rgba(0, 0, 0, 0.3);
-    }
     .highlight-box {
       background: linear-gradient(135deg, rgba(212, 175, 55, 0.1) 0%, rgba(212, 175, 55, 0.05) 100%);
       border: 1px solid rgba(212, 175, 55, 0.3);
+    }
+    
+    /* 업종 선택 드롭다운 스타일 */
+    .industry-selector {
+      position: relative;
+    }
+    .industry-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      max-height: 300px;
+      overflow-y: auto;
+      z-index: 50;
+      display: none;
+    }
+    .industry-dropdown.show {
+      display: block;
+    }
+    .industry-option {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .industry-option:hover {
+      background: rgba(212, 175, 55, 0.1);
+    }
+    .industry-option.selected {
+      background: rgba(212, 175, 55, 0.2);
+      border-left: 3px solid #D4AF37;
+    }
+    .industry-option:last-child {
+      border-bottom: none;
+    }
+    
+    /* 검색 필터 하이라이트 */
+    .industry-option.hidden {
+      display: none;
+    }
+    
+    /* 커스텀 입력 필드 */
+    .custom-input-wrapper {
+      display: none;
+    }
+    .custom-input-wrapper.show {
+      display: block;
     }
   </style>
 </head>
@@ -52,7 +121,7 @@ export function renderClientOnboarding(storeId?: number): string {
         <i class="fas fa-robot text-3xl text-black"></i>
       </div>
       <h1 class="text-3xl font-bold mb-2">XIVIX <span class="gold">AI 지배인</span></h1>
-      <p class="text-white/60">3단계 간편 연동으로 AI 상담사를 바로 배치하세요</p>
+      <p class="text-white/60">어떤 업종이든 30분 내 AI 상담사 배치</p>
     </div>
     
     <!-- Main Card -->
@@ -166,27 +235,21 @@ export function renderClientOnboarding(storeId?: number): string {
           <div class="space-y-3 text-sm">
             <div class="flex items-start gap-3">
               <span class="w-6 h-6 rounded-full gold-bg text-black flex items-center justify-center text-xs shrink-0 font-bold">1</span>
-              <div>
-                <span class="text-white/80"><strong>설정</strong> 메뉴 클릭</span>
-              </div>
+              <span class="text-white/80"><strong>설정</strong> 메뉴 클릭</span>
             </div>
             <div class="flex items-start gap-3">
               <span class="w-6 h-6 rounded-full gold-bg text-black flex items-center justify-center text-xs shrink-0 font-bold">2</span>
-              <div>
-                <span class="text-white/80"><strong>상담 멤버관리</strong> 선택</span>
-              </div>
+              <span class="text-white/80"><strong>상담 멤버관리</strong> 선택</span>
             </div>
             <div class="flex items-start gap-3">
               <span class="w-6 h-6 rounded-full gold-bg text-black flex items-center justify-center text-xs shrink-0 font-bold">3</span>
-              <div>
-                <span class="text-white/80"><strong class="gold">+ 새로운 멤버 초대하기</strong> 클릭</span>
-              </div>
+              <span class="text-white/80"><strong class="gold">+ 새로운 멤버 초대하기</strong> 클릭</span>
             </div>
             <div class="flex items-start gap-3">
               <span class="w-6 h-6 rounded-full gold-bg text-black flex items-center justify-center text-xs shrink-0 font-bold">4</span>
               <div>
-                <span class="text-white/80">이름에 <strong>XIVIX 지배인</strong></span><br>
-                <span class="text-white/80">이메일에 <strong class="gold">partner@xivix.kr</strong> 입력</span>
+                <span class="text-white/80">이름: <strong>XIVIX 지배인</strong></span><br>
+                <span class="text-white/80">이메일: <strong class="gold">partner@xivix.kr</strong></span>
               </div>
             </div>
           </div>
@@ -203,7 +266,7 @@ export function renderClientOnboarding(storeId?: number): string {
       </div>
       
       <!-- ================================================ -->
-      <!-- Step 3: 연동 요청 (매장정보 + 최종확인) -->
+      <!-- Step 3: 연동 요청 (매장정보 + 업종 선택) -->
       <!-- ================================================ -->
       <div id="step-3" class="step-content hidden">
         <div class="text-center mb-6">
@@ -211,7 +274,7 @@ export function renderClientOnboarding(storeId?: number): string {
             <i class="fas fa-magic text-2xl text-purple-400"></i>
           </div>
           <h2 class="text-xl font-bold mb-2">연동 요청하기</h2>
-          <p class="text-white/60 text-sm">매장 정보를 입력하고 버튼만 누르면 끝!</p>
+          <p class="text-white/60 text-sm">매장 정보와 업종을 선택해주세요</p>
         </div>
         
         <!-- 매장 정보 입력 -->
@@ -230,18 +293,63 @@ export function renderClientOnboarding(storeId?: number): string {
               <input type="tel" id="owner-phone" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-[#D4AF37] transition-all" placeholder="010-0000-0000">
             </div>
           </div>
+          
+          <!-- 업종 선택 (검색 가능한 드롭다운) -->
           <div>
-            <label class="block text-sm text-white/60 mb-2">업종</label>
-            <select id="business-type" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#D4AF37] transition-all">
-              <option value="beauty">미용실/헤어샵</option>
-              <option value="skincare">피부관리/에스테틱</option>
-              <option value="nail">네일샵</option>
-              <option value="restaurant">음식점/카페</option>
-              <option value="fitness">피트니스/요가</option>
-              <option value="medical">병원/의원</option>
-              <option value="other">기타</option>
-            </select>
+            <label class="block text-sm text-white/60 mb-2">
+              업종 선택 <span class="text-red-400">*</span>
+              <span class="text-xs text-white/40">(어떤 업종이든 AI가 전문가로 변신합니다)</span>
+            </label>
+            <div class="industry-selector">
+              <!-- 선택된 업종 표시 / 검색 입력 -->
+              <div class="relative">
+                <input type="text" id="industry-search" 
+                  class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-[#D4AF37] transition-all pr-10" 
+                  placeholder="업종 검색 또는 선택..."
+                  onclick="toggleIndustryDropdown(true)"
+                  oninput="filterIndustries(this.value)">
+                <button type="button" onclick="toggleIndustryDropdown()" class="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white">
+                  <i class="fas fa-chevron-down" id="dropdown-icon"></i>
+                </button>
+              </div>
+              
+              <!-- 드롭다운 목록 -->
+              <div id="industry-dropdown" class="industry-dropdown glass rounded-xl mt-2 gold-border">
+                ${industryOptionsHtml}
+              </div>
+            </div>
+            
+            <!-- 선택된 업종 정보 -->
+            <div id="selected-industry-info" class="mt-2 p-3 glass rounded-lg hidden">
+              <div class="flex items-center gap-3">
+                <i id="selected-icon" class="fas fa-store text-lg gold"></i>
+                <div class="flex-1">
+                  <p class="font-medium text-sm" id="selected-name">-</p>
+                  <p class="text-xs text-white/40" id="selected-specialty">-</p>
+                </div>
+                <button onclick="clearIndustrySelection()" class="text-white/40 hover:text-red-400">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+            </div>
+            
+            <!-- 직접 입력 (커스텀) -->
+            <div id="custom-input-wrapper" class="custom-input-wrapper mt-3">
+              <label class="block text-sm text-white/60 mb-2">업종명 직접 입력</label>
+              <input type="text" id="custom-industry" 
+                class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-[#D4AF37] transition-all" 
+                placeholder="예: 웨딩플래너, 꽃집, 세탁소...">
+              <p class="text-xs text-white/40 mt-2">
+                <i class="fas fa-magic mr-1 gold"></i>
+                AI가 입력하신 업종의 전문가로 자동 최적화됩니다
+              </p>
+            </div>
           </div>
+          
+          <!-- 숨겨진 업종 값 -->
+          <input type="hidden" id="business-type" value="">
+          <input type="hidden" id="business-type-name" value="">
+          <input type="hidden" id="business-specialty" value="">
         </div>
         
         <!-- 입력 요약 -->
@@ -251,6 +359,10 @@ export function renderClientOnboarding(storeId?: number): string {
             <div class="flex justify-between">
               <span class="text-white/60">톡톡 ID</span>
               <span class="font-mono gold" id="summary-talktalk">@-</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-white/60">업종</span>
+              <span class="gold" id="summary-industry">-</span>
             </div>
             <div class="flex justify-between">
               <span class="text-white/60">매니저 초대</span>
@@ -264,8 +376,8 @@ export function renderClientOnboarding(storeId?: number): string {
           <div class="flex items-start gap-3">
             <i class="fas fa-check-circle text-emerald-400 mt-0.5"></i>
             <div class="text-sm">
-              <p class="text-white/80 mb-1">연동 요청 후 진행 과정</p>
-              <p class="text-white/50">XIVIX 전문가가 <strong>30분 이내</strong> 설정을 완료하고, 카카오톡으로 완료 안내를 드립니다.</p>
+              <p class="text-white/80 mb-1">어떤 업종이든 30분 내 세팅 완료!</p>
+              <p class="text-white/50">XIVIX 전문가가 업종에 맞는 AI 페르소나를 설정하고, 카카오톡으로 완료 안내를 드립니다.</p>
             </div>
           </div>
         </div>
@@ -300,7 +412,7 @@ export function renderClientOnboarding(storeId?: number): string {
             <div class="w-full h-2 bg-white/10 rounded-full overflow-hidden">
               <div class="progress-bar h-full gold-bg rounded-full" style="width: 10%" id="progress-bar"></div>
             </div>
-            <p class="text-xs text-white/40 mt-2" id="status-detail">XIVIX 지배인이 매장에 접속 준비 중...</p>
+            <p class="text-xs text-white/40 mt-2" id="status-detail">XIVIX 지배인이 업종에 맞는 AI를 준비 중...</p>
           </div>
           
           <!-- 안내 -->
@@ -331,14 +443,18 @@ export function renderClientOnboarding(storeId?: number): string {
     
     <!-- Footer -->
     <p class="text-center text-white/30 text-sm mt-6">
-      © 2026 XIVIX. AI가 매장을 관리합니다.
+      © 2026 XIVIX. 세상의 모든 사장님을 위해.
     </p>
     
   </div>
   
   <script>
+    // 업종 데이터베이스 (클라이언트용)
+    const industries = ${JSON.stringify(INDUSTRY_DATABASE)};
+    
     let currentStep = 1;
     let talktalkId = '';
+    let selectedIndustry = null;
     
     function goToStep(step) {
       // Step 1 → 2: 톡톡 ID 검증
@@ -354,11 +470,6 @@ export function renderClientOnboarding(storeId?: number): string {
       // Step 2 → 3: 요약 업데이트
       if (step === 3 && currentStep === 2) {
         document.getElementById('summary-talktalk').textContent = '@' + talktalkId;
-      }
-      
-      // Step 3 → Submit: 폼 검증
-      if (step === 3) {
-        // 포커스 이동 없이 그냥 진행
       }
       
       currentStep = step;
@@ -385,6 +496,104 @@ export function renderClientOnboarding(storeId?: number): string {
       }
     }
     
+    // 업종 드롭다운 토글
+    function toggleIndustryDropdown(show) {
+      const dropdown = document.getElementById('industry-dropdown');
+      const icon = document.getElementById('dropdown-icon');
+      
+      if (show === undefined) {
+        dropdown.classList.toggle('show');
+      } else if (show) {
+        dropdown.classList.add('show');
+      } else {
+        dropdown.classList.remove('show');
+      }
+      
+      if (dropdown.classList.contains('show')) {
+        icon.classList.replace('fa-chevron-down', 'fa-chevron-up');
+      } else {
+        icon.classList.replace('fa-chevron-up', 'fa-chevron-down');
+      }
+    }
+    
+    // 업종 검색 필터
+    function filterIndustries(query) {
+      const options = document.querySelectorAll('.industry-option');
+      const lowerQuery = query.toLowerCase();
+      
+      options.forEach(opt => {
+        const name = opt.dataset.name.toLowerCase();
+        const specialty = opt.dataset.specialty.toLowerCase();
+        
+        if (name.includes(lowerQuery) || specialty.includes(lowerQuery)) {
+          opt.classList.remove('hidden');
+        } else {
+          opt.classList.add('hidden');
+        }
+      });
+      
+      toggleIndustryDropdown(true);
+    }
+    
+    // 업종 선택
+    function selectIndustry(id) {
+      const industry = industries.find(i => i.id === id);
+      if (!industry) return;
+      
+      selectedIndustry = industry;
+      
+      // 검색창에 선택된 업종 표시
+      document.getElementById('industry-search').value = industry.name;
+      
+      // 히든 필드 업데이트
+      document.getElementById('business-type').value = industry.id;
+      document.getElementById('business-type-name').value = industry.name;
+      document.getElementById('business-specialty').value = industry.specialty;
+      
+      // 선택된 업종 정보 표시
+      const infoBox = document.getElementById('selected-industry-info');
+      document.getElementById('selected-icon').className = 'fas ' + industry.icon + ' text-lg gold';
+      document.getElementById('selected-name').textContent = industry.name;
+      document.getElementById('selected-specialty').textContent = industry.specialty;
+      infoBox.classList.remove('hidden');
+      
+      // 요약 업데이트
+      document.getElementById('summary-industry').textContent = industry.name;
+      
+      // 커스텀 입력 표시/숨김
+      const customWrapper = document.getElementById('custom-input-wrapper');
+      if (industry.id === 'CUSTOM_SECTOR') {
+        customWrapper.classList.add('show');
+      } else {
+        customWrapper.classList.remove('show');
+      }
+      
+      // 선택 표시
+      document.querySelectorAll('.industry-option').forEach(opt => {
+        opt.classList.remove('selected');
+        if (opt.dataset.id === id) {
+          opt.classList.add('selected');
+        }
+      });
+      
+      // 드롭다운 닫기
+      toggleIndustryDropdown(false);
+    }
+    
+    // 업종 선택 초기화
+    function clearIndustrySelection() {
+      selectedIndustry = null;
+      document.getElementById('industry-search').value = '';
+      document.getElementById('business-type').value = '';
+      document.getElementById('business-type-name').value = '';
+      document.getElementById('business-specialty').value = '';
+      document.getElementById('selected-industry-info').classList.add('hidden');
+      document.getElementById('summary-industry').textContent = '-';
+      document.getElementById('custom-input-wrapper').classList.remove('show');
+      document.querySelectorAll('.industry-option').forEach(opt => opt.classList.remove('selected'));
+    }
+    
+    // 이메일 복사
     function copyInviteEmail() {
       const email = 'partner@xivix.kr';
       
@@ -419,15 +628,30 @@ export function renderClientOnboarding(storeId?: number): string {
       }
     }
     
+    // 연동 요청 제출
     async function submitRequest() {
       const storeName = document.getElementById('store-name').value.trim();
       const ownerName = document.getElementById('owner-name').value.trim();
       const ownerPhone = document.getElementById('owner-phone').value.trim();
       const businessType = document.getElementById('business-type').value;
+      const businessTypeName = document.getElementById('business-type-name').value;
+      const businessSpecialty = document.getElementById('business-specialty').value;
+      const customIndustry = document.getElementById('custom-industry')?.value.trim();
       
       // 필수 입력 검증
       if (!storeName || !ownerName || !ownerPhone) {
         alert('매장 이름, 사장님 성함, 연락처를 모두 입력해주세요.');
+        return;
+      }
+      
+      if (!businessType) {
+        alert('업종을 선택해주세요.');
+        return;
+      }
+      
+      // 커스텀 업종일 경우 직접 입력 검증
+      if (businessType === 'CUSTOM_SECTOR' && !customIndustry) {
+        alert('업종명을 직접 입력해주세요.');
         return;
       }
       
@@ -442,11 +666,17 @@ export function renderClientOnboarding(storeId?: number): string {
       btn.disabled = true;
       btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> 요청 중...';
       
+      // 최종 업종명 결정
+      const finalBusinessType = businessType === 'CUSTOM_SECTOR' ? 'CUSTOM_SECTOR' : businessType;
+      const finalBusinessName = businessType === 'CUSTOM_SECTOR' ? customIndustry : businessTypeName;
+      
       const data = {
         store_name: storeName,
         owner_name: ownerName,
         owner_phone: ownerPhone,
-        business_type: businessType,
+        business_type: finalBusinessType,
+        business_type_name: finalBusinessName,
+        business_specialty: businessType === 'CUSTOM_SECTOR' ? '사장님 정의 맞춤 최적화' : businessSpecialty,
         naver_talktalk_id: talktalkId,
         status: 'pending'
       };
@@ -483,7 +713,7 @@ export function renderClientOnboarding(storeId?: number): string {
       const steps = [
         { progress: 20, text: '요청 접수', detail: 'XIVIX 전문가에게 알림을 보냈습니다...' },
         { progress: 30, text: '확인 중', detail: 'XIVIX 전문가가 요청을 확인하고 있습니다...' },
-        { progress: 40, text: '준비 중', detail: '매니저 권한을 확인하고 있습니다...' },
+        { progress: 40, text: '준비 중', detail: '업종에 맞는 AI 페르소나를 준비 중...' },
       ];
       
       let i = 0;
@@ -498,6 +728,14 @@ export function renderClientOnboarding(storeId?: number): string {
         }
       }, 3000);
     }
+    
+    // 페이지 외부 클릭 시 드롭다운 닫기
+    document.addEventListener('click', function(e) {
+      const selector = document.querySelector('.industry-selector');
+      if (selector && !selector.contains(e.target)) {
+        toggleIndustryDropdown(false);
+      }
+    });
     
     // Auto uppercase for talktalk ID input
     document.addEventListener('DOMContentLoaded', function() {

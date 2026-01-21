@@ -1,7 +1,27 @@
 // XIVIX AI Core V1.0 - 슈퍼 마스터 대시보드
 // 방대표님 전용: 모든 매장의 '심장'을 조종하는 곳
+// 범용 업종 확장 시스템 v2026.01.21
+
+// 업종 데이터베이스 (Master Logic) - /connect와 동기화
+const INDUSTRY_DATABASE = [
+  { id: 'BEAUTY_HAIR', name: '미용실/헤어숍', icon: 'fa-cut', specialty: '스타일 추천, 시술 소요시간 안내, 디자이너 매칭', basePrompt: '스타일링 전문가이자 뷰티 컨설턴트' },
+  { id: 'BEAUTY_SKIN', name: '피부관리/에스테틱', icon: 'fa-spa', specialty: '피부 타입 분석, 홈케어 가이드, 코스별 효능 안내', basePrompt: '피부 관리 전문가이자 뷰티 어드바이저' },
+  { id: 'BEAUTY_NAIL', name: '네일아트/속눈썹', icon: 'fa-hand-sparkles', specialty: '디자인 추천, 관리 팁, 예약 안내', basePrompt: '네일&속눈썹 아티스트이자 뷰티 상담사' },
+  { id: 'RESTAURANT', name: '일반 식당/카페', icon: 'fa-utensils', specialty: '메뉴 추천, 주차 안내, 단체 예약, 알레르기 정보', basePrompt: '레스토랑 매니저이자 메뉴 전문가' },
+  { id: 'FITNESS', name: '피트니스/요가/PT', icon: 'fa-dumbbell', specialty: '프로그램 안내, 트레이너 매칭, 회원권 상담', basePrompt: '피트니스 컨설턴트이자 건강 코치' },
+  { id: 'MEDICAL', name: '병원/의원/치과', icon: 'fa-hospital', specialty: '진료 안내, 보험 상담, 예약 관리', basePrompt: '의료 코디네이터이자 환자 케어 전문가' },
+  { id: 'PROFESSIONAL_LEGAL', name: '법률/세무/보험', icon: 'fa-balance-scale', specialty: '서류 요약, 상담 예약, 기초 법률/보험 상식 안내', basePrompt: '법률/세무 상담 어시스턴트' },
+  { id: 'EDUCATION', name: '학원/교육/과외', icon: 'fa-graduation-cap', specialty: '수강료 안내, 커리큘럼 상담, 레벨 테스트 예약', basePrompt: '교육 상담사이자 학습 코디네이터' },
+  { id: 'PET_SERVICE', name: '애견/반려동물', icon: 'fa-paw', specialty: '미용 예약, 호텔 예약, 건강 상담', basePrompt: '반려동물 케어 전문가이자 펫 컨시어지' },
+  { id: 'REAL_ESTATE', name: '부동산/인테리어', icon: 'fa-home', specialty: '매물 안내, 상담 예약, 시공 문의', basePrompt: '부동산 컨설턴트이자 인테리어 상담사' },
+  { id: 'AUTO_SERVICE', name: '자동차 정비/세차', icon: 'fa-car', specialty: '정비 예약, 견적 안내, 부품 상담', basePrompt: '자동차 서비스 매니저이자 정비 상담사' },
+  { id: 'PHOTOGRAPHY', name: '사진관/스튜디오', icon: 'fa-camera', specialty: '촬영 예약, 패키지 안내, 포트폴리오 상담', basePrompt: '스튜디오 매니저이자 촬영 코디네이터' },
+  { id: 'CUSTOM_SECTOR', name: '직접 입력 (기타)', icon: 'fa-pencil-alt', specialty: '사장님이 정의한 특정 비즈니스 로직에 맞춤 최적화', basePrompt: '비즈니스 전문 어시스턴트' }
+];
 
 export function renderSuperMasterDashboard(): string {
+  const industryDataJson = JSON.stringify(INDUSTRY_DATABASE);
+  
   return `
 <!DOCTYPE html>
 <html lang="ko">
@@ -321,18 +341,25 @@ export function renderSuperMasterDashboard(): string {
             
             <!-- AI 페르소나 설정 -->
             <div class="glass rounded-xl p-4">
-              <h4 class="font-medium mb-3 flex items-center gap-2">
-                <i class="fas fa-robot text-purple-400"></i>
-                AI 페르소나 설정
+              <h4 class="font-medium mb-3 flex items-center justify-between">
+                <span class="flex items-center gap-2">
+                  <i class="fas fa-robot text-purple-400"></i>
+                  AI 페르소나 설정
+                </span>
+                <button onclick="generateAIPersona()" class="text-xs px-3 py-1.5 gold-bg text-black rounded-lg font-medium hover:opacity-90 transition-all">
+                  <i class="fas fa-magic mr-1"></i>업종별 자동 생성
+                </button>
               </h4>
               <div class="space-y-3">
                 <div>
                   <label class="block text-sm text-white/60 mb-1">AI 역할</label>
                   <input type="text" id="modal-ai-role" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#D4AF37]" placeholder="예: 뷰티 컨설턴트">
+                  <p class="text-xs text-white/30 mt-1" id="ai-role-hint"></p>
                 </div>
                 <div>
                   <label class="block text-sm text-white/60 mb-1">매장 특징 (AI가 강조할 점)</label>
                   <textarea id="modal-ai-features" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#D4AF37] h-20" placeholder="예: 동탄 1등 미용실, 원장 직접 시술, 정중한 어조"></textarea>
+                  <p class="text-xs text-white/30 mt-1" id="ai-features-hint"></p>
                 </div>
                 <div>
                   <label class="block text-sm text-white/60 mb-1">말투 스타일</label>
@@ -384,6 +411,22 @@ export function renderSuperMasterDashboard(): string {
     let currentStoreId = null;
     let stores = [];
     
+    // 업종 데이터베이스 (서버에서 주입)
+    const industries = ${industryDataJson};
+    
+    // 업종 ID로 아이콘 조회
+    function getIndustryIcon(businessType) {
+      if (!businessType) return 'fa-store';
+      const ind = industries.find(i => i.id === businessType);
+      return ind ? ind.icon : 'fa-store';
+    }
+    
+    // 업종 ID로 전체 정보 조회
+    function getIndustryInfo(businessType) {
+      if (!businessType) return null;
+      return industries.find(i => i.id === businessType) || null;
+    }
+    
     function showSection(section) {
       // Update nav
       document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
@@ -422,7 +465,7 @@ export function renderSuperMasterDashboard(): string {
                 <div class="flex items-start justify-between mb-4">
                   <div class="flex items-center gap-4">
                     <div class="w-12 h-12 rounded-xl bg-yellow-500/20 flex items-center justify-center">
-                      <i class="fas fa-store text-yellow-400"></i>
+                      <i class="fas \${getIndustryIcon(store.business_type)} text-yellow-400"></i>
                     </div>
                     <div>
                       <h3 class="font-semibold">\${store.store_name}</h3>
@@ -431,24 +474,29 @@ export function renderSuperMasterDashboard(): string {
                   </div>
                   <span class="status-pending text-xs px-3 py-1 rounded-full">대기중</span>
                 </div>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mb-3">
                   <div>
                     <p class="text-white/40">연락처</p>
                     <p>\${store.owner_phone || '-'}</p>
                   </div>
                   <div>
                     <p class="text-white/40">업종</p>
-                    <p>\${store.business_type || '-'}</p>
+                    <div class="flex items-center gap-1">
+                      <i class="fas \${getIndustryIcon(store.business_type)} text-xs gold"></i>
+                      <span class="gold">\${store.business_type_name || store.business_type || '-'}</span>
+                    </div>
                   </div>
                   <div>
                     <p class="text-white/40">톡톡 ID</p>
                     <p class="font-mono gold">@\${store.naver_talktalk_id || '-'}</p>
                   </div>
-                  <div>
-                    <p class="text-white/40">요청일</p>
-                    <p>\${new Date(store.created_at).toLocaleDateString('ko-KR')}</p>
-                  </div>
                 </div>
+                \${store.business_specialty ? \`
+                <div class="p-2 bg-white/5 rounded-lg text-xs text-white/50 mb-3">
+                  <i class="fas fa-magic mr-1 gold"></i> AI 전문분야: \${store.business_specialty}
+                </div>
+                \` : ''}
+                <div class="text-xs text-white/30">요청일: \${new Date(store.created_at).toLocaleDateString('ko-KR')}</div>
                 <div class="mt-4 pt-4 border-t border-white/5 flex justify-end">
                   <button class="px-4 py-2 gold-bg text-black rounded-lg text-sm font-medium hover:opacity-90">
                     <i class="fas fa-cog mr-1"></i>세팅하기
@@ -517,17 +565,105 @@ export function renderSuperMasterDashboard(): string {
         document.getElementById('modal-store-name').textContent = store.store_name;
         document.getElementById('modal-owner-name').textContent = store.owner_name || '-';
         document.getElementById('modal-owner-phone').textContent = store.owner_phone || '-';
-        document.getElementById('modal-business-type').textContent = store.business_type || '-';
+        
+        // 업종 정보 표시 개선
+        const industryInfo = getIndustryInfo(store.business_type);
+        const businessTypeEl = document.getElementById('modal-business-type');
+        if (industryInfo) {
+          businessTypeEl.innerHTML = \`<i class="fas \${industryInfo.icon} mr-1 gold"></i> \${store.business_type_name || industryInfo.name}\`;
+        } else {
+          businessTypeEl.textContent = store.business_type_name || store.business_type || '-';
+        }
+        
         document.getElementById('modal-created-at').textContent = new Date(store.created_at).toLocaleDateString('ko-KR');
         document.getElementById('modal-talktalk-id').textContent = '@' + (store.naver_talktalk_id || '-');
         document.getElementById('modal-webhook').value = 'https://xivix-ai-core.pages.dev/v1/naver/callback/' + storeId;
         document.getElementById('modal-ai-role').value = store.ai_persona || '';
         document.getElementById('modal-ai-features').value = store.ai_features || '';
         document.getElementById('modal-ai-tone').value = store.ai_tone || 'professional';
+        
+        // 업종별 AI 힌트 표시
+        updateAIHints(store);
       }
       
       document.getElementById('setup-modal').classList.remove('hidden');
       document.getElementById('setup-modal').classList.add('flex');
+    }
+    
+    // 업종별 AI 힌트 업데이트
+    function updateAIHints(store) {
+      const industryInfo = getIndustryInfo(store.business_type);
+      const roleHint = document.getElementById('ai-role-hint');
+      const featuresHint = document.getElementById('ai-features-hint');
+      
+      if (industryInfo) {
+        roleHint.innerHTML = \`<i class="fas fa-lightbulb mr-1 gold"></i> 추천: \${industryInfo.basePrompt}\`;
+        featuresHint.innerHTML = \`<i class="fas fa-lightbulb mr-1 gold"></i> 업종 특성: \${industryInfo.specialty}\`;
+      } else if (store.business_type === 'CUSTOM_SECTOR' && store.business_type_name) {
+        roleHint.innerHTML = \`<i class="fas fa-lightbulb mr-1 gold"></i> 커스텀 업종: "\${store.business_type_name}" 전문 어시스턴트\`;
+        featuresHint.innerHTML = \`<i class="fas fa-lightbulb mr-1 gold"></i> 사장님 정의 비즈니스에 최적화된 응대\`;
+      } else {
+        roleHint.textContent = '';
+        featuresHint.textContent = '';
+      }
+    }
+    
+    // AI 페르소나 자동 생성
+    function generateAIPersona() {
+      const store = stores.find(s => s.id === currentStoreId);
+      if (!store) {
+        alert('매장 정보를 불러올 수 없습니다');
+        return;
+      }
+      
+      const industryInfo = getIndustryInfo(store.business_type);
+      
+      // AI 역할 생성
+      let aiRole = '';
+      let aiFeatures = '';
+      
+      if (industryInfo) {
+        // 정의된 업종
+        aiRole = \`\${store.store_name}의 \${industryInfo.basePrompt}\`;
+        aiFeatures = \`전문분야: \${industryInfo.specialty}\\n\\n매장 특징: (사장님 특징을 추가해주세요)\`;
+      } else if (store.business_type === 'CUSTOM_SECTOR' && store.business_type_name) {
+        // 커스텀 업종
+        aiRole = \`\${store.store_name}의 \${store.business_type_name} 전문 어시스턴트\`;
+        aiFeatures = \`업종: \${store.business_type_name}\\n\\n(\${store.owner_name} 사장님의 비즈니스 특징을 추가해주세요)\`;
+      } else {
+        aiRole = \`\${store.store_name}의 비즈니스 어시스턴트\`;
+        aiFeatures = '매장 특징을 입력해주세요';
+      }
+      
+      // 입력 필드에 값 설정
+      document.getElementById('modal-ai-role').value = aiRole;
+      document.getElementById('modal-ai-features').value = aiFeatures;
+      
+      // 업종별 추천 말투
+      const toneMap = {
+        'MEDICAL': 'formal',
+        'PROFESSIONAL_LEGAL': 'formal',
+        'EDUCATION': 'professional',
+        'BEAUTY_HAIR': 'friendly',
+        'BEAUTY_SKIN': 'friendly',
+        'BEAUTY_NAIL': 'friendly',
+        'RESTAURANT': 'friendly',
+        'FITNESS': 'professional',
+        'PET_SERVICE': 'friendly',
+        'REAL_ESTATE': 'professional',
+        'AUTO_SERVICE': 'professional',
+        'PHOTOGRAPHY': 'friendly'
+      };
+      
+      const recommendedTone = toneMap[store.business_type] || 'professional';
+      document.getElementById('modal-ai-tone').value = recommendedTone;
+      
+      // 애니메이션 효과
+      const btn = event.currentTarget;
+      btn.innerHTML = '<i class="fas fa-check mr-1"></i>생성 완료!';
+      setTimeout(() => {
+        btn.innerHTML = '<i class="fas fa-magic mr-1"></i>업종별 자동 생성';
+      }, 1500);
     }
     
     function closeSetupModal() {
