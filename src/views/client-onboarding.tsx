@@ -461,12 +461,47 @@ export function renderClientOnboarding(storeId?: number): string {
     let talktalkId = '';
     let selectedIndustry = null;
     
+    // ============ 유효성 검사 함수 (추가) ============
+    // 톡톡 ID 정규식 검증: 4~10자리 영문/숫자
+    function validateTalktalkId(id) {
+      const regex = /^[A-Z0-9]{4,10}$/;
+      return regex.test(id);
+    }
+    
+    // 전화번호 검증: 숫자만 추출 후 10~11자리
+    function validatePhone(phone) {
+      const digits = phone.replace(/[^0-9]/g, '');
+      return digits.length >= 10 && digits.length <= 11;
+    }
+    
+    // 실시간 유효성 검사 상태 업데이트
+    function updateValidationStatus() {
+      const storeName = document.getElementById('store-name')?.value.trim();
+      const ownerName = document.getElementById('owner-name')?.value.trim();
+      const ownerPhone = document.getElementById('owner-phone')?.value.trim();
+      const businessType = document.getElementById('business-type')?.value;
+      const submitBtn = document.getElementById('submit-btn');
+      
+      if (!submitBtn) return;
+      
+      const isValid = storeName && ownerName && validatePhone(ownerPhone || '') && businessType && talktalkId;
+      
+      if (isValid) {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+      } else {
+        submitBtn.disabled = true;
+        submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      }
+    }
+    // ============ 유효성 검사 함수 끝 ============
+    
     function goToStep(step) {
-      // Step 1 → 2: 톡톡 ID 검증
+      // Step 1 → 2: 톡톡 ID 검증 (정규식 강화)
       if (step === 2 && currentStep === 1) {
         const id = document.getElementById('talktalk-id').value.trim().toUpperCase();
-        if (!id || id.length < 4) {
-          alert('톡톡 계정 ID를 입력해주세요.\\n(파트너센터 좌측 상단 프로필 아래 6자리 코드)');
+        if (!id || !validateTalktalkId(id)) {
+          alert('톡톡 계정 ID를 정확히 입력해주세요.\\n(4~10자리 영문/숫자 조합, 예: WC92CF)');
           return;
         }
         talktalkId = id;
@@ -646,6 +681,12 @@ export function renderClientOnboarding(storeId?: number): string {
       // 필수 입력 검증
       if (!storeName || !ownerName || !ownerPhone) {
         alert('매장 이름, 사장님 성함, 연락처를 모두 입력해주세요.');
+        return;
+      }
+      
+      // 전화번호 형식 검증 (추가)
+      if (!validatePhone(ownerPhone)) {
+        alert('연락처를 정확히 입력해주세요.\\n(10~11자리 숫자, 예: 010-1234-5678)');
         return;
       }
       
@@ -954,8 +995,20 @@ export function renderClientOnboarding(storeId?: number): string {
       if (talktalkInput) {
         talktalkInput.addEventListener('input', function(e) {
           e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+          // 실시간 유효성 표시 (추가)
+          const isValid = validateTalktalkId(e.target.value);
+          e.target.style.borderColor = isValid ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)';
         });
       }
+      
+      // Step 3 입력 필드 실시간 유효성 검사 이벤트 리스너 (추가)
+      const step3Inputs = ['store-name', 'owner-name', 'owner-phone'];
+      step3Inputs.forEach(id => {
+        const input = document.getElementById(id);
+        if (input) {
+          input.addEventListener('input', updateValidationStatus);
+        }
+      });
     });
   </script>
 </body>
