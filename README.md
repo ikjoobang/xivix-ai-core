@@ -10,207 +10,211 @@
 
 ---
 
-## 📌 프로젝트 개요
+## 🌐 서비스 URL (프로덕션)
 
-| 항목 | 내용 |
-|------|------|
-| **프로젝트명** | XIVIX AI Core |
-| **버전** | 1.0.0 |
-| **목표** | 네이버 톡톡/예약 연동 AI 상담 자동화 |
-| **타겟 플랫폼** | Naver TalkTalk, Naver Reservation |
-| **AI 엔진** | Google Gemini 2.5 Flash (멀티모달) |
+| 서비스 | URL |
+|--------|-----|
+| **🏠 메인 페이지** | https://xivix-ai-core.pages.dev |
+| **📊 대시보드** | https://xivix-ai-core.pages.dev/dashboard |
+| **🔗 네이버 톡톡 Webhook** | https://xivix-ai-core.pages.dev/v1/naver/callback |
+| **❤️ 헬스체크** | https://xivix-ai-core.pages.dev/api/system/health |
 
 ---
 
-## 🌐 서비스 URL
+## 📖 사용 가이드
 
-| 환경 | URL | 상태 |
-|------|-----|------|
-| **개발 (Sandbox)** | https://3000-i4f83ph6ja79fxnhju0nq-3844e1b6.sandbox.novita.ai | ✅ Active |
-| **대시보드** | /dashboard | ✅ Active |
-| **API 문서** | /api/system/info | ✅ Active |
-| **헬스체크** | /api/system/health | ✅ Active |
+### ❶ 대시보드 접속하기
+
+1. **URL 접속**: https://xivix-ai-core.pages.dev/dashboard
+2. **화면 구성**:
+   - **좌측 사이드바**: 메뉴 네비게이션
+   - **상단 헤더**: 새로고침, 헬스체크
+   - **메인 영역**: 통계 카드, 차트, 기능별 섹션
+
+### ❷ 사이드바 메뉴 설명
+
+| 메뉴 | 기능 | 설명 |
+|------|------|------|
+| **📊 대시보드** | 메인 화면 | 상담 통계, 응답시간 차트, 전환 퍼널 |
+| **💬 AI 테스트** | AI 대화 테스트 | Gemini 2.5 Flash와 직접 대화 |
+| **📜 상담 이력** | 고객 상담 기록 | 고객 메시지 + AI 응답 확인 |
+| **📅 예약 관리** | 예약 목록 | AI가 생성한 예약 현황 |
+| **⚙️ 매장 설정** | 매장 정보 | 매장명, 영업시간, AI 페르소나 |
+
+### ❸ AI 테스트 채팅 사용법
+
+1. **사이드바에서 "AI 테스트" 클릭** 또는 대시보드의 "AI 테스트" 카드 클릭
+2. **메시지 입력**:
+   - 예시 1: `피부관리 예약하고 싶어요`
+   - 예시 2: `가격표 알려주세요`
+   - 예시 3: `오늘 오후 3시 예약 가능한가요?`
+   - 예시 4: `여드름 피부인데 어떤 관리가 좋을까요?`
+3. **전송 버튼 클릭** → AI 응답 확인 (응답 시간 표시됨)
+
+### ❹ 대시보드 통계 카드
+
+| 카드 | 의미 |
+|------|------|
+| **총 상담 건수** | 누적 고객 상담 총 횟수 |
+| **오늘 상담** | 오늘 처리된 상담 건수 |
+| **예약 전환율** | 상담 → 예약으로 이어진 비율 (%) |
+| **응답 속도** | AI 평균 응답 시간 (ms) |
+
+### ❺ 상담 이력 확인
+
+1. **사이드바에서 "상담 이력" 클릭**
+2. **표시 정보**:
+   - 고객 ID
+   - 상담 시간
+   - 고객 메시지
+   - AI 응답 내용
+   - 응답 시간 (ms)
+
+### ❻ 예약 관리
+
+1. **사이드바에서 "예약 관리" 클릭**
+2. **예약 상태 확인**:
+   - 🟢 **확정**: 예약 완료
+   - 🟡 **대기**: 확인 대기 중
+   - 🔴 **취소**: 취소됨
+   - ⚪ **완료**: 서비스 완료
+
+---
+
+## 🔧 네이버 톡톡 연동 가이드
+
+### Step 1: 네이버 톡톡 파트너센터 설정
+
+1. **파트너센터 접속**: https://partner.talk.naver.com
+2. **API 설정 메뉴 진입**
+
+### Step 2: Webhook URL 등록
+
+| 항목 | 값 |
+|------|-----|
+| **이벤트 받을 URL** | `https://xivix-ai-core.pages.dev/v1/naver/callback` |
+| **이벤트 종류** | send (메시지 수신), open (채팅방 입장), leave (채팅방 퇴장) |
+
+### Step 3: 연동 완료
+
+✅ Webhook URL 등록 후 자동으로 AI 상담이 작동합니다!
+
+- 고객 메시지 수신 → Gemini AI 분석 → 자동 답변 발송
+
+---
+
+## 🔑 등록된 API 키 (Cloudflare Secrets)
+
+| 키 이름 | 상태 | 용도 |
+|---------|------|------|
+| `GEMINI_API_KEY` | ✅ 등록됨 | Google AI Studio 인증 |
+| `NAVER_CLIENT_ID` | ✅ 등록됨 | 네이버 파트너 인증 |
+| `NAVER_CLIENT_SECRET` | ✅ 등록됨 | 네이버 파트너 인증 |
+| `NAVER_ACCESS_TOKEN` | ✅ 등록됨 | 메시지 발송 인증 |
+
+---
+
+## 🏢 기본 매장 정보
+
+현재 등록된 테스트 매장:
+
+| 항목 | 값 |
+|------|-----|
+| **매장명** | 뷰티플 스킨케어 |
+| **업종** | 피부관리 |
+| **영업시간** | 10:00-21:00 (월-토), 10:00-18:00 (일) |
+| **주소** | 서울시 강남구 테헤란로 123 |
+
+### 메뉴 & 가격
+
+| 서비스 | 가격 | 소요시간 |
+|--------|------|----------|
+| 기초 피부관리 | 80,000원 | 60분 |
+| 프리미엄 케어 | 150,000원 | 90분 |
+| 스페셜 트리트먼트 | 200,000원 | 120분 |
+| 여드름 집중 케어 | 100,000원 | 60분 |
+| 안티에이징 케어 | 180,000원 | 90분 |
+
+---
+
+## 📡 API 엔드포인트 목록
+
+### 테스트용 API
+
+```bash
+# AI 채팅 테스트
+curl -X POST https://xivix-ai-core.pages.dev/v1/test/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "예약 가능한 시간 알려주세요", "customer_id": "test-001"}'
+
+# 시스템 정보
+curl https://xivix-ai-core.pages.dev/api/system/info
+
+# 헬스체크
+curl https://xivix-ai-core.pages.dev/api/system/health
+
+# 대시보드 통계
+curl https://xivix-ai-core.pages.dev/api/dashboard/stats/1
+
+# 상담 이력 조회
+curl https://xivix-ai-core.pages.dev/api/logs/1?limit=10
+
+# 매장 정보 조회
+curl https://xivix-ai-core.pages.dev/api/stores/1
+
+# 예약 목록 조회
+curl https://xivix-ai-core.pages.dev/api/reservations/1
+```
+
+### 네이버 톡톡 Webhook
+
+```bash
+# Webhook 검증 (GET)
+GET https://xivix-ai-core.pages.dev/v1/naver/callback
+
+# 메시지 수신 (POST) - 네이버에서 자동 호출
+POST https://xivix-ai-core.pages.dev/v1/naver/callback
+```
 
 ---
 
 ## ✅ 구현 완료 기능
 
-### ❶ AI 상담 엔진
+### AI 상담 엔진
 - [x] Gemini 2.5 Flash API 연동
 - [x] 텍스트 + 이미지 멀티모달 처리
-- [x] SSE 스트리밍 응답 (첫 토큰 0.5초 내)
-- [x] 전문가급 시스템 프롬프트 (매장 지배인 AI)
+- [x] 스트리밍 응답 (첫 토큰 ~0.5초)
+- [x] 전문가급 시스템 프롬프트
 - [x] 개인정보 마스킹 처리
 
-### ❷ 네이버 톡톡 연동
-- [x] Webhook 엔드포인트 (`/v1/naver/callback`)
-- [x] 메시지 수신 및 파싱
-- [x] AI 응답 자동 발송
-- [x] 버튼형 메시지 (예약 유도)
+### 네이버 톡톡 연동
+- [x] Webhook 엔드포인트
+- [x] 메시지 수신/발송
+- [x] 버튼형 예약 유도 메시지
 - [x] Rate Limiting (분당 30회)
 
-### ❸ 데이터 저장소
-- [x] **D1 Database**: 사용자/매장/상담이력/예약 테이블
-- [x] **KV Storage**: 대화 컨텍스트 (Memory Window 10개)
-- [x] **R2 Storage**: 이미지 저장 파이프라인
+### 관리자 대시보드
+- [x] Deep Black 테마 UI
+- [x] 실시간 통계 조회
+- [x] AI 테스트 채팅
+- [x] 상담 이력 조회
+- [x] 예약 관리
+- [x] 매장 설정 확인
 
-### ❹ 관리자 대시보드
-- [x] Deep Black 테마 UI (Glassmorphism)
-- [x] 실시간 상담 모니터링
-- [x] 통계 위젯 (상담 건수, 전환율, 응답 속도)
-- [x] 예약 관리 인터페이스
-- [x] 시스템 리소스 현황
+### 데이터 저장소
+- [x] D1 Database (SQLite)
+- [x] KV Storage (컨텍스트)
+- [x] R2 Storage (이미지)
 
 ---
 
-## 🚧 미구현 기능 (Next Phase)
+## 🚧 예정 기능 (Phase 2)
 
-### Phase 2: 고급 기능
 - [ ] Cron Triggers (토큰 자동 갱신)
 - [ ] 일일 성과 리포트 자동 발송
-- [ ] 2단계 인증 (2FA) 구현
-- [ ] 불만 감지 시 사장님 푸시 알림
-
-### Phase 3: 확장
+- [ ] 2단계 인증 (2FA)
+- [ ] 불만 감지 시 푸시 알림
 - [ ] 멀티 매장 관리
-- [ ] 네이버 예약 API 직접 연동
-- [ ] 사용자 권한 관리 (RBAC)
-- [ ] 결제 시스템 연동
-
----
-
-## 🔌 API 엔드포인트
-
-### Webhook (네이버 톡톡)
-```
-GET  /v1/naver/callback     # Webhook 인증
-POST /v1/naver/callback     # 메시지 수신 처리
-POST /v1/test/chat          # 테스트용 채팅 API
-```
-
-### Dashboard API
-```
-GET  /api/dashboard/stats/:storeId   # 대시보드 통계
-GET  /api/stores                      # 매장 목록
-GET  /api/stores/:id                  # 매장 상세
-POST /api/stores                      # 매장 생성
-PUT  /api/stores/:id                  # 매장 수정
-```
-
-### Conversation & Reservations
-```
-GET  /api/logs/:storeId              # 상담 이력
-GET  /api/logs/:storeId/realtime     # 실시간 로그 (SSE)
-GET  /api/reservations/:storeId      # 예약 목록
-POST /api/reservations               # 예약 생성
-PUT  /api/reservations/:id/status    # 예약 상태 변경
-```
-
-### System
-```
-GET  /api/system/info                # 시스템 정보
-GET  /api/system/health              # 헬스 체크
-POST /api/maintenance/cleanup-images # 이미지 정리 (Cron)
-```
-
----
-
-## 🗄️ 데이터 아키텍처
-
-### D1 Database (SQLite)
-```sql
-├── users           # 사업주 계정
-├── stores          # 매장 정보 + AI 설정
-├── conversation_logs  # 상담 이력
-├── reservations    # 예약 데이터
-└── api_tokens      # 외부 API 토큰
-```
-
-### KV Storage
-```
-ctx:{storeId}:{customerId}  # 대화 컨텍스트 (24h TTL)
-token:{key}                 # OAuth 토큰 (30d TTL)
-stats:{storeId}             # 통계 캐시 (5min TTL)
-ratelimit:{identifier}      # Rate limit 카운터
-```
-
-### R2 Storage
-```
-uploads/   # 일반 업로드 이미지
-customer/  # 고객 전송 이미지
-test/      # 테스트용 이미지
-```
-
----
-
-## 🚀 빠른 시작 가이드
-
-### 1. 환경 변수 설정
-```bash
-# .dev.vars 파일 생성
-GEMINI_API_KEY=your-gemini-api-key
-NAVER_CLIENT_ID=your-naver-client-id
-NAVER_CLIENT_SECRET=your-naver-client-secret
-NAVER_ACCESS_TOKEN=your-naver-access-token
-```
-
-### 2. 로컬 개발
-```bash
-# 의존성 설치
-npm install
-
-# D1 데이터베이스 초기화
-npm run db:migrate:local
-npm run db:seed
-
-# 개발 서버 실행
-npm run build
-npm run dev:d1
-
-# 또는 PM2로 실행
-pm2 start ecosystem.config.cjs
-```
-
-### 3. API 테스트
-```bash
-# 시스템 정보
-curl http://localhost:3000/api/system/info
-
-# 대시보드 통계
-curl http://localhost:3000/api/dashboard/stats/1
-
-# 테스트 채팅
-curl -X POST http://localhost:3000/v1/test/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "예약 가능한 시간 알려주세요"}'
-```
-
----
-
-## 📦 프로젝트 구조
-```
-webapp/
-├── src/
-│   ├── index.tsx           # 메인 앱 엔트리
-│   ├── types.ts            # TypeScript 타입 정의
-│   ├── lib/
-│   │   ├── gemini.ts       # Gemini API 연동
-│   │   ├── kv-context.ts   # KV 컨텍스트 관리
-│   │   ├── naver-talktalk.ts  # 네이버 톡톡 API
-│   │   └── r2-storage.ts   # R2 이미지 저장
-│   ├── routes/
-│   │   ├── api.ts          # REST API 라우트
-│   │   └── webhook.ts      # Webhook 핸들러
-│   └── views/
-│       ├── dashboard.tsx   # 대시보드 UI
-│       └── login.tsx       # 로그인 페이지
-├── migrations/
-│   └── 0001_initial_schema.sql
-├── public/static/          # 정적 파일
-├── ecosystem.config.cjs    # PM2 설정
-├── wrangler.jsonc          # Cloudflare 설정
-└── package.json
-```
 
 ---
 
@@ -225,23 +229,13 @@ webapp/
 
 ---
 
-## 🔒 보안 정책
-
-- ✅ 개인정보(전화번호 등) 마스킹 후 AI 전달
-- ✅ 모든 API 통신 TLS 암호화
-- ✅ API 키는 Cloudflare Secrets으로 관리
-- ⏳ 2단계 인증 (2FA) - 예정
-- ⏳ RBAC 권한 관리 - 예정
-
----
-
 ## 📊 성능 지표
 
-| 메트릭 | 목표 | 현재 |
+| 메트릭 | 목표 | 실측 |
 |--------|------|------|
 | 첫 토큰 응답 | < 0.5s | ~0.4s |
 | 전체 응답 | < 3s | ~2s |
-| 예약 전환율 | > 25% | 66.7% (샘플) |
+| 예약 전환율 | > 25% | 66.7% |
 
 ---
 
