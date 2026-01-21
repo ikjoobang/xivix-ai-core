@@ -12,6 +12,8 @@ import apiRoutes from './routes/api';
 import { renderDashboard } from './views/dashboard';
 import { renderLogin } from './views/login';
 import { renderAdminDashboard } from './views/admin-dashboard';
+import { renderClientOnboarding } from './views/client-onboarding';
+import { renderSuperMasterDashboard } from './views/super-master';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -76,9 +78,27 @@ app.get('/dashboard/:storeId', async (c) => {
   return c.html(renderDashboard(storeId, c.env.XIVIX_VERSION));
 });
 
-// Admin Dashboard (멀티테넌트 업체 관리)
-app.get('/admin', async (c) => {
+// Admin Dashboard (멀티테넌트 업체 관리) - 기존 (폐기 예정)
+app.get('/admin-old', async (c) => {
   return c.html(renderAdminDashboard());
+});
+
+// ============ Zero-Touch Onboarding Pages ============
+
+// 고객용 30초 연동 페이지
+app.get('/connect', async (c) => {
+  return c.html(renderClientOnboarding());
+});
+
+// 슈퍼 마스터 대시보드 (방대표님 전용)
+app.get('/master', async (c) => {
+  // TODO: 마스터 인증 체크
+  return c.html(renderSuperMasterDashboard());
+});
+
+// 기존 admin을 master로 리다이렉트
+app.get('/admin', async (c) => {
+  return c.redirect('/master');
 });
 
 // ============ Root & Landing ============

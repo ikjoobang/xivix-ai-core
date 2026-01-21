@@ -447,6 +447,203 @@ api.get('/stores/:id/tokens', async (c) => {
   });
 });
 
+// ============ Zero-Touch Onboarding API ============
+
+// 고객 연동 요청 (30초 연동 페이지에서 호출)
+api.post('/onboarding/request', async (c) => {
+  const data = await c.req.json() as {
+    store_name: string;
+    owner_name: string;
+    owner_phone: string;
+    business_type?: string;
+  };
+  
+  if (!data.store_name || !data.owner_name || !data.owner_phone) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '필수 정보를 입력해주세요',
+      timestamp: Date.now()
+    }, 400);
+  }
+  
+  try {
+    const result = await c.env.DB.prepare(`
+      INSERT INTO xivix_stores (user_id, store_name, owner_name, owner_phone, business_type, onboarding_status, is_active)
+      VALUES (1, ?, ?, ?, ?, 'pending', 0)
+    `).bind(
+      data.store_name,
+      data.owner_name,
+      data.owner_phone,
+      data.business_type || '기타'
+    ).run();
+    
+    const storeId = result.meta.last_row_id;
+    
+    // TODO: 카카오톡 알림 발송 (솔라피)
+    // await sendKakaoNotification(...)
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: { 
+        id: storeId,
+        message: '연동 요청이 완료되었습니다. 곧 연락드리겠습니다.'
+      },
+      timestamp: Date.now()
+    });
+  } catch (error) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '요청 처리 중 오류가 발생했습니다',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// ============ Master Admin API ============
+
+// 대기 중인 매장 목록
+api.get('/master/pending', async (c) => {
+  // TODO: 마스터 인증 미들웨어 추가
+  
+  const results = await c.env.DB.prepare(`
+    SELECT * FROM xivix_stores 
+    WHERE onboarding_status = 'pending' 
+    ORDER BY created_at DESC
+  `).all();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: results.results,
+    timestamp: Date.now()
+  });
+});
+
+// 전체 매장 목록 (마스터용)
+api.get('/master/stores', async (c) => {
+  const results = await c.env.DB.prepare(`
+    SELECT * FROM xivix_stores ORDER BY created_at DESC
+  `).all();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: results.results,
+    timestamp: Date.now()
+  });
+});
+
+// 매장 활성화 (마스터가 세팅 완료 후 호출)
+api.post('/master/activate/:id', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  const data = await c.req.json() as {
+    auth_key?: string;
+    ai_persona?: string;
+    ai_features?: string;
+    ai_tone?: string;
+  };
+  
+  try {
+    // 매장 정보 업데이트
+    await c.env.DB.prepare(`
+      UPDATE xivix_stores SET
+        onboarding_status = 'active',
+        is_active = 1,
+        ai_persona = ?,
+        ai_features = ?,
+        ai_tone = ?,
+        activated_at = CURRENT_TIMESTAMP,
+        activated_by = 'master',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).bind(
+      data.ai_persona || '',
+      data.ai_features || '',
+      data.ai_tone || 'professional',
+      storeId
+    ).run();
+    
+    // Authorization 키 저장 (있으면)
+    if (data.auth_key) {
+      const existing = await c.env.DB.prepare(
+        'SELECT id FROM xivix_api_tokens WHERE store_id = ? AND provider = ?'
+      ).bind(storeId, 'naver_talktalk').first();
+      
+      if (existing) {
+        await c.env.DB.prepare(`
+          UPDATE xivix_api_tokens SET access_token = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE store_id = ? AND provider = 'naver_talktalk'
+        `).bind(data.auth_key, storeId).run();
+      } else {
+        await c.env.DB.prepare(`
+          INSERT INTO xivix_api_tokens (store_id, provider, access_token)
+          VALUES (?, 'naver_talktalk', ?)
+        `).bind(storeId, data.auth_key).run();
+      }
+    }
+    
+    // 관리자 로그 기록
+    await c.env.DB.prepare(`
+      INSERT INTO xivix_admin_logs (admin_id, action, target_store_id, details)
+      VALUES ('master', 'activate', ?, ?)
+    `).bind(storeId, JSON.stringify(data)).run();
+    
+    // TODO: 사장님께 카카오톡으로 세팅 완료 알림 발송
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: { message: '매장이 활성화되었습니다' },
+      timestamp: Date.now()
+    });
+  } catch (error) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '활성화 처리 중 오류가 발생했습니다',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 매장 일시정지
+api.post('/master/pause/:id', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  await c.env.DB.prepare(`
+    UPDATE xivix_stores SET onboarding_status = 'paused', is_active = 0 WHERE id = ?
+  `).bind(storeId).run();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { message: '매장이 일시정지되었습니다' },
+    timestamp: Date.now()
+  });
+});
+
+// 알림 설정 저장
+api.post('/master/notifications/settings', async (c) => {
+  const data = await c.req.json() as Record<string, string>;
+  
+  try {
+    for (const [key, value] of Object.entries(data)) {
+      await c.env.DB.prepare(`
+        INSERT INTO xivix_notification_settings (setting_key, setting_value)
+        VALUES (?, ?)
+        ON CONFLICT(setting_key) DO UPDATE SET setting_value = ?, updated_at = CURRENT_TIMESTAMP
+      `).bind(key, value, value).run();
+    }
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: { message: '설정이 저장되었습니다' },
+      timestamp: Date.now()
+    });
+  } catch (error) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '설정 저장 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
 // ============ System Info ============
 
 api.get('/system/info', async (c) => {
