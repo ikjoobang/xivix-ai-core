@@ -279,8 +279,50 @@ export function renderClientOnboarding(storeId?: number): string {
             <i class="fas fa-magic text-2xl text-purple-400"></i>
           </div>
           <h2 class="text-xl font-bold mb-2">연동 요청하기</h2>
-          <p class="text-white/60 text-sm">매장 정보와 업종을 선택해주세요</p>
+          <p class="text-white/60 text-sm">스마트 플레이스 링크로 자동 분석!</p>
         </div>
+        
+        <!-- ============ 스마트 플레이스 자동 분석 (추가) ============ -->
+        <div class="highlight-box rounded-xl p-4 mb-4">
+          <p class="text-sm font-medium mb-3 flex items-center gap-2">
+            <i class="fas fa-bolt text-yellow-400"></i>
+            <span class="gold">원클릭 자동 분석</span> - 링크만 넣으면 끝!
+          </p>
+          <div class="flex gap-2">
+            <input type="text" id="smart-place-url" 
+              class="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-[#D4AF37] transition-all text-sm" 
+              placeholder="네이버 스마트 플레이스 링크 붙여넣기">
+            <button onclick="analyzeSmartPlace()" id="analyze-btn" class="px-4 py-3 gold-bg text-black rounded-lg font-bold text-sm hover:opacity-90 transition-all shrink-0">
+              <i class="fas fa-search" id="analyze-icon"></i>
+            </button>
+          </div>
+          <p class="text-xs text-white/40 mt-2">
+            <i class="fas fa-info-circle mr-1"></i>
+            네이버 지도나 플레이스 링크를 넣으면 AI가 자동으로 분석합니다
+          </p>
+          <!-- 분석 결과 미리보기 -->
+          <div id="analysis-result" class="hidden mt-4 p-3 glass rounded-lg border border-emerald-500/30">
+            <div class="flex items-center gap-2 mb-2">
+              <i class="fas fa-check-circle text-emerald-400"></i>
+              <span class="text-sm font-medium text-emerald-400">AI 분석 완료!</span>
+            </div>
+            <div class="text-sm space-y-1">
+              <p class="text-white/60">매장명: <span id="analyzed-store-name" class="text-white font-medium">-</span></p>
+              <p class="text-white/60">업종: <span id="analyzed-category" class="text-white">-</span></p>
+              <p class="text-white/60">AI 제안: <span id="analyzed-persona" class="gold text-xs">-</span></p>
+            </div>
+            <button onclick="applyAnalysis()" class="w-full mt-3 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg text-sm font-medium hover:bg-emerald-500/30 transition-all">
+              <i class="fas fa-magic mr-1"></i> 분석 결과 적용하기
+            </button>
+          </div>
+        </div>
+        
+        <div class="flex items-center gap-3 mb-4">
+          <div class="flex-1 h-px bg-white/10"></div>
+          <span class="text-xs text-white/40">또는 직접 입력</span>
+          <div class="flex-1 h-px bg-white/10"></div>
+        </div>
+        <!-- ============ 스마트 플레이스 자동 분석 끝 ============ -->
         
         <!-- 매장 정보 입력 -->
         <div class="space-y-4 mb-6">
@@ -1010,6 +1052,100 @@ export function renderClientOnboarding(storeId?: number): string {
         }
       });
     });
+    
+    // ============ 스마트 플레이스 자동 분석 함수 (추가) ============
+    let analysisData = null; // AI 분석 결과 저장
+    
+    async function analyzeSmartPlace() {
+      const urlInput = document.getElementById('smart-place-url');
+      const analyzeBtn = document.getElementById('analyze-btn');
+      const analyzeIcon = document.getElementById('analyze-icon');
+      const resultDiv = document.getElementById('analysis-result');
+      
+      const url = urlInput?.value?.trim();
+      
+      if (!url) {
+        alert('네이버 스마트 플레이스 링크를 입력해주세요');
+        return;
+      }
+      
+      // 로딩 상태
+      analyzeBtn.disabled = true;
+      analyzeIcon.className = 'fas fa-spinner fa-spin';
+      
+      try {
+        const res = await fetch('/api/smartplace/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        
+        const result = await res.json();
+        
+        if (result.success && result.data) {
+          analysisData = result.data;
+          
+          // 결과 표시
+          document.getElementById('analyzed-store-name').textContent = result.data.place_info?.store_name || result.data.auto_fill?.store_name || '-';
+          document.getElementById('analyzed-category').textContent = result.data.ai_analysis?.business_type_name || result.data.place_info?.category || '-';
+          document.getElementById('analyzed-persona').textContent = result.data.ai_analysis?.ai_persona?.substring(0, 50) + '...' || '-';
+          
+          resultDiv.classList.remove('hidden');
+          urlInput.style.borderColor = 'rgba(16, 185, 129, 0.5)';
+        } else {
+          alert(result.error || '분석에 실패했습니다. 올바른 링크인지 확인해주세요.');
+          urlInput.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+        }
+      } catch (e) {
+        alert('네트워크 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+      } finally {
+        analyzeBtn.disabled = false;
+        analyzeIcon.className = 'fas fa-search';
+      }
+    }
+    
+    // 분석 결과 적용
+    function applyAnalysis() {
+      if (!analysisData) return;
+      
+      const autoFill = analysisData.auto_fill;
+      const aiAnalysis = analysisData.ai_analysis;
+      const placeInfo = analysisData.place_info;
+      
+      // 매장명 자동 입력
+      if (autoFill?.store_name) {
+        document.getElementById('store-name').value = autoFill.store_name;
+      }
+      
+      // 업종 자동 선택
+      if (autoFill?.business_type && autoFill.business_type !== 'OTHER') {
+        selectIndustry(autoFill.business_type);
+      } else if (autoFill?.business_type_name) {
+        // 커스텀 업종으로 설정
+        selectIndustry('CUSTOM_SECTOR');
+        const customInput = document.getElementById('custom-industry');
+        if (customInput) {
+          customInput.value = autoFill.business_type_name;
+        }
+      }
+      
+      // 숨김 필드에 AI 분석 데이터 저장
+      document.getElementById('business-specialty').value = aiAnalysis?.ai_features || '';
+      
+      // 알림
+      const resultDiv = document.getElementById('analysis-result');
+      resultDiv.innerHTML = \`
+        <div class="flex items-center gap-2">
+          <i class="fas fa-check-circle text-emerald-400"></i>
+          <span class="text-sm font-medium text-emerald-400">적용 완료!</span>
+        </div>
+        <p class="text-xs text-white/60 mt-1">아래 정보를 확인 후 연동 요청해주세요</p>
+      \`;
+      
+      // 유효성 검사 업데이트
+      updateValidationStatus();
+    }
+    // ============ 스마트 플레이스 자동 분석 함수 끝 ============
   </script>
 </body>
 </html>
