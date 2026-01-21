@@ -1,0 +1,796 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "name": "XIVIX Store Setup Schema",
+    "description": "업체별 AI 봇 설정을 위한 완전한 데이터 스키마",
+    "updated_at": "2026-01-21"
+  },
+
+  "setup_wizard_steps": [
+    {
+      "step": 1,
+      "id": "naver_api_connection",
+      "title": "네이버 API 연결",
+      "description": "네이버 톡톡 및 예약 API를 연결합니다"
+    },
+    {
+      "step": 2,
+      "id": "business_analysis",
+      "title": "상권/경쟁사/타겟 분석",
+      "description": "업종 특성과 시장 환경을 분석합니다"
+    },
+    {
+      "step": 3,
+      "id": "store_info",
+      "title": "매장 기본 정보",
+      "description": "매장명, 주소, 영업시간 등을 설정합니다"
+    },
+    {
+      "step": 4,
+      "id": "service_menu",
+      "title": "서비스/메뉴 설정",
+      "description": "제공하는 서비스와 가격을 설정합니다"
+    },
+    {
+      "step": 5,
+      "id": "ai_persona",
+      "title": "AI 페르소나 설정",
+      "description": "AI의 성격과 역할을 설정합니다"
+    },
+    {
+      "step": 6,
+      "id": "ai_tone",
+      "title": "AI 말투 설정",
+      "description": "AI의 말투와 커뮤니케이션 스타일을 설정합니다"
+    },
+    {
+      "step": 7,
+      "id": "crm_setup",
+      "title": "고객 관리 설정",
+      "description": "CRM 및 고객 세그먼트를 설정합니다"
+    },
+    {
+      "step": 8,
+      "id": "marketing_setup",
+      "title": "마케팅 설정",
+      "description": "프로모션 및 마케팅 메시지를 설정합니다"
+    },
+    {
+      "step": 9,
+      "id": "reservation_setup",
+      "title": "예약 시스템 설정",
+      "description": "예약 규칙과 연동을 설정합니다"
+    },
+    {
+      "step": 10,
+      "id": "final_review",
+      "title": "최종 검토 및 테스트",
+      "description": "설정을 검토하고 AI 봇을 테스트합니다"
+    }
+  ],
+
+  "schemas": {
+    "naver_api_connection": {
+      "naver_talktalk": {
+        "partner_id": {
+          "type": "string",
+          "label": "파트너 ID",
+          "required": true,
+          "placeholder": "네이버 톡톡 파트너 ID"
+        },
+        "client_id": {
+          "type": "string",
+          "label": "Client ID",
+          "required": true,
+          "placeholder": "발급받은 Client ID",
+          "encrypted": true
+        },
+        "client_secret": {
+          "type": "string",
+          "label": "Client Secret",
+          "required": true,
+          "placeholder": "발급받은 Client Secret",
+          "encrypted": true
+        },
+        "access_token": {
+          "type": "string",
+          "label": "Access Token",
+          "required": true,
+          "placeholder": "보내기 API 토큰",
+          "encrypted": true
+        },
+        "webhook_url": {
+          "type": "string",
+          "label": "Webhook URL",
+          "readonly": true,
+          "value": "https://xivix-ai-core.pages.dev/v1/naver/callback/{store_id}"
+        },
+        "events": {
+          "type": "multiselect",
+          "label": "수신 이벤트",
+          "options": ["send", "open", "leave", "friend"],
+          "default": ["send", "open", "leave"]
+        }
+      },
+      "naver_reservation": {
+        "business_id": {
+          "type": "string",
+          "label": "네이버 예약 사업자 ID",
+          "required": false
+        },
+        "api_key": {
+          "type": "string",
+          "label": "예약 API Key",
+          "required": false,
+          "encrypted": true
+        },
+        "sync_enabled": {
+          "type": "boolean",
+          "label": "실시간 동기화",
+          "default": true
+        }
+      }
+    },
+
+    "business_analysis": {
+      "market_analysis": {
+        "business_category": {
+          "type": "select",
+          "label": "업종 카테고리",
+          "required": true,
+          "options": [
+            {"value": "beauty_salon", "label": "미용실/헤어샵"},
+            {"value": "skin_care", "label": "피부관리/에스테틱"},
+            {"value": "nail_shop", "label": "네일샵"},
+            {"value": "restaurant", "label": "레스토랑/카페"},
+            {"value": "fitness", "label": "피트니스/요가"},
+            {"value": "medical", "label": "병원/의원"},
+            {"value": "pet_service", "label": "반려동물 서비스"},
+            {"value": "education", "label": "학원/교육"},
+            {"value": "consulting", "label": "컨설팅/전문서비스"},
+            {"value": "other", "label": "기타"}
+          ]
+        },
+        "target_area": {
+          "type": "string",
+          "label": "상권 위치",
+          "placeholder": "예: 강남역 4번 출구 앞"
+        },
+        "competition_level": {
+          "type": "select",
+          "label": "경쟁 강도",
+          "options": [
+            {"value": "low", "label": "낮음 (동종업체 3개 미만)"},
+            {"value": "medium", "label": "보통 (동종업체 3-10개)"},
+            {"value": "high", "label": "높음 (동종업체 10개 이상)"}
+          ]
+        },
+        "key_competitors": {
+          "type": "array",
+          "label": "주요 경쟁사",
+          "item_type": {
+            "name": "string",
+            "strengths": "string",
+            "weaknesses": "string"
+          },
+          "max_items": 5
+        },
+        "unique_selling_points": {
+          "type": "array",
+          "label": "우리 매장 차별점",
+          "item_type": "string",
+          "placeholder": "예: 원장 직접 시술, 유기농 제품 사용"
+        }
+      },
+      "target_customer": {
+        "age_range": {
+          "type": "range",
+          "label": "주 타겟 연령대",
+          "min": 10,
+          "max": 70,
+          "default": [25, 45]
+        },
+        "gender": {
+          "type": "select",
+          "label": "주 타겟 성별",
+          "options": [
+            {"value": "female", "label": "여성"},
+            {"value": "male", "label": "남성"},
+            {"value": "all", "label": "전체"}
+          ]
+        },
+        "income_level": {
+          "type": "select",
+          "label": "타겟 소득 수준",
+          "options": [
+            {"value": "budget", "label": "가성비 중시"},
+            {"value": "middle", "label": "중간"},
+            {"value": "premium", "label": "프리미엄/럭셔리"}
+          ]
+        },
+        "customer_personas": {
+          "type": "array",
+          "label": "고객 페르소나",
+          "item_type": {
+            "name": "string",
+            "description": "string",
+            "pain_points": "array",
+            "desires": "array"
+          },
+          "max_items": 3
+        }
+      }
+    },
+
+    "store_info": {
+      "basic_info": {
+        "store_name": {
+          "type": "string",
+          "label": "매장명",
+          "required": true,
+          "max_length": 50
+        },
+        "business_registration_number": {
+          "type": "string",
+          "label": "사업자등록번호",
+          "pattern": "^[0-9]{3}-[0-9]{2}-[0-9]{5}$"
+        },
+        "owner_name": {
+          "type": "string",
+          "label": "대표자명",
+          "required": true
+        },
+        "address": {
+          "type": "string",
+          "label": "매장 주소",
+          "required": true
+        },
+        "phone": {
+          "type": "string",
+          "label": "매장 전화번호",
+          "pattern": "^[0-9]{2,3}-[0-9]{3,4}-[0-9]{4}$"
+        },
+        "email": {
+          "type": "email",
+          "label": "이메일"
+        }
+      },
+      "operating_hours": {
+        "type": "weekly_schedule",
+        "label": "영업시간",
+        "days": ["월", "화", "수", "목", "금", "토", "일"],
+        "fields": {
+          "is_open": "boolean",
+          "open_time": "time",
+          "close_time": "time",
+          "break_start": "time",
+          "break_end": "time"
+        }
+      },
+      "holidays": {
+        "type": "array",
+        "label": "정기 휴무일",
+        "item_type": "string",
+        "placeholder": "예: 매월 첫째, 셋째 월요일"
+      },
+      "parking": {
+        "type": "string",
+        "label": "주차 정보",
+        "placeholder": "예: 건물 내 무료 주차 2시간"
+      }
+    },
+
+    "service_menu": {
+      "categories": {
+        "type": "array",
+        "label": "서비스 카테고리",
+        "item_type": {
+          "name": {
+            "type": "string",
+            "label": "카테고리명"
+          },
+          "description": {
+            "type": "string",
+            "label": "설명"
+          },
+          "display_order": {
+            "type": "number",
+            "label": "표시 순서"
+          }
+        }
+      },
+      "services": {
+        "type": "array",
+        "label": "서비스 목록",
+        "item_type": {
+          "category_id": {
+            "type": "reference",
+            "label": "카테고리"
+          },
+          "name": {
+            "type": "string",
+            "label": "서비스명",
+            "required": true
+          },
+          "description": {
+            "type": "text",
+            "label": "상세 설명"
+          },
+          "price": {
+            "type": "number",
+            "label": "가격 (원)",
+            "required": true
+          },
+          "price_type": {
+            "type": "select",
+            "label": "가격 유형",
+            "options": ["fixed", "from", "consultation"]
+          },
+          "duration_minutes": {
+            "type": "number",
+            "label": "소요시간 (분)"
+          },
+          "is_popular": {
+            "type": "boolean",
+            "label": "인기 서비스"
+          },
+          "is_available": {
+            "type": "boolean",
+            "label": "예약 가능",
+            "default": true
+          },
+          "tags": {
+            "type": "array",
+            "item_type": "string",
+            "label": "태그"
+          }
+        }
+      },
+      "promotions": {
+        "type": "array",
+        "label": "진행 중인 프로모션",
+        "item_type": {
+          "name": {
+            "type": "string",
+            "label": "프로모션명"
+          },
+          "description": {
+            "type": "string",
+            "label": "설명"
+          },
+          "discount_type": {
+            "type": "select",
+            "options": ["percent", "amount", "bundle"]
+          },
+          "discount_value": {
+            "type": "number",
+            "label": "할인값"
+          },
+          "start_date": {
+            "type": "date",
+            "label": "시작일"
+          },
+          "end_date": {
+            "type": "date",
+            "label": "종료일"
+          },
+          "conditions": {
+            "type": "string",
+            "label": "적용 조건"
+          }
+        }
+      }
+    },
+
+    "ai_persona": {
+      "basic_persona": {
+        "role_name": {
+          "type": "string",
+          "label": "AI 역할 이름",
+          "placeholder": "예: 뷰티 컨설턴트, 웰니스 매니저",
+          "required": true
+        },
+        "experience_years": {
+          "type": "number",
+          "label": "경력 연차",
+          "default": 10,
+          "min": 1,
+          "max": 30
+        },
+        "specialty": {
+          "type": "array",
+          "label": "전문 분야",
+          "item_type": "string",
+          "placeholder": "예: 피부 진단, 컬러 추천"
+        },
+        "certifications": {
+          "type": "array",
+          "label": "보유 자격",
+          "item_type": "string",
+          "placeholder": "예: 피부관리사 1급, 메이크업 아티스트"
+        }
+      },
+      "personality_traits": {
+        "primary_trait": {
+          "type": "select",
+          "label": "주요 성격 특성",
+          "required": true,
+          "options": [
+            {"value": "professional", "label": "전문적 - 신뢰감 있는 전문가"},
+            {"value": "warm", "label": "따뜻함 - 친근하고 공감적인"},
+            {"value": "energetic", "label": "활기참 - 밝고 긍정적인"},
+            {"value": "calm", "label": "차분함 - 안정적이고 편안한"},
+            {"value": "witty", "label": "위트 - 재치있고 유머러스한"}
+          ]
+        },
+        "secondary_traits": {
+          "type": "multiselect",
+          "label": "부가 성격 특성",
+          "options": [
+            "꼼꼼함", "적극적", "배려심", "솔직함", "인내심", "창의적", "세심함", "신속함"
+          ],
+          "max_select": 3
+        },
+        "avoid_traits": {
+          "type": "multiselect",
+          "label": "피해야 할 특성",
+          "options": [
+            "딱딱함", "과한 친근함", "재촉하는 느낌", "무관심함", "과한 세일즈"
+          ]
+        }
+      },
+      "conversation_style": {
+        "greeting_style": {
+          "type": "select",
+          "label": "인사 스타일",
+          "options": [
+            {"value": "formal", "label": "격식체 (안녕하십니까)"},
+            {"value": "polite", "label": "공손체 (안녕하세요)"},
+            {"value": "friendly", "label": "친근체 (안녕하세요!)"}
+          ]
+        },
+        "response_depth": {
+          "type": "select",
+          "label": "답변 깊이",
+          "options": [
+            {"value": "concise", "label": "간결 (핵심만)"},
+            {"value": "balanced", "label": "균형 (핵심 + 부가정보)"},
+            {"value": "detailed", "label": "상세 (충분한 설명)"}
+          ]
+        },
+        "proactivity_level": {
+          "type": "slider",
+          "label": "적극성 레벨",
+          "min": 1,
+          "max": 5,
+          "default": 3,
+          "labels": ["수동적", "약간 수동적", "균형", "약간 적극적", "적극적"]
+        }
+      },
+      "knowledge_scope": {
+        "must_know": {
+          "type": "array",
+          "label": "반드시 알아야 할 정보",
+          "item_type": "string",
+          "default": [
+            "모든 서비스/메뉴 정보",
+            "가격 정보",
+            "영업시간",
+            "예약 가능 여부",
+            "현재 프로모션"
+          ]
+        },
+        "can_recommend": {
+          "type": "array",
+          "label": "추천 가능한 항목",
+          "item_type": "string",
+          "placeholder": "예: 피부 타입별 서비스, 시즌 추천"
+        },
+        "cannot_answer": {
+          "type": "array",
+          "label": "답변 불가 항목",
+          "item_type": "string",
+          "default": [
+            "의료 진단",
+            "확정되지 않은 가격",
+            "타 업체 비교"
+          ]
+        }
+      }
+    },
+
+    "ai_tone": {
+      "language_style": {
+        "formality_level": {
+          "type": "select",
+          "label": "격식 수준",
+          "required": true,
+          "options": [
+            {"value": "very_formal", "label": "매우 격식 (~하십니다, ~드립니다)"},
+            {"value": "formal", "label": "격식 (~합니다, ~해드립니다)"},
+            {"value": "polite_casual", "label": "공손-캐주얼 (~해요, ~할게요)"},
+            {"value": "casual", "label": "캐주얼 (~야, ~해)"}
+          ]
+        },
+        "sentence_ending_style": {
+          "type": "multiselect",
+          "label": "문장 마무리 스타일",
+          "options": [
+            "~드리겠습니다",
+            "~드릴게요",
+            "~해드릴까요?",
+            "~하실 수 있어요",
+            "~해보시는 건 어떠세요?"
+          ]
+        },
+        "question_style": {
+          "type": "select",
+          "label": "질문 스타일",
+          "options": [
+            {"value": "direct", "label": "직접적 (예약하시겠어요?)"},
+            {"value": "soft", "label": "부드러운 (예약 도와드릴까요?)"},
+            {"value": "suggestive", "label": "제안형 (예약해두시면 편하실 거예요)"}
+          ]
+        }
+      },
+      "expression_elements": {
+        "emoji_usage": {
+          "type": "select",
+          "label": "이모지 사용",
+          "options": [
+            {"value": "none", "label": "사용 안함"},
+            {"value": "minimal", "label": "최소 (핵심 포인트만)"},
+            {"value": "moderate", "label": "적당히 (문장 끝에)"},
+            {"value": "frequent", "label": "자주 (친근한 느낌)"}
+          ]
+        },
+        "allowed_emojis": {
+          "type": "multiselect",
+          "label": "사용 가능 이모지",
+          "options": ["😊", "✨", "💇‍♀️", "💆‍♀️", "🌟", "❤️", "👍", "📞", "📅", "💪"],
+          "condition": "emoji_usage != 'none'"
+        },
+        "use_exclamation": {
+          "type": "boolean",
+          "label": "느낌표 사용",
+          "default": true
+        },
+        "use_special_expressions": {
+          "type": "array",
+          "label": "특별 표현 (반복 사용)",
+          "item_type": "string",
+          "placeholder": "예: 정말요?, 좋으시네요!, 걱정 마세요"
+        }
+      },
+      "custom_phrases": {
+        "greeting_phrases": {
+          "type": "array",
+          "label": "인사말 문구",
+          "item_type": "string",
+          "default": [
+            "안녕하세요! {store_name}입니다.",
+            "반갑습니다! 무엇을 도와드릴까요?"
+          ]
+        },
+        "closing_phrases": {
+          "type": "array",
+          "label": "마무리 문구",
+          "item_type": "string",
+          "default": [
+            "더 궁금한 점 있으시면 편하게 물어봐주세요!",
+            "예약 관련 문의는 언제든 환영합니다."
+          ]
+        },
+        "reservation_prompts": {
+          "type": "array",
+          "label": "예약 유도 문구",
+          "item_type": "string",
+          "default": [
+            "예약 도와드릴까요?",
+            "원하시는 날짜와 시간을 알려주세요.",
+            "지금 예약하시면 대기 없이 바로 가능해요."
+          ]
+        },
+        "thank_you_phrases": {
+          "type": "array",
+          "label": "감사 문구",
+          "item_type": "string",
+          "default": [
+            "감사합니다!",
+            "문의해주셔서 감사해요.",
+            "선택해주셔서 감사합니다."
+          ]
+        }
+      }
+    },
+
+    "crm_setup": {
+      "customer_segments": {
+        "type": "array",
+        "label": "고객 세그먼트",
+        "item_type": {
+          "name": {
+            "type": "string",
+            "label": "세그먼트명"
+          },
+          "criteria": {
+            "type": "object",
+            "label": "분류 기준",
+            "fields": {
+              "visit_count_min": "number",
+              "visit_count_max": "number",
+              "total_spend_min": "number",
+              "last_visit_days": "number"
+            }
+          },
+          "treatment": {
+            "type": "string",
+            "label": "응대 방식"
+          }
+        },
+        "default": [
+          {
+            "name": "신규 고객",
+            "criteria": {"visit_count_max": 0},
+            "treatment": "환영 인사, 매장 소개, 첫 방문 혜택 안내"
+          },
+          {
+            "name": "단골 고객",
+            "criteria": {"visit_count_min": 5},
+            "treatment": "기억하는 느낌, 개인화된 추천, VIP 혜택 안내"
+          },
+          {
+            "name": "이탈 위험 고객",
+            "criteria": {"last_visit_days": 90},
+            "treatment": "안부 인사, 특별 프로모션, 재방문 유도"
+          }
+        ]
+      },
+      "customer_tags": {
+        "type": "array",
+        "label": "고객 태그",
+        "item_type": "string",
+        "default": ["VIP", "민감피부", "예약잦은취소", "소개고객", "SNS인플루언서"]
+      },
+      "follow_up_rules": {
+        "type": "array",
+        "label": "팔로업 규칙",
+        "item_type": {
+          "trigger": "string",
+          "action": "string",
+          "timing": "string"
+        },
+        "default": [
+          {"trigger": "예약 완료", "action": "예약 확인 메시지", "timing": "즉시"},
+          {"trigger": "방문 완료", "action": "감사 메시지 + 리뷰 요청", "timing": "방문 후 1일"},
+          {"trigger": "30일 미방문", "action": "안부 인사 + 프로모션", "timing": "자동"}
+        ]
+      }
+    },
+
+    "marketing_setup": {
+      "campaign_templates": {
+        "type": "array",
+        "label": "캠페인 템플릿",
+        "item_type": {
+          "name": "string",
+          "type": {
+            "type": "select",
+            "options": ["promotion", "seasonal", "event", "retention"]
+          },
+          "message_template": "text",
+          "target_segment": "string"
+        }
+      },
+      "auto_messages": {
+        "birthday_message": {
+          "type": "text",
+          "label": "생일 축하 메시지",
+          "default": "{customer_name}님, 생일 축하드려요! 🎂 생일 기념으로 {discount}% 할인 쿠폰을 선물로 드릴게요."
+        },
+        "anniversary_message": {
+          "type": "text",
+          "label": "방문 기념일 메시지",
+          "default": "{customer_name}님, 벌써 저희 매장과 {years}년째네요! 감사의 마음을 담아 특별 혜택을 준비했어요."
+        }
+      },
+      "sms_settings": {
+        "enabled": {
+          "type": "boolean",
+          "label": "SMS 발송 사용"
+        },
+        "sender_number": {
+          "type": "string",
+          "label": "발신 번호"
+        },
+        "opt_out_keywords": {
+          "type": "array",
+          "label": "수신 거부 키워드",
+          "default": ["수신거부", "해지", "그만"]
+        }
+      }
+    },
+
+    "reservation_setup": {
+      "booking_rules": {
+        "advance_booking_days": {
+          "type": "number",
+          "label": "사전 예약 가능 일수",
+          "default": 30,
+          "min": 1,
+          "max": 90
+        },
+        "min_notice_hours": {
+          "type": "number",
+          "label": "최소 예약 시간 전 (시간)",
+          "default": 2
+        },
+        "max_bookings_per_slot": {
+          "type": "number",
+          "label": "시간대별 최대 예약 수",
+          "default": 1
+        },
+        "slot_duration_minutes": {
+          "type": "number",
+          "label": "예약 슬롯 단위 (분)",
+          "default": 30,
+          "options": [15, 30, 60]
+        },
+        "buffer_between_bookings": {
+          "type": "number",
+          "label": "예약 간 여유 시간 (분)",
+          "default": 0
+        }
+      },
+      "cancellation_policy": {
+        "free_cancellation_hours": {
+          "type": "number",
+          "label": "무료 취소 가능 시간 전",
+          "default": 24
+        },
+        "late_cancellation_fee": {
+          "type": "number",
+          "label": "늦은 취소 수수료 (%)",
+          "default": 0
+        },
+        "no_show_policy": {
+          "type": "text",
+          "label": "노쇼 정책",
+          "default": "연락 없이 방문하지 않으시면 다음 예약이 제한될 수 있습니다."
+        }
+      },
+      "confirmation_messages": {
+        "booking_confirmed": {
+          "type": "text",
+          "label": "예약 확정 메시지",
+          "default": "예약이 확정되었습니다! 📅\n\n■ 일시: {date} {time}\n■ 서비스: {service}\n■ 매장: {store_name}\n\n변경/취소는 방문 {hours}시간 전까지 가능합니다."
+        },
+        "booking_reminder": {
+          "type": "text",
+          "label": "예약 리마인더",
+          "default": "내일 {time}에 예약이 있으시네요! {store_name}에서 기다리고 있을게요 😊"
+        }
+      }
+    }
+  },
+
+  "validation_rules": {
+    "store_name": {
+      "required": true,
+      "min_length": 2,
+      "max_length": 50
+    },
+    "phone": {
+      "pattern": "^[0-9]{2,3}-[0-9]{3,4}-[0-9]{4}$",
+      "message": "올바른 전화번호 형식이 아닙니다"
+    },
+    "price": {
+      "min": 0,
+      "message": "가격은 0 이상이어야 합니다"
+    },
+    "operating_hours": {
+      "custom": "open_time < close_time",
+      "message": "영업 시작 시간은 종료 시간보다 빨라야 합니다"
+    }
+  }
+}

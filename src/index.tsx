@@ -11,6 +11,7 @@ import webhookRoutes from './routes/webhook';
 import apiRoutes from './routes/api';
 import { renderDashboard } from './views/dashboard';
 import { renderLogin } from './views/login';
+import { renderAdminDashboard } from './views/admin-dashboard';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -73,6 +74,11 @@ app.get('/dashboard', async (c) => {
 app.get('/dashboard/:storeId', async (c) => {
   const storeId = parseInt(c.req.param('storeId'), 10);
   return c.html(renderDashboard(storeId, c.env.XIVIX_VERSION));
+});
+
+// Admin Dashboard (멀티테넌트 업체 관리)
+app.get('/admin', async (c) => {
+  return c.html(renderAdminDashboard());
 });
 
 // ============ Root & Landing ============
