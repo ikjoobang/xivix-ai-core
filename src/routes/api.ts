@@ -1344,57 +1344,10 @@ api.post('/smartplace/analyze', async (c) => {
   }
   
   try {
-    // 네이버 플레이스 API 호출 (공개 정보)
-    const placeApiUrl = `https://map.naver.com/p/api/search/allSearch?query=${placeId}&type=all&searchCoord=&boundary=`;
+    // ============ [추가] 실제 데이터 크롤링 - Place Summary API (최우선) ============
+    // 이 API가 가장 안정적으로 실제 매장 정보를 반환함
+    console.log(`[SmartPlace] Place ID ${placeId} 실제 데이터 크롤링 시작...`);
     
-    // 또는 직접 place 정보 조회
-    const placeDetailUrl = `https://map.naver.com/p/api/place/detailed/${placeId}`;
-    
-    let placeData: any = null;
-    
-    // 방법 1: Place Detail API 시도
-    try {
-      const detailRes = await fetch(placeDetailUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': 'application/json',
-          'Referer': 'https://map.naver.com/'
-        }
-      });
-      
-      if (detailRes.ok) {
-        placeData = await detailRes.json();
-      }
-    } catch (e) {
-      console.log('Place detail API failed, trying alternative...');
-    }
-    
-    // 방법 2: Place API v2 시도
-    if (!placeData) {
-      try {
-        const v2Url = `https://pcmap.place.naver.com/place/${placeId}/home`;
-        const v2Res = await fetch(v2Url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          }
-        });
-        
-        if (v2Res.ok) {
-          const html = await v2Res.text();
-          // HTML에서 JSON 데이터 추출
-          const jsonMatch = html.match(/__APOLLO_STATE__\s*=\s*({.*?});/s);
-          if (jsonMatch) {
-            try {
-              placeData = JSON.parse(jsonMatch[1]);
-            } catch {}
-          }
-        }
-      } catch (e) {
-        console.log('Place v2 API failed');
-      }
-    }
-    
-    // 데이터 추출 및 정규화
     let extractedData = {
       place_id: placeId,
       store_name: '',
@@ -1407,78 +1360,268 @@ api.post('/smartplace/analyze', async (c) => {
       review_keywords: [] as string[],
       images: [] as string[],
       rating: 0,
-      review_count: 0
+      review_count: 0,
+      business_type_code: '' // hairshop, restaurant 등
     };
     
-    if (placeData) {
-      // Apollo State 구조에서 데이터 추출
-      const placeKey = Object.keys(placeData).find(k => k.startsWith('PlaceDetailBase:'));
-      if (placeKey && placeData[placeKey]) {
-        const place = placeData[placeKey];
-        extractedData.store_name = place.name || '';
-        extractedData.category = place.category || '';
-        extractedData.address = place.roadAddress || place.address || '';
-        extractedData.phone = place.phone || '';
+    let realDataFetched = false;
+    
+    // [추가] 방법 0: Place Summary API (가장 신뢰성 높음)
+    try {
+      const summaryUrl = `https://map.naver.com/p/api/place/summary/${placeId}`;
+      console.log(`[SmartPlace] Summary API 호출: ${summaryUrl}`);
+      
+      const summaryRes = await fetch(summaryUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/json',
+          'Accept-Language': 'ko-KR,ko;q=0.9',
+          'Referer': 'https://map.naver.com/'
+        }
+      });
+      
+      if (summaryRes.ok) {
+        const summaryData = await summaryRes.json() as any;
+        console.log(`[SmartPlace] Summary API 응답 수신`);
+        
+        // 실제 데이터 추출
+        if (summaryData?.data?.placeDetail) {
+          const detail = summaryData.data.placeDetail;
+          
+          // 매장명 (필수)
+          if (detail.name) {
+            extractedData.store_name = detail.name;
+            console.log(`[SmartPlace] ✅ 실제 매장명: ${detail.name}`);
+          }
+          
+          // 업종 (필수)
+          if (detail.category?.category) {
+            extractedData.category = detail.category.category;
+            console.log(`[SmartPlace] ✅ 실제 업종: ${detail.category.category}`);
+          }
+          
+          // 업종 코드 (hairshop, restaurant 등)
+          if (detail.businessType) {
+            extractedData.business_type_code = detail.businessType;
+            console.log(`[SmartPlace] ✅ 업종 코드: ${detail.businessType}`);
+          }
+          
+          // 주소
+          if (detail.address?.roadAddress) {
+            extractedData.address = detail.address.roadAddress;
+          } else if (detail.address?.address) {
+            extractedData.address = detail.address.address;
+          }
+          
+          // 영업시간
+          if (detail.businessHours?.description) {
+            extractedData.business_hours = detail.businessHours.description;
+          }
+          
+          // 대표 가격/메뉴
+          if (detail.reprPrice?.displayText) {
+            extractedData.menu_items.push(detail.reprPrice.displayText);
+          }
+          
+          // 리뷰 수
+          if (detail.visitorReviews?.displayText) {
+            const reviewMatch = detail.visitorReviews.displayText.match(/\d+/);
+            if (reviewMatch) {
+              extractedData.review_count = parseInt(reviewMatch[0], 10);
+            }
+          }
+          
+          // 이미지
+          if (detail.images?.images) {
+            extractedData.images = detail.images.images.slice(0, 5).map((img: any) => img.origin);
+          }
+          
+          // 뷰티 스타일 (미용실인 경우)
+          if (detail.beautyStyles?.reprStyles) {
+            extractedData.review_keywords = detail.beautyStyles.reprStyles.slice(0, 5).map((s: any) => s.categoryString);
+          }
+          
+          // 필수 필드 검증 (매장명, 업종)
+          if (extractedData.store_name && extractedData.category) {
+            realDataFetched = true;
+            console.log(`[SmartPlace] ✅ 실제 데이터 수집 성공: ${extractedData.store_name} (${extractedData.category})`);
+          }
+        }
+      } else {
+        console.log(`[SmartPlace] Summary API 실패: ${summaryRes.status}`);
+      }
+    } catch (e) {
+      console.log(`[SmartPlace] Summary API 오류:`, e);
+    }
+    // ============ [추가] Place Summary API 끝 ============
+    
+    // 기존 방법들 (Summary API 실패 시 폴백)
+    let placeData: any = null;
+    
+    if (!realDataFetched) {
+      // 네이버 플레이스 API 호출 (공개 정보)
+      const placeApiUrl = `https://map.naver.com/p/api/search/allSearch?query=${placeId}&type=all&searchCoord=&boundary=`;
+      
+      // 또는 직접 place 정보 조회
+      const placeDetailUrl = `https://map.naver.com/p/api/place/detailed/${placeId}`;
+      
+      // 방법 1: Place Detail API 시도
+      try {
+        const detailRes = await fetch(placeDetailUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json',
+            'Referer': 'https://map.naver.com/'
+          }
+        });
+        
+        if (detailRes.ok) {
+          placeData = await detailRes.json();
+        }
+      } catch (e) {
+        console.log('Place detail API failed, trying alternative...');
       }
       
-      // 영업시간 추출
-      const bizHoursKey = Object.keys(placeData).find(k => k.startsWith('PlaceBizHours:'));
-      if (bizHoursKey && placeData[bizHoursKey]) {
-        extractedData.business_hours = placeData[bizHoursKey].summary || '';
+      // 방법 2: Place API v2 시도
+      if (!placeData) {
+        try {
+          const v2Url = `https://pcmap.place.naver.com/place/${placeId}/home`;
+          const v2Res = await fetch(v2Url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+          });
+          
+          if (v2Res.ok) {
+            const html = await v2Res.text();
+            // HTML에서 JSON 데이터 추출
+            const jsonMatch = html.match(/__APOLLO_STATE__\s*=\s*({.*?});/s);
+            if (jsonMatch) {
+              try {
+                placeData = JSON.parse(jsonMatch[1]);
+              } catch {}
+            }
+          }
+        } catch (e) {
+          console.log('Place v2 API failed');
+        }
       }
       
-      // 메뉴 추출
-      const menuKeys = Object.keys(placeData).filter(k => k.startsWith('PlaceMenuItem:'));
-      extractedData.menu_items = menuKeys.slice(0, 10).map(k => {
-        const item = placeData[k];
-        return item?.name ? `${item.name}${item.price ? ` (${item.price})` : ''}` : '';
-      }).filter(Boolean);
+      // 기존 데이터 추출 로직 (폴백용)
+      if (placeData) {
+        // Apollo State 구조에서 데이터 추출
+        const placeKey = Object.keys(placeData).find(k => k.startsWith('PlaceDetailBase:'));
+        if (placeKey && placeData[placeKey]) {
+          const place = placeData[placeKey];
+          if (!extractedData.store_name) extractedData.store_name = place.name || '';
+          if (!extractedData.category) extractedData.category = place.category || '';
+          if (!extractedData.address) extractedData.address = place.roadAddress || place.address || '';
+          extractedData.phone = place.phone || '';
+        }
+        
+        // 영업시간 추출
+        const bizHoursKey = Object.keys(placeData).find(k => k.startsWith('PlaceBizHours:'));
+        if (bizHoursKey && placeData[bizHoursKey]) {
+          if (!extractedData.business_hours) extractedData.business_hours = placeData[bizHoursKey].summary || '';
+        }
+        
+        // 메뉴 추출
+        const menuKeys = Object.keys(placeData).filter(k => k.startsWith('PlaceMenuItem:'));
+        if (extractedData.menu_items.length === 0) {
+          extractedData.menu_items = menuKeys.slice(0, 10).map(k => {
+            const item = placeData[k];
+            return item?.name ? `${item.name}${item.price ? ` (${item.price})` : ''}` : '';
+          }).filter(Boolean);
+        }
+        
+        // 폴백에서도 데이터 있으면 성공 처리
+        if (extractedData.store_name && extractedData.category) {
+          realDataFetched = true;
+        }
+      }
     }
     
-    // 데이터가 부족하면 시뮬레이션 데이터 생성 (테스트용)
-    if (!extractedData.store_name) {
-      // Place ID 기반 기본 정보 생성
-      extractedData = {
-        place_id: placeId,
-        store_name: `매장 #${placeId}`,
-        category: '음식점/카페',
-        address: '서울특별시',
-        phone: '',
-        business_hours: '매일 10:00 - 22:00',
-        description: '네이버 플레이스에 등록된 매장입니다.',
-        menu_items: [],
-        review_keywords: ['친절', '맛있는', '깔끔한'],
-        images: [],
-        rating: 4.5,
-        review_count: 100
-      };
+    // ============ [추가] 데이터 수집 실패 시 에러 반환 (가짜 데이터 생성 금지) ============
+    if (!realDataFetched || !extractedData.store_name) {
+      console.log(`[SmartPlace] ❌ 실제 데이터 수집 실패 - Place ID: ${placeId}`);
+      return c.json<ApiResponse>({
+        success: false,
+        error: '데이터를 수집할 수 없습니다. 네이버 플레이스 페이지에서 직접 정보를 확인하시거나, 수동으로 입력해 주세요.',
+        data: {
+          place_id: placeId,
+          place_url: `https://map.naver.com/p/entry/place/${placeId}`,
+          reason: '네이버 API 응답 없음 또는 매장 정보 비공개'
+        },
+        timestamp: Date.now()
+      }, 400);
     }
+    // ============ 가짜 데이터 생성 로직 삭제됨 ============
+    
+    // ============ [추가] 업종 코드 매핑 (실제 데이터 기반) ============
+    // 네이버 businessType → XIVIX 업종 코드 매핑
+    const businessTypeMapping: { [key: string]: { code: string; name: string } } = {
+      'hairshop': { code: 'BEAUTY_HAIR', name: '미용실' },
+      'beauty': { code: 'BEAUTY_SKIN', name: '피부관리/에스테틱' },
+      'nail': { code: 'BEAUTY_NAIL', name: '네일샵' },
+      'restaurant': { code: 'RESTAURANT', name: '음식점' },
+      'cafe': { code: 'CAFE', name: '카페' },
+      'fitness': { code: 'FITNESS', name: '헬스/피트니스' },
+      'hospital': { code: 'MEDICAL', name: '병원/의원' },
+      'pharmacy': { code: 'PHARMACY', name: '약국' },
+      'accommodation': { code: 'ACCOMMODATION', name: '숙박' },
+      'education': { code: 'EDUCATION', name: '학원/교육' }
+    };
+    
+    // 실제 수집된 업종 코드로 매핑 (할루시네이션 방지)
+    let mappedBusinessType = { code: 'OTHER', name: extractedData.category || '기타' };
+    if (extractedData.business_type_code && businessTypeMapping[extractedData.business_type_code]) {
+      mappedBusinessType = businessTypeMapping[extractedData.business_type_code];
+      console.log(`[SmartPlace] 업종 코드 매핑: ${extractedData.business_type_code} → ${mappedBusinessType.code} (${mappedBusinessType.name})`);
+    } else if (extractedData.category) {
+      // 카테고리 텍스트로 추론
+      if (extractedData.category.includes('미용') || extractedData.category.includes('헤어')) {
+        mappedBusinessType = { code: 'BEAUTY_HAIR', name: '미용실' };
+      } else if (extractedData.category.includes('음식') || extractedData.category.includes('식당')) {
+        mappedBusinessType = { code: 'RESTAURANT', name: '음식점' };
+      } else if (extractedData.category.includes('카페') || extractedData.category.includes('커피')) {
+        mappedBusinessType = { code: 'CAFE', name: '카페' };
+      }
+    }
+    // ============ 업종 코드 매핑 끝 ============
     
     // Gemini AI로 페르소나 자동 생성
     let aiAnalysis = null;
     
     if (c.env.GEMINI_API_KEY) {
       try {
+        // [수정] 실제 수집된 데이터 기반 프롬프트 (업종 코드 강제 적용)
         const geminiPrompt = `당신은 AI 상담사 페르소나를 설계하는 전문가입니다.
 
-다음 매장 정보를 분석하여 최적화된 AI 상담사 페르소나를 JSON 형식으로 제안해주세요:
+다음은 네이버 플레이스에서 실제로 수집된 매장 정보입니다:
 
+[실제 수집 데이터]
 매장명: ${extractedData.store_name}
 업종: ${extractedData.category}
+업종 코드: ${extractedData.business_type_code || '미확인'}
 주소: ${extractedData.address}
 영업시간: ${extractedData.business_hours}
-메뉴: ${extractedData.menu_items.join(', ') || '정보 없음'}
-리뷰 키워드: ${extractedData.review_keywords.join(', ') || '정보 없음'}
+대표 메뉴/가격: ${extractedData.menu_items.join(', ') || '정보 없음'}
+스타일/키워드: ${extractedData.review_keywords.join(', ') || '정보 없음'}
+리뷰 수: ${extractedData.review_count}개
+
+중요: 위 데이터는 실제 네이버 플레이스에서 수집된 정보입니다. 
+업종이 "${extractedData.category}"이므로, business_type은 반드시 "${mappedBusinessType.code}"로, business_type_name은 "${mappedBusinessType.name}"으로 설정하세요.
+절대로 다른 업종으로 변경하지 마세요.
 
 다음 JSON 형식으로만 응답하세요:
 {
-  "business_type": "업종 분류 코드 (BEAUTY_HAIR, RESTAURANT, FITNESS 등)",
-  "business_type_name": "업종 한글명",
-  "ai_persona": "AI 상담사의 역할 설명 (2-3문장)",
+  "business_type": "${mappedBusinessType.code}",
+  "business_type_name": "${mappedBusinessType.name}",
+  "ai_persona": "AI 상담사의 역할 설명 (2-3문장, 매장명과 업종 특성 반영)",
   "ai_tone": "말투 스타일 (friendly/professional/casual)",
-  "ai_features": "주요 기능들 (쉼표로 구분)",
-  "greeting_message": "첫 인사말 예시",
-  "target_customer": "예상 주요 고객층",
+  "ai_features": "주요 기능들 (업종에 맞는 기능, 쉼표로 구분)",
+  "greeting_message": "첫 인사말 예시 (실제 매장명 포함)",
+  "target_customer": "예상 주요 고객층 (주소 기반)",
   "competitive_edge": "경쟁력 분석 (1-2문장)"
 }`;
 
@@ -1516,11 +1659,11 @@ api.post('/smartplace/analyze', async (c) => {
       }
     }
     
-    // AI 분석 실패 시 기본값
+    // AI 분석 실패 시 기본값 (실제 수집 데이터 기반)
     if (!aiAnalysis) {
       aiAnalysis = {
-        business_type: 'OTHER',
-        business_type_name: extractedData.category || '기타',
+        business_type: mappedBusinessType.code,  // [수정] 실제 업종 코드 사용
+        business_type_name: mappedBusinessType.name,  // [수정] 실제 업종명 사용
         ai_persona: `${extractedData.store_name}의 전문 AI 상담사입니다. 고객님의 문의에 친절하게 응대합니다.`,
         ai_tone: 'friendly',
         ai_features: '예약 안내, 메뉴 소개, 영업시간 안내',
@@ -1529,6 +1672,16 @@ api.post('/smartplace/analyze', async (c) => {
         competitive_edge: '친절한 응대와 빠른 답변'
       };
     }
+    
+    // ============ [추가] AI 분석 결과 업종 검증 (할루시네이션 방지) ============
+    // AI가 잘못된 업종을 반환하면 실제 수집된 업종으로 강제 교정
+    if (aiAnalysis.business_type !== mappedBusinessType.code) {
+      console.log(`[SmartPlace] ⚠️ AI 업종 불일치 감지: AI=${aiAnalysis.business_type}, 실제=${mappedBusinessType.code}`);
+      console.log(`[SmartPlace] 실제 업종으로 강제 교정`);
+      aiAnalysis.business_type = mappedBusinessType.code;
+      aiAnalysis.business_type_name = mappedBusinessType.name;
+    }
+    // ============ 업종 검증 끝 ============
     
     return c.json<ApiResponse>({
       success: true,
