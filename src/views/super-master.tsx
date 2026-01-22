@@ -94,6 +94,26 @@ export function renderSuperMasterDashboard(): string {
           </div>
         </div>
         
+        <p class="text-xs text-white/30 uppercase tracking-wider mb-3 px-3">WATCHDOG</p>
+        <div class="space-y-1 mb-6">
+          <div class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer" onclick="showSection('watchdog')">
+            <i class="fas fa-dog w-5 text-red-400"></i>
+            <span>시스템 감시</span>
+            <span class="ml-auto" id="watchdog-status">
+              <span class="w-2 h-2 rounded-full bg-green-400 inline-block animate-pulse"></span>
+            </span>
+          </div>
+          <div class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer" onclick="showSection('rawdata')">
+            <i class="fas fa-database w-5 text-blue-400"></i>
+            <span>RAW 데이터</span>
+          </div>
+          <div class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer" onclick="showSection('errors')">
+            <i class="fas fa-bug w-5 text-red-400"></i>
+            <span>에러 로그</span>
+            <span class="ml-auto text-red-400 text-xs" id="error-count">0</span>
+          </div>
+        </div>
+        
         <p class="text-xs text-white/30 uppercase tracking-wider mb-3 px-3">설정</p>
         <div class="space-y-1">
           <div class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer" onclick="showSection('notifications')">
@@ -264,6 +284,213 @@ export function renderSuperMasterDashboard(): string {
                   <div class="w-11 h-6 bg-white/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
                 </label>
               </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Section: WATCHDOG 시스템 감시 -->
+        <div id="section-watchdog" class="hidden">
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <!-- 시스템 상태 신호등 -->
+            <div class="glass rounded-xl p-6 border border-white/10">
+              <h3 class="font-semibold mb-4 flex items-center gap-2">
+                <i class="fas fa-traffic-light text-yellow-400"></i>
+                시스템 상태
+              </h3>
+              <div class="space-y-3" id="system-status-lights">
+                <div class="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                  <span class="text-sm">Database (D1)</span>
+                  <span class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-gray-500" id="db-status-light"></span>
+                    <span class="text-xs text-white/40" id="db-status-text">확인 중...</span>
+                  </span>
+                </div>
+                <div class="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                  <span class="text-sm">KV Storage</span>
+                  <span class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-gray-500" id="kv-status-light"></span>
+                    <span class="text-xs text-white/40" id="kv-status-text">확인 중...</span>
+                  </span>
+                </div>
+                <div class="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                  <span class="text-sm">R2 Storage</span>
+                  <span class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-gray-500" id="r2-status-light"></span>
+                    <span class="text-xs text-white/40" id="r2-status-text">확인 중...</span>
+                  </span>
+                </div>
+              </div>
+              <div class="mt-4 p-3 rounded-lg" id="overall-status-box">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium">전체 상태</span>
+                  <span class="text-lg font-bold" id="overall-status-text">-</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- API 헬스체크 -->
+            <div class="glass rounded-xl p-6 border border-white/10">
+              <h3 class="font-semibold mb-4 flex items-center gap-2">
+                <i class="fas fa-heartbeat text-red-400"></i>
+                API 상태
+              </h3>
+              <div class="text-center py-4">
+                <p class="text-4xl font-bold gold" id="api-healthy-count">-</p>
+                <p class="text-sm text-white/40 mt-1">정상 작동 중</p>
+              </div>
+              <div class="mt-4 grid grid-cols-2 gap-2 text-center">
+                <div class="bg-emerald-500/10 rounded-lg p-2">
+                  <p class="text-lg font-bold text-emerald-400" id="api-green-count">0</p>
+                  <p class="text-xs text-white/40">GREEN</p>
+                </div>
+                <div class="bg-red-500/10 rounded-lg p-2">
+                  <p class="text-lg font-bold text-red-400" id="api-red-count">0</p>
+                  <p class="text-xs text-white/40">RED</p>
+                </div>
+              </div>
+              <button onclick="runWatchdogCheck()" class="w-full mt-4 py-2 glass rounded-lg text-sm hover:bg-white/10 transition-all">
+                <i class="fas fa-sync-alt mr-2"></i>지금 점검
+              </button>
+            </div>
+            
+            <!-- 오늘의 에러 -->
+            <div class="glass rounded-xl p-6 border border-white/10">
+              <h3 class="font-semibold mb-4 flex items-center gap-2">
+                <i class="fas fa-exclamation-triangle text-orange-400"></i>
+                오늘의 에러
+              </h3>
+              <div class="text-center py-4">
+                <p class="text-4xl font-bold" id="today-error-count">0</p>
+                <p class="text-sm text-white/40 mt-1">발생 건수</p>
+              </div>
+              <div class="mt-4 space-y-2" id="recent-errors-mini">
+                <p class="text-xs text-white/30 text-center">최근 에러 없음</p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Watchdog 버전 정보 -->
+          <div class="glass rounded-xl p-4 border border-yellow-500/30 bg-yellow-500/5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <i class="fas fa-dog text-yellow-400 text-2xl"></i>
+                <div>
+                  <p class="font-semibold">XIVIX Watchdog V1.0</p>
+                  <p class="text-sm text-white/40">개발자 할루시네이션 방지 시스템 가동 중</p>
+                </div>
+              </div>
+              <div class="text-right">
+                <p class="text-xs text-white/40">마지막 점검</p>
+                <p class="text-sm gold" id="last-watchdog-check">-</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Section: RAW 데이터 뷰어 -->
+        <div id="section-rawdata" class="hidden">
+          <div class="glass rounded-xl p-6 mb-6">
+            <h3 class="font-semibold mb-4 flex items-center gap-2">
+              <i class="fas fa-database text-blue-400"></i>
+              D1 Database 직접 조회
+            </h3>
+            <p class="text-sm text-white/40 mb-4">모든 데이터는 D1 Database의 실제 레코드입니다. 가짜 데이터(Mock)가 없습니다.</p>
+            
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+              <button onclick="downloadRawData('xivix_stores')" class="p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-all text-left">
+                <i class="fas fa-store text-blue-400 mb-2"></i>
+                <p class="font-medium">매장 데이터</p>
+                <p class="text-xs text-white/40">xivix_stores</p>
+              </button>
+              <button onclick="downloadRawData('xivix_conversation_logs')" class="p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-all text-left">
+                <i class="fas fa-comments text-green-400 mb-2"></i>
+                <p class="font-medium">상담 로그</p>
+                <p class="text-xs text-white/40">xivix_conversation_logs</p>
+              </button>
+              <button onclick="downloadRawData('xivix_reservations')" class="p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-all text-left">
+                <i class="fas fa-calendar-check text-purple-400 mb-2"></i>
+                <p class="font-medium">예약 데이터</p>
+                <p class="text-xs text-white/40">xivix_reservations</p>
+              </button>
+              <button onclick="downloadRawData('xivix_error_logs')" class="p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-all text-left">
+                <i class="fas fa-bug text-red-400 mb-2"></i>
+                <p class="font-medium">에러 로그</p>
+                <p class="text-xs text-white/40">xivix_error_logs</p>
+              </button>
+              <button onclick="downloadRawData('xivix_admin_logs')" class="p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-all text-left">
+                <i class="fas fa-user-shield text-yellow-400 mb-2"></i>
+                <p class="font-medium">관리자 로그</p>
+                <p class="text-xs text-white/40">xivix_admin_logs</p>
+              </button>
+              <button onclick="downloadRawData('xivix_notification_logs')" class="p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-all text-left">
+                <i class="fas fa-bell text-orange-400 mb-2"></i>
+                <p class="font-medium">알림 로그</p>
+                <p class="text-xs text-white/40">xivix_notification_logs</p>
+              </button>
+            </div>
+            
+            <div class="flex gap-3">
+              <select id="export-format" class="bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white">
+                <option value="json">JSON 형식</option>
+                <option value="csv">CSV (엑셀 호환)</option>
+              </select>
+              <input type="number" id="export-limit" value="1000" min="1" max="10000" class="bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white w-32" placeholder="최대 행">
+            </div>
+          </div>
+          
+          <!-- 데이터 미리보기 -->
+          <div class="glass rounded-xl p-6">
+            <h3 class="font-semibold mb-4">데이터 미리보기</h3>
+            <div id="raw-data-preview" class="bg-black/50 rounded-lg p-4 font-mono text-xs text-green-400 max-h-96 overflow-auto">
+              <p class="text-white/40">테이블을 선택하면 데이터가 표시됩니다</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Section: 에러 로그 -->
+        <div id="section-errors" class="hidden">
+          <div class="glass rounded-xl p-6 mb-6 border border-red-500/30 bg-red-500/5" id="critical-error-banner" style="display: none;">
+            <div class="flex items-center gap-3">
+              <i class="fas fa-exclamation-circle text-red-400 text-2xl animate-pulse"></i>
+              <div>
+                <p class="font-semibold text-red-400">⚠️ 긴급: 시스템 에러 감지됨</p>
+                <p class="text-sm text-white/60" id="critical-error-message">-</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="glass rounded-xl p-6">
+            <div class="flex items-center justify-between mb-6">
+              <h3 class="font-semibold flex items-center gap-2">
+                <i class="fas fa-bug text-red-400"></i>
+                에러 블랙박스
+              </h3>
+              <button onclick="loadErrorLogs()" class="px-4 py-2 glass rounded-lg text-sm hover:bg-white/10">
+                <i class="fas fa-sync-alt mr-2"></i>새로고침
+              </button>
+            </div>
+            
+            <div class="grid grid-cols-4 gap-4 mb-6">
+              <div class="bg-red-500/10 rounded-xl p-4 text-center">
+                <p class="text-2xl font-bold text-red-400" id="error-critical-count">0</p>
+                <p class="text-xs text-white/40">CRITICAL</p>
+              </div>
+              <div class="bg-orange-500/10 rounded-xl p-4 text-center">
+                <p class="text-2xl font-bold text-orange-400" id="error-error-count">0</p>
+                <p class="text-xs text-white/40">ERROR</p>
+              </div>
+              <div class="bg-yellow-500/10 rounded-xl p-4 text-center">
+                <p class="text-2xl font-bold text-yellow-400" id="error-warning-count">0</p>
+                <p class="text-xs text-white/40">WARNING</p>
+              </div>
+              <div class="bg-blue-500/10 rounded-xl p-4 text-center">
+                <p class="text-2xl font-bold text-blue-400" id="error-info-count">0</p>
+                <p class="text-xs text-white/40">INFO</p>
+              </div>
+            </div>
+            
+            <div class="space-y-3" id="error-log-list">
+              <p class="text-center text-white/40 py-8">에러 로그를 불러오는 중...</p>
             </div>
           </div>
         </div>
@@ -803,8 +1030,210 @@ export function renderSuperMasterDashboard(): string {
       }
     }
     
+    // ============================================================================
+    // XIVIX WATCHDOG V1.0 - JavaScript Functions
+    // ============================================================================
+    
+    // Watchdog 시스템 상태 체크
+    async function runWatchdogCheck() {
+      try {
+        document.getElementById('last-watchdog-check').textContent = '점검 중...';
+        
+        const res = await fetch('/api/watchdog/health');
+        const data = await res.json();
+        
+        if (data.success && data.data) {
+          const wd = data.data;
+          
+          // DB 상태
+          const dbStatus = wd.services.database.status;
+          document.getElementById('db-status-light').className = \`w-3 h-3 rounded-full \${dbStatus === 'GREEN' ? 'bg-emerald-400' : 'bg-red-400'}\`;
+          document.getElementById('db-status-text').textContent = dbStatus === 'GREEN' ? '정상' : '오류';
+          
+          // KV 상태
+          const kvStatus = wd.services.kv_storage.status;
+          document.getElementById('kv-status-light').className = \`w-3 h-3 rounded-full \${kvStatus === 'GREEN' ? 'bg-emerald-400' : 'bg-red-400'}\`;
+          document.getElementById('kv-status-text').textContent = kvStatus === 'GREEN' ? '정상' : '오류';
+          
+          // R2 상태
+          const r2Status = wd.services.r2_storage.status;
+          document.getElementById('r2-status-light').className = \`w-3 h-3 rounded-full \${r2Status === 'GREEN' ? 'bg-emerald-400' : r2Status === 'YELLOW' ? 'bg-yellow-400' : 'bg-red-400'}\`;
+          document.getElementById('r2-status-text').textContent = r2Status === 'GREEN' ? '정상' : r2Status === 'YELLOW' ? '점검필요' : '오류';
+          
+          // 전체 상태
+          const overall = wd.overall_status;
+          const statusBox = document.getElementById('overall-status-box');
+          const statusText = document.getElementById('overall-status-text');
+          
+          statusBox.className = \`mt-4 p-3 rounded-lg \${overall === 'GREEN' ? 'bg-emerald-500/10 border border-emerald-500/30' : overall === 'YELLOW' ? 'bg-yellow-500/10 border border-yellow-500/30' : 'bg-red-500/10 border border-red-500/30'}\`;
+          statusText.className = \`text-lg font-bold \${overall === 'GREEN' ? 'text-emerald-400' : overall === 'YELLOW' ? 'text-yellow-400' : 'text-red-400'}\`;
+          statusText.textContent = overall;
+          
+          // API 상태
+          document.getElementById('api-healthy-count').textContent = wd.endpoints_healthy || 0;
+          document.getElementById('api-green-count').textContent = wd.overall_status === 'GREEN' ? 3 : wd.overall_status === 'YELLOW' ? 2 : 1;
+          document.getElementById('api-red-count').textContent = wd.critical_failures || 0;
+          
+          // Watchdog 사이드바 상태
+          const watchdogStatus = document.getElementById('watchdog-status');
+          watchdogStatus.innerHTML = \`<span class="w-2 h-2 rounded-full \${overall === 'GREEN' ? 'bg-green-400' : overall === 'YELLOW' ? 'bg-yellow-400' : 'bg-red-400'} inline-block animate-pulse"></span>\`;
+          
+          // 마지막 점검 시간
+          document.getElementById('last-watchdog-check').textContent = new Date().toLocaleTimeString('ko-KR');
+        }
+      } catch (e) {
+        console.error('Watchdog check failed:', e);
+        document.getElementById('last-watchdog-check').textContent = '점검 실패';
+      }
+    }
+    
+    // 에러 로그 로드
+    async function loadErrorLogs() {
+      try {
+        const res = await fetch('/api/watchdog/error-logs');
+        const data = await res.json();
+        
+        if (data.success && data.data) {
+          const errors = data.data;
+          
+          // 오늘 에러 수
+          document.getElementById('today-error-count').textContent = errors.today_errors || 0;
+          document.getElementById('error-count').textContent = errors.today_errors || 0;
+          
+          // 심각도별 분류
+          const bySeverity = errors.by_severity || [];
+          document.getElementById('error-critical-count').textContent = bySeverity.find(s => s.severity === 'CRITICAL')?.count || 0;
+          document.getElementById('error-error-count').textContent = bySeverity.find(s => s.severity === 'ERROR')?.count || 0;
+          document.getElementById('error-warning-count').textContent = bySeverity.find(s => s.severity === 'WARNING')?.count || 0;
+          document.getElementById('error-info-count').textContent = bySeverity.find(s => s.severity === 'INFO')?.count || 0;
+          
+          // 에러 목록
+          const logs = errors.recent_logs || [];
+          const errorList = document.getElementById('error-log-list');
+          
+          if (logs.length === 0) {
+            errorList.innerHTML = '<p class="text-center text-white/40 py-8">에러 로그가 없습니다. 시스템이 정상입니다! ✅</p>';
+          } else {
+            errorList.innerHTML = logs.slice(0, 20).map(log => \`
+              <div class="p-4 bg-white/5 rounded-xl border-l-4 \${log.severity === 'CRITICAL' ? 'border-red-500' : log.severity === 'ERROR' ? 'border-orange-500' : log.severity === 'WARNING' ? 'border-yellow-500' : 'border-blue-500'}">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs px-2 py-1 rounded \${log.severity === 'CRITICAL' ? 'bg-red-500/20 text-red-400' : log.severity === 'ERROR' ? 'bg-orange-500/20 text-orange-400' : log.severity === 'WARNING' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-blue-500/20 text-blue-400'}">\${log.severity}</span>
+                  <span class="text-xs text-white/40">\${new Date(log.created_at).toLocaleString('ko-KR')}</span>
+                </div>
+                <p class="text-sm font-medium">\${log.error_type}</p>
+                <p class="text-xs text-white/60 mt-1">\${log.error_message?.substring(0, 200) || '-'}</p>
+                <p class="text-xs text-white/30 mt-1">Endpoint: \${log.endpoint || '-'}</p>
+              </div>
+            \`).join('');
+          }
+          
+          // 긴급 에러 배너
+          const criticalCount = bySeverity.find(s => s.severity === 'CRITICAL')?.count || 0;
+          const criticalBanner = document.getElementById('critical-error-banner');
+          if (criticalCount > 0 && logs[0]) {
+            criticalBanner.style.display = 'block';
+            document.getElementById('critical-error-message').textContent = logs[0].error_message?.substring(0, 100) || '확인 필요';
+          } else {
+            criticalBanner.style.display = 'none';
+          }
+          
+          // 미니 에러 목록 (Watchdog 섹션)
+          const miniList = document.getElementById('recent-errors-mini');
+          if (logs.length === 0) {
+            miniList.innerHTML = '<p class="text-xs text-white/30 text-center">최근 에러 없음 ✅</p>';
+          } else {
+            miniList.innerHTML = logs.slice(0, 3).map(log => \`
+              <div class="text-xs p-2 bg-white/5 rounded">
+                <span class="\${log.severity === 'CRITICAL' || log.severity === 'ERROR' ? 'text-red-400' : 'text-yellow-400'}">\${log.error_type}</span>
+              </div>
+            \`).join('');
+          }
+        }
+      } catch (e) {
+        console.error('Error logs load failed:', e);
+      }
+    }
+    
+    // RAW 데이터 다운로드
+    async function downloadRawData(tableName) {
+      const format = document.getElementById('export-format')?.value || 'json';
+      const limit = document.getElementById('export-limit')?.value || 1000;
+      
+      try {
+        const preview = document.getElementById('raw-data-preview');
+        preview.innerHTML = '<p class="text-yellow-400">데이터 로딩 중...</p>';
+        
+        const res = await fetch(\`/api/watchdog/raw-data/\${tableName}?format=\${format}&limit=\${limit}\`);
+        
+        if (format === 'csv') {
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = \`\${tableName}_\${new Date().toISOString().split('T')[0]}.csv\`;
+          a.click();
+          URL.revokeObjectURL(url);
+          preview.innerHTML = '<p class="text-green-400">✅ CSV 파일 다운로드 완료!</p>';
+        } else {
+          const data = await res.json();
+          if (data.success) {
+            preview.innerHTML = \`<pre>\${JSON.stringify(data.data, null, 2)}</pre>\`;
+          } else {
+            preview.innerHTML = \`<p class="text-red-400">에러: \${data.error}</p>\`;
+          }
+        }
+      } catch (e) {
+        console.error('Raw data download failed:', e);
+        document.getElementById('raw-data-preview').innerHTML = '<p class="text-red-400">데이터 로드 실패</p>';
+      }
+    }
+    
+    // showSection 업데이트 (Watchdog 섹션 추가)
+    const originalShowSection = showSection;
+    showSection = function(section) {
+      // Update nav
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      if (event?.currentTarget) {
+        event.currentTarget.classList.add('active');
+      }
+      
+      // Update title
+      const titles = {
+        pending: { title: '연동 대기 목록', desc: '사장님들이 연동 요청한 매장을 관리합니다' },
+        stores: { title: '전체 매장', desc: '모든 매장의 상태를 확인하고 관리합니다' },
+        monitoring: { title: '실시간 모니터링', desc: 'AI 상담 현황을 실시간으로 확인합니다' },
+        notifications: { title: '알림 설정', desc: '카카오톡 알림 연동을 설정합니다' },
+        security: { title: '보안 설정', desc: '마스터 페이지 보안을 관리합니다' },
+        watchdog: { title: 'WATCHDOG 시스템 감시', desc: '개발자 할루시네이션 방지 시스템 - 실시간 무결성 검증' },
+        rawdata: { title: 'RAW 데이터 뷰어', desc: 'D1 Database의 실제 레코드를 직접 조회합니다' },
+        errors: { title: '에러 블랙박스', desc: '모든 500 에러를 숨김없이 기록합니다' }
+      };
+      
+      document.getElementById('section-title').textContent = titles[section]?.title || '';
+      document.getElementById('section-desc').textContent = titles[section]?.desc || '';
+      
+      // Show section
+      document.querySelectorAll('[id^="section-"]').forEach(el => el.classList.add('hidden'));
+      document.getElementById('section-' + section)?.classList.remove('hidden');
+      
+      // 섹션별 데이터 로드
+      if (section === 'watchdog') {
+        runWatchdogCheck();
+        loadErrorLogs();
+      } else if (section === 'errors') {
+        loadErrorLogs();
+      }
+    };
+    
     // Initialize
-    document.addEventListener('DOMContentLoaded', refreshData);
+    document.addEventListener('DOMContentLoaded', () => {
+      refreshData();
+      runWatchdogCheck();
+      loadErrorLogs();
+      
+      // 60초마다 Watchdog 체크
+      setInterval(runWatchdogCheck, 60000);
+    });
   </script>
 </body>
 </html>
