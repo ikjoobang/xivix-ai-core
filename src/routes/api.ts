@@ -248,13 +248,15 @@ api.get('/reservations/:storeId', async (c) => {
   });
 });
 
+// [XIVIX_SAFETY_CONTROL] 예약 세이프티 락 - 모든 예약은 마스터 승인 필요
 api.post('/reservations', async (c) => {
   const data = await c.req.json() as Partial<Reservation>;
   
+  // [Phase 04-31] 예약 세이프티 락 적용 - pending_approval 상태로 시작
   const result = await c.env.DB.prepare(`
     INSERT INTO xivix_reservations 
     (store_id, customer_id, customer_name, customer_phone, service_name, reservation_date, reservation_time, status, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_approval', ?)
   `).bind(
     data.store_id,
     data.customer_id,
@@ -263,12 +265,21 @@ api.post('/reservations', async (c) => {
     data.service_name || '',
     data.reservation_date,
     data.reservation_time,
-    data.created_by || 'manual'
+    data.created_by || 'ai_suggested'
   ).run();
   
-  return c.json<ApiResponse<{ id: number }>>({
+  const reservationId = result.meta.last_row_id as number;
+  
+  // [WATCHDOG] 예약 생성 로그
+  console.log(`[Reservation] 새 예약 승인 대기 (ID: ${reservationId}, Store: ${data.store_id})`);
+  
+  return c.json<ApiResponse<{ id: number; status: string; message: string }>>({
     success: true,
-    data: { id: result.meta.last_row_id as number },
+    data: { 
+      id: reservationId,
+      status: 'pending_approval',
+      message: '예약이 등록되었습니다. 마스터 승인 후 확정됩니다.'
+    },
     timestamp: Date.now()
   });
 });
@@ -1558,35 +1569,95 @@ api.post('/smartplace/analyze', async (c) => {
     // ============ 가짜 데이터 생성 로직 삭제됨 ============
     
     // ============ [추가] 업종 코드 매핑 (실제 데이터 기반) ============
-    // 네이버 businessType → XIVIX 업종 코드 매핑
+    // 네이버 businessType → XIVIX 업종 코드 매핑 (확장판)
     const businessTypeMapping: { [key: string]: { code: string; name: string } } = {
+      // 뷰티/미용
       'hairshop': { code: 'BEAUTY_HAIR', name: '미용실' },
+      'hair': { code: 'BEAUTY_HAIR', name: '미용실' },
       'beauty': { code: 'BEAUTY_SKIN', name: '피부관리/에스테틱' },
+      'skincare': { code: 'BEAUTY_SKIN', name: '피부관리' },
       'nail': { code: 'BEAUTY_NAIL', name: '네일샵' },
+      'nailshop': { code: 'BEAUTY_NAIL', name: '네일샵' },
+      'spa': { code: 'BEAUTY_SKIN', name: '스파/마사지' },
+      'massage': { code: 'BEAUTY_SKIN', name: '마사지' },
+      // 음식점/카페
       'restaurant': { code: 'RESTAURANT', name: '음식점' },
+      'food': { code: 'RESTAURANT', name: '음식점' },
       'cafe': { code: 'CAFE', name: '카페' },
+      'bakery': { code: 'CAFE', name: '베이커리/카페' },
+      'bar': { code: 'RESTAURANT', name: '바/주점' },
+      // 건강/의료
       'fitness': { code: 'FITNESS', name: '헬스/피트니스' },
+      'gym': { code: 'FITNESS', name: '헬스장' },
+      'yoga': { code: 'FITNESS', name: '요가/필라테스' },
       'hospital': { code: 'MEDICAL', name: '병원/의원' },
+      'clinic': { code: 'MEDICAL', name: '의원/클리닉' },
+      'dental': { code: 'MEDICAL', name: '치과' },
       'pharmacy': { code: 'PHARMACY', name: '약국' },
+      // 기타
       'accommodation': { code: 'ACCOMMODATION', name: '숙박' },
-      'education': { code: 'EDUCATION', name: '학원/교육' }
+      'hotel': { code: 'ACCOMMODATION', name: '호텔' },
+      'education': { code: 'EDUCATION', name: '학원/교육' },
+      'academy': { code: 'EDUCATION', name: '학원' },
+      'pet': { code: 'PET_SERVICE', name: '반려동물' },
+      'petshop': { code: 'PET_SERVICE', name: '펫샵' },
+      'auto': { code: 'AUTO_SERVICE', name: '자동차 서비스' },
+      'carwash': { code: 'AUTO_SERVICE', name: '세차장' }
     };
     
-    // 실제 수집된 업종 코드로 매핑 (할루시네이션 방지)
+    // 실제 수집된 업종 코드로 매핑 (할루시네이션 방지 - 강제 적용)
     let mappedBusinessType = { code: 'OTHER', name: extractedData.category || '기타' };
-    if (extractedData.business_type_code && businessTypeMapping[extractedData.business_type_code]) {
-      mappedBusinessType = businessTypeMapping[extractedData.business_type_code];
-      console.log(`[SmartPlace] 업종 코드 매핑: ${extractedData.business_type_code} → ${mappedBusinessType.code} (${mappedBusinessType.name})`);
-    } else if (extractedData.category) {
-      // 카테고리 텍스트로 추론
-      if (extractedData.category.includes('미용') || extractedData.category.includes('헤어')) {
-        mappedBusinessType = { code: 'BEAUTY_HAIR', name: '미용실' };
-      } else if (extractedData.category.includes('음식') || extractedData.category.includes('식당')) {
-        mappedBusinessType = { code: 'RESTAURANT', name: '음식점' };
-      } else if (extractedData.category.includes('카페') || extractedData.category.includes('커피')) {
-        mappedBusinessType = { code: 'CAFE', name: '카페' };
+    
+    // 1순위: 네이버 businessType 코드 직접 매핑
+    if (extractedData.business_type_code) {
+      const lowerCode = extractedData.business_type_code.toLowerCase();
+      if (businessTypeMapping[lowerCode]) {
+        mappedBusinessType = businessTypeMapping[lowerCode];
+        console.log(`[SmartPlace] ✅ 업종 코드 직접 매핑: ${lowerCode} → ${mappedBusinessType.code} (${mappedBusinessType.name})`);
       }
     }
+    
+    // 2순위: 카테고리 텍스트 기반 강제 매핑 (업종 코드 없을 때)
+    if (mappedBusinessType.code === 'OTHER' && extractedData.category) {
+      const cat = extractedData.category.toLowerCase();
+      
+      // 미용실 패턴 (최우선 - '음식점/카페' 오분류 방지)
+      if (cat.includes('미용') || cat.includes('헤어') || cat.includes('hair') || 
+          cat.includes('펌') || cat.includes('염색') || cat.includes('커트')) {
+        mappedBusinessType = { code: 'BEAUTY_HAIR', name: '미용실' };
+        console.log(`[SmartPlace] ✅ 카테고리 텍스트 매핑 (미용실): ${extractedData.category}`);
+      }
+      // 네일/속눈썹
+      else if (cat.includes('네일') || cat.includes('nail') || cat.includes('속눈썹')) {
+        mappedBusinessType = { code: 'BEAUTY_NAIL', name: '네일/속눈썹' };
+      }
+      // 피부관리
+      else if (cat.includes('피부') || cat.includes('에스테틱') || cat.includes('스파') || cat.includes('마사지')) {
+        mappedBusinessType = { code: 'BEAUTY_SKIN', name: '피부관리/에스테틱' };
+      }
+      // 음식점
+      else if (cat.includes('음식') || cat.includes('식당') || cat.includes('맛집') || 
+               cat.includes('치킨') || cat.includes('고기') || cat.includes('한식') ||
+               cat.includes('중식') || cat.includes('일식') || cat.includes('양식')) {
+        mappedBusinessType = { code: 'RESTAURANT', name: '음식점' };
+      }
+      // 카페
+      else if (cat.includes('카페') || cat.includes('커피') || cat.includes('베이커리') || cat.includes('디저트')) {
+        mappedBusinessType = { code: 'CAFE', name: '카페' };
+      }
+      // 헬스/피트니스
+      else if (cat.includes('헬스') || cat.includes('피트니스') || cat.includes('gym') || 
+               cat.includes('요가') || cat.includes('필라테스')) {
+        mappedBusinessType = { code: 'FITNESS', name: '헬스/피트니스' };
+      }
+      // 병원/의료
+      else if (cat.includes('병원') || cat.includes('의원') || cat.includes('클리닉') || 
+               cat.includes('치과') || cat.includes('한의원')) {
+        mappedBusinessType = { code: 'MEDICAL', name: '병원/의원' };
+      }
+    }
+    
+    console.log(`[SmartPlace] 최종 업종 결정: ${mappedBusinessType.code} (${mappedBusinessType.name})`);
     // ============ 업종 코드 매핑 끝 ============
     
     // Gemini AI로 페르소나 자동 생성
@@ -3074,10 +3145,18 @@ api.get('/watchdog/raw-data/:table', async (c) => {
       
       const csv = csvRows.join('\n');
       
-      return new Response(csv, {
+      // BOM 추가 (Excel에서 한글 인식용)
+      const bom = '\uFEFF';
+      const csvWithBom = bom + csv;
+      
+      // 파일명 (영문만 사용 - Windows 호환)
+      const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      const safeFilename = `${table}_export_${dateStr}.csv`;
+      
+      return new Response(csvWithBom, {
         headers: {
           'Content-Type': 'text/csv; charset=utf-8',
-          'Content-Disposition': `attachment; filename="${table}_${new Date().toISOString().split('T')[0]}.csv"`
+          'Content-Disposition': `attachment; filename="${safeFilename}"`
         }
       });
     }

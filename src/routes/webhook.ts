@@ -1,5 +1,6 @@
 // XIVIX AI Core V1.0 - 네이버 톡톡 Webhook Handler
 // 실시간 메시지 수신 및 AI 응답 처리
+// [XIVIX_TOTAL_AUTOMATION] Phase 03 - TalkTalk Binding (21~30)
 
 import { Hono } from 'hono';
 import type { Env, Store } from '../types';
@@ -22,11 +23,68 @@ import {
 } from '../lib/kv-context';
 import { uploadImageFromUrl } from '../lib/r2-storage';
 
+// ============ [XIVIX WATCHDOG] 이벤트 타입 정의 ============
+type NaverTalkTalkEventType = 'open' | 'leave' | 'friend' | 'send' | 'echo' | 'profile';
+
+// ============ [매장별 환영 메시지 생성] ============
+function generateWelcomeMessage(store: Store | null): string {
+  if (!store) {
+    return '안녕하세요! XIVIX AI 상담사입니다. 무엇을 도와드릴까요?';
+  }
+  
+  const storeName = store.store_name || '매장';
+  const greeting = store.greeting_message || `${storeName}에 오신 것을 환영합니다!`;
+  const aiTone = store.ai_tone || 'friendly';
+  
+  // 업종별 환영 메시지 커스터마이징
+  const businessType = store.business_type || 'OTHER';
+  let suffix = '';
+  
+  switch (businessType) {
+    case 'BEAUTY_HAIR':
+      suffix = '헤어 스타일, 예약, 가격 안내 등 무엇이든 물어보세요! 💇';
+      break;
+    case 'BEAUTY_SKIN':
+      suffix = '피부 관리, 예약, 프로그램 안내 등 도와드릴게요! ✨';
+      break;
+    case 'BEAUTY_NAIL':
+      suffix = '네일 디자인, 예약, 가격 안내 등 물어보세요! 💅';
+      break;
+    case 'RESTAURANT':
+    case 'CAFE':
+      suffix = '메뉴, 예약, 영업시간 등 물어보세요! 🍽️';
+      break;
+    case 'FITNESS':
+      suffix = '프로그램, 시간표, 가격 안내 등 도와드릴게요! 💪';
+      break;
+    case 'MEDICAL':
+      suffix = '진료 예약, 진료 시간, 위치 안내 등 도와드릴게요! 🏥';
+      break;
+    default:
+      suffix = '무엇이든 물어보세요! 😊';
+  }
+  
+  return `${greeting}\n\n${suffix}`;
+}
+
+// ============ [친구 추가 환영 메시지] ============
+function generateFriendAddMessage(store: Store | null): string {
+  const storeName = store?.store_name || 'XIVIX';
+  return `${storeName}을(를) 친구 추가해 주셔서 감사합니다! 🎉\n\n앞으로 예약 알림, 특별 할인 소식 등을 보내드릴게요.\n언제든 편하게 말씀해 주세요!`;
+}
+
 const webhook = new Hono<{ Bindings: Env }>();
 
-// Webhook verification (GET)
+// Webhook verification (GET) - 기본 경로
 webhook.get('/v1/naver/callback', (c) => {
   // 네이버 톡톡 Webhook 인증
+  return c.text('OK', 200);
+});
+
+// Webhook verification (GET) - storeId 포함 경로
+webhook.get('/v1/naver/callback/:storeId', (c) => {
+  const storeId = c.req.param('storeId');
+  console.log(`[Webhook] GET verification for Store ID: ${storeId}`);
   return c.text('OK', 200);
 });
 
@@ -44,24 +102,90 @@ webhook.post('/v1/naver/callback', async (c) => {
     }
     
     const { event, user: customerId, textContent, imageContent } = message;
+    const eventType = event as NaverTalkTalkEventType;
     
-    // 이벤트 타입 처리
-    if (event === 'open') {
-      // 채팅방 입장 - 환영 메시지
-      await sendTextMessage(env, customerId, 
-        '안녕하세요, XIVIX AI 상담사입니다. 무엇을 도와드릴까요?'
-      );
-      return c.json({ success: true });
+    // ============ [XIVIX_WATCHDOG] 이벤트 로깅 ============
+    console.log(`[Webhook] Event: ${eventType}, Customer: ${customerId?.slice(0, 8)}...`);
+    
+    // ============ [Phase 03-21] 이벤트 타입별 처리 ============
+    
+    // [open] 채팅방 입장 - 매장별 환영 메시지
+    if (eventType === 'open') {
+      console.log(`[Webhook] OPEN event - Sending welcome message`);
+      
+      // 매장 정보 조회 (환영 메시지 커스터마이징용)
+      const storeResult = await env.DB.prepare(
+        'SELECT * FROM xivix_stores WHERE is_active = 1 LIMIT 1'
+      ).first<Store>();
+      
+      const welcomeMsg = generateWelcomeMessage(storeResult);
+      await sendTextMessage(env, customerId, welcomeMsg);
+      
+      // [WATCHDOG] 입장 로그 기록
+      await env.DB.prepare(`
+        INSERT INTO xivix_conversation_logs 
+        (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
+        VALUES (?, ?, 'system', '[OPEN] 채팅방 입장', ?, ?, 0)
+      `).bind(
+        storeResult?.id || 1,
+        customerId,
+        welcomeMsg,
+        Date.now() - startTime
+      ).run();
+      
+      return c.json({ success: true, event: 'open', message_sent: true });
     }
     
-    if (event === 'leave') {
-      // 채팅방 퇴장
-      return c.json({ success: true });
+    // [friend] 친구 추가 - 감사 메시지 + 쿠폰/혜택 안내
+    if (eventType === 'friend') {
+      console.log(`[Webhook] FRIEND event - Sending friend add message`);
+      
+      const storeResult = await env.DB.prepare(
+        'SELECT * FROM xivix_stores WHERE is_active = 1 LIMIT 1'
+      ).first<Store>();
+      
+      const friendMsg = generateFriendAddMessage(storeResult);
+      await sendTextMessage(env, customerId, friendMsg);
+      
+      // [WATCHDOG] 친구 추가 로그 기록
+      await env.DB.prepare(`
+        INSERT INTO xivix_conversation_logs 
+        (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
+        VALUES (?, ?, 'system', '[FRIEND] 친구 추가', ?, ?, 0)
+      `).bind(
+        storeResult?.id || 1,
+        customerId,
+        friendMsg,
+        Date.now() - startTime
+      ).run();
+      
+      return c.json({ success: true, event: 'friend', message_sent: true });
     }
     
-    if (event !== 'send') {
-      return c.json({ success: true });
+    // [leave] 채팅방 퇴장
+    if (eventType === 'leave') {
+      console.log(`[Webhook] LEAVE event - Customer left`);
+      return c.json({ success: true, event: 'leave' });
     }
+    
+    // [echo] 본인 메시지 에코 - 무시
+    if (eventType === 'echo') {
+      return c.json({ success: true, event: 'echo', ignored: true });
+    }
+    
+    // [profile] 프로필 변경 - 무시
+    if (eventType === 'profile') {
+      return c.json({ success: true, event: 'profile', ignored: true });
+    }
+    
+    // [send] 외 이벤트는 무시
+    if (eventType !== 'send') {
+      console.log(`[Webhook] Unknown event type: ${eventType}`);
+      return c.json({ success: true, event: eventType, ignored: true });
+    }
+    
+    // ============ [Phase 03-22] send 이벤트 처리 ============
+    console.log(`[Webhook] SEND event - Processing message`);
     
     // Rate limiting
     const rateLimit = await checkRateLimit(env.KV, customerId, 30, 60);

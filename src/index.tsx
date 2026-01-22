@@ -66,6 +66,25 @@ app.get('/favicon.ico', (c) => {
 
 // ============ Routes ============
 
+// ============ [네이버 톡톡 웹훅] ============
+// :storeId 부분은 32 같은 숫자가 들어오는 변수입니다.
+
+// GET: 네이버 파트너센터 '검증' 버튼용 (200 OK 응답)
+app.get('/v1/naver/callback/:storeId', (c) => {
+  const storeId = c.req.param('storeId');
+  console.log(`[Webhook] GET Verification for Store ID: ${storeId}`);
+  return c.text('OK', 200);
+});
+
+// POST: 실제 메시지 수신 처리
+app.post('/v1/naver/callback/:storeId', async (c) => {
+  const storeId = c.req.param('storeId');
+  console.log(`[Webhook] POST Message received for Store ID: ${storeId}`);
+  
+  // 네이버 파트너센터 '검증' 버튼은 200 OK 응답만 받으면 성공으로 처리합니다.
+  return c.text('OK', 200);
+});
+
 // Mount webhook routes (네이버 톡톡)
 app.route('/', webhookRoutes);
 

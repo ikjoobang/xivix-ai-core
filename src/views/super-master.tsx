@@ -915,12 +915,17 @@ export function renderSuperMasterDashboard(): string {
     }
     
     async function activateStore() {
-      if (!currentStoreId) return;
+      if (!currentStoreId) {
+        alert('매장 ID가 없습니다');
+        return;
+      }
       
       const authKey = document.getElementById('modal-auth-key').value;
       const aiRole = document.getElementById('modal-ai-role').value;
       const aiFeatures = document.getElementById('modal-ai-features').value;
       const aiTone = document.getElementById('modal-ai-tone').value;
+      
+      console.log('[activateStore] Starting for storeId:', currentStoreId);
       
       try {
         const res = await fetch('/api/master/activate/' + currentStoreId, {
@@ -934,7 +939,17 @@ export function renderSuperMasterDashboard(): string {
           })
         });
         
+        console.log('[activateStore] Response status:', res.status);
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error('[activateStore] HTTP error:', res.status, errorText);
+          alert('HTTP 오류 ' + res.status + ': ' + errorText.slice(0, 100));
+          return;
+        }
+        
         const data = await res.json();
+        console.log('[activateStore] Response data:', data);
         
         if (data.success) {
           alert('매장이 활성화되었습니다! 사장님께 카카오톡으로 알림이 발송됩니다.');
@@ -944,7 +959,8 @@ export function renderSuperMasterDashboard(): string {
           alert('활성화 실패: ' + (data.error || '알 수 없는 오류'));
         }
       } catch (e) {
-        alert('네트워크 오류');
+        console.error('[activateStore] Error:', e);
+        alert('네트워크 오류: ' + (e.message || e.toString()));
       }
     }
     
@@ -1002,6 +1018,7 @@ export function renderSuperMasterDashboard(): string {
     
     // 세팅 시작 (pending → processing)
     async function startProcessing(storeId) {
+      console.log('[startProcessing] Starting for storeId:', storeId);
       try {
         const res = await fetch('/api/master/status/' + storeId, {
           method: 'POST',
@@ -1009,14 +1026,26 @@ export function renderSuperMasterDashboard(): string {
           body: JSON.stringify({ status: 'processing' })
         });
         
+        console.log('[startProcessing] Response status:', res.status);
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error('[startProcessing] HTTP error:', res.status, errorText);
+          alert('HTTP 오류 ' + res.status + ': ' + errorText.slice(0, 100));
+          return;
+        }
+        
         const data = await res.json();
+        console.log('[startProcessing] Response data:', data);
         
         if (data.success) {
           // 성공 애니메이션
           const btn = event.currentTarget;
-          btn.innerHTML = '<i class="fas fa-check mr-1"></i>진행 중!';
-          btn.classList.add('bg-emerald-500/20', 'text-emerald-400', 'border-emerald-500/30');
-          btn.classList.remove('bg-blue-500/20', 'text-blue-400', 'border-blue-500/30');
+          if (btn) {
+            btn.innerHTML = '<i class="fas fa-check mr-1"></i>진행 중!';
+            btn.classList.add('bg-emerald-500/20', 'text-emerald-400', 'border-emerald-500/30');
+            btn.classList.remove('bg-blue-500/20', 'text-blue-400', 'border-blue-500/30');
+          }
           
           // 1초 후 새로고침
           setTimeout(() => {
@@ -1026,7 +1055,8 @@ export function renderSuperMasterDashboard(): string {
           alert('상태 변경 실패: ' + (data.error || '알 수 없는 오류'));
         }
       } catch (e) {
-        alert('네트워크 오류');
+        console.error('[startProcessing] Error:', e);
+        alert('네트워크 오류: ' + (e.message || e.toString()));
       }
     }
     
