@@ -1143,53 +1143,205 @@ api.get('/system/health', async (c) => {
 
 // ============ 스마트 플레이스 자동화 API (추가) ============
 
-// 스마트 플레이스 URL 검증
-function validateSmartPlaceUrl(url: string): { valid: boolean; placeId?: string; error?: string } {
+// naver.me 단축 URL 리다이렉트 처리 (추가)
+async function resolveNaverShortUrl(shortUrl: string): Promise<{ resolved: boolean; finalUrl?: string; placeId?: string; error?: string }> {
+  try {
+    // naver.me 단축 URL인지 확인
+    if (!shortUrl.includes('naver.me')) {
+      return { resolved: false, finalUrl: shortUrl };
+    }
+    
+    console.log('[SmartPlace] naver.me 단축 URL 감지:', shortUrl);
+    
+    // 리다이렉트 따라가기 (redirect: 'manual'로 Location 헤더 추출)
+    const response = await fetch(shortUrl, {
+      method: 'HEAD',
+      redirect: 'manual',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    });
+    
+    // Location 헤더에서 실제 URL 추출
+    const location = response.headers.get('location');
+    console.log('[SmartPlace] 리다이렉트 Location:', location);
+    
+    if (location) {
+      // 리다이렉트된 URL에서 Place ID 추출 시도
+      const placeIdMatch = location.match(/place\/([0-9]+)/);
+      if (placeIdMatch) {
+        return { resolved: true, finalUrl: location, placeId: placeIdMatch[1] };
+      }
+      
+      // 추가 리다이렉트가 필요한 경우 (2단계 리다이렉트)
+      if (location.includes('naver.com') || location.includes('naver.me')) {
+        const secondRes = await fetch(location, {
+          method: 'HEAD',
+          redirect: 'manual',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          }
+        });
+        
+        const secondLocation = secondRes.headers.get('location');
+        console.log('[SmartPlace] 2단계 리다이렉트:', secondLocation);
+        
+        if (secondLocation) {
+          const secondPlaceIdMatch = secondLocation.match(/place\/([0-9]+)/);
+          if (secondPlaceIdMatch) {
+            return { resolved: true, finalUrl: secondLocation, placeId: secondPlaceIdMatch[1] };
+          }
+          return { resolved: true, finalUrl: secondLocation };
+        }
+      }
+      
+      return { resolved: true, finalUrl: location };
+    }
+    
+    // GET 요청으로 최종 URL 확인
+    const getResponse = await fetch(shortUrl, {
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+    
+    const finalUrl = getResponse.url;
+    console.log('[SmartPlace] 최종 URL:', finalUrl);
+    
+    const placeIdMatch = finalUrl.match(/place\/([0-9]+)/);
+    if (placeIdMatch) {
+      return { resolved: true, finalUrl, placeId: placeIdMatch[1] };
+    }
+    
+    return { resolved: true, finalUrl };
+    
+  } catch (e) {
+    console.error('[SmartPlace] 단축 URL 처리 오류:', e);
+    return { resolved: false, error: '단축 URL을 처리할 수 없습니다. 직접 플레이스 페이지의 URL을 복사해주세요.' };
+  }
+}
+
+// 스마트 플레이스 URL 검증 (naver.me 지원 추가)
+function validateSmartPlaceUrl(url: string): { valid: boolean; placeId?: string; error?: string; needsRedirect?: boolean } {
   if (!url || typeof url !== 'string') {
     return { valid: false, error: '올바른 링크를 입력해주세요' };
   }
   
-  // 네이버 플레이스 URL 패턴들
+  const trimmedUrl = url.trim();
+  
+  // naver.me 단축 URL인 경우 리다이렉트 필요 표시 (analyze API에서 처리)
+  if (trimmedUrl.includes('naver.me')) {
+    return { valid: true, needsRedirect: true };
+  }
+  
+  // 네이버 플레이스 URL 패턴들 (확장)
   const patterns = [
-    /naver\.com\/restaurant\/([0-9]+)/,      // 음식점
-    /naver\.com\/place\/([0-9]+)/,           // 일반 플레이스
-    /naver\.com\/hairshop\/([0-9]+)/,        // 미용실
-    /naver\.com\/beauty\/([0-9]+)/,          // 뷰티
-    /map\.naver\.com\/.*place\/([0-9]+)/,    // 네이버 지도
-    /m\.place\.naver\.com\/.*\/([0-9]+)/,    // 모바일
-    /pcmap\.place\.naver\.com\/.*\/([0-9]+)/ // PC 지도
+    /naver\.com\/restaurant\/([0-9]+)/,           // 음식점
+    /naver\.com\/place\/([0-9]+)/,                // 일반 플레이스
+    /naver\.com\/hairshop\/([0-9]+)/,             // 미용실
+    /naver\.com\/beauty\/([0-9]+)/,               // 뷰티
+    /naver\.com\/hospital\/([0-9]+)/,             // 병원
+    /naver\.com\/gym\/([0-9]+)/,                  // 헬스장
+    /map\.naver\.com\/.*place\/([0-9]+)/,         // 네이버 지도
+    /map\.naver\.com\/p\/entry\/place\/([0-9]+)/, // 네이버 지도 엔트리
+    /m\.place\.naver\.com\/.*\/([0-9]+)/,         // 모바일
+    /pcmap\.place\.naver\.com\/.*\/([0-9]+)/,     // PC 지도
+    /place\.naver\.com\/.*\/([0-9]+)/,            // 플레이스 직접
+    /naver\.me\/.*\/([0-9]+)/                     // 단축 URL에서 직접 ID 포함된 경우
   ];
   
   for (const pattern of patterns) {
-    const match = url.match(pattern);
+    const match = trimmedUrl.match(pattern);
     if (match && match[1]) {
       return { valid: true, placeId: match[1] };
     }
   }
   
-  // place ID만 입력한 경우
-  if (/^[0-9]{8,12}$/.test(url.trim())) {
-    return { valid: true, placeId: url.trim() };
+  // place ID만 입력한 경우 (7~12자리 숫자)
+  if (/^[0-9]{7,12}$/.test(trimmedUrl)) {
+    return { valid: true, placeId: trimmedUrl };
   }
   
-  return { valid: false, error: '올바른 네이버 스마트 플레이스 링크를 입력해주세요' };
+  return { valid: false, error: '지원하지 않는 링크 형식입니다. 네이버 플레이스/지도 링크 또는 Place ID를 입력해주세요.' };
 }
 
 // 스마트 플레이스 정보 크롤링 API
 api.post('/smartplace/analyze', async (c) => {
-  const { url } = await c.req.json() as { url: string };
+  const { url: inputUrl } = await c.req.json() as { url: string };
   
-  // URL 검증
-  const validation = validateSmartPlaceUrl(url);
-  if (!validation.valid) {
+  if (!inputUrl || typeof inputUrl !== 'string' || inputUrl.trim().length === 0) {
     return c.json<ApiResponse>({
       success: false,
-      error: validation.error || '올바른 링크를 입력해주세요',
+      error: '올바른 링크를 입력해주세요',
       timestamp: Date.now()
     }, 400);
   }
   
-  const placeId = validation.placeId;
+  let url = inputUrl.trim();
+  let placeId: string | undefined;
+  
+  // ============ naver.me 단축 URL 처리 (추가) ============
+  // naver.me 단축 URL인 경우 리다이렉트 따라가기
+  if (url.includes('naver.me')) {
+    console.log('[SmartPlace] naver.me 단축 URL 처리 시작:', url);
+    
+    try {
+      const resolved = await resolveNaverShortUrl(url);
+      
+      if (resolved.error) {
+        return c.json<ApiResponse>({
+          success: false,
+          error: resolved.error,
+          timestamp: Date.now()
+        }, 400);
+      }
+      
+      if (resolved.placeId) {
+        placeId = resolved.placeId;
+        console.log('[SmartPlace] naver.me에서 Place ID 추출 성공:', placeId);
+      } else if (resolved.finalUrl) {
+        url = resolved.finalUrl;
+        console.log('[SmartPlace] naver.me 리다이렉트 완료:', url);
+      } else {
+        return c.json<ApiResponse>({
+          success: false,
+          error: '지원하지 않는 링크 형식입니다. 네이버 플레이스 페이지의 URL을 직접 복사해주세요.',
+          timestamp: Date.now()
+        }, 400);
+      }
+    } catch (e) {
+      console.error('[SmartPlace] naver.me 처리 오류:', e);
+      return c.json<ApiResponse>({
+        success: false,
+        error: '단축 URL 처리 중 오류가 발생했습니다. 직접 플레이스 페이지의 URL을 복사해주세요.',
+        timestamp: Date.now()
+      }, 400);
+    }
+  }
+  // ============ naver.me 단축 URL 처리 끝 ============
+  
+  // placeId가 아직 없으면 URL 검증
+  if (!placeId) {
+    const validation = validateSmartPlaceUrl(url);
+    if (!validation.valid) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: validation.error || '지원하지 않는 링크 형식입니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    placeId = validation.placeId;
+  }
+  
+  // placeId가 여전히 없으면 에러
+  if (!placeId) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '플레이스 ID를 추출할 수 없습니다. 올바른 네이버 스마트 플레이스 링크를 입력해주세요.',
+      timestamp: Date.now()
+    }, 400);
+  }
   
   try {
     // 네이버 플레이스 API 호출 (공개 정보)
