@@ -8,6 +8,7 @@ ALTER TABLE xivix_stores ADD COLUMN bot_paused INTEGER DEFAULT 0;
 ALTER TABLE xivix_stores ADD COLUMN ai_model TEXT DEFAULT 'gemini-2.5-flash';
 ALTER TABLE xivix_stores ADD COLUMN ai_temperature REAL DEFAULT 0.7;
 ALTER TABLE xivix_stores ADD COLUMN auto_reservation INTEGER DEFAULT 1;
+ALTER TABLE xivix_stores ADD COLUMN greeting_message TEXT;
 
 -- 2. 통계 관련 필드 (캐싱용)
 ALTER TABLE xivix_stores ADD COLUMN today_conversations INTEGER DEFAULT 0;
