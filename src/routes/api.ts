@@ -3921,4 +3921,272 @@ api.get('/insights/store/:storeId', async (c) => {
   }
 });
 
+// ============================================================================
+// [7] XIVIX V2.0 - 원클릭 AI 셋팅 & 봇 관리 API
+// ============================================================================
+
+// [7-1] 원클릭 AI 셋팅 (Gemini 2.5 Flash + 자동 프롬프트)
+api.post('/master/quick-setup/:id', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    // 1. 매장 정보 조회
+    const store = await c.env.DB.prepare(
+      'SELECT * FROM xivix_stores WHERE id = ?'
+    ).bind(storeId).first<any>();
+    
+    if (!store) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '매장을 찾을 수 없습니다',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    // 2. 업종 기반 AI 프롬프트 자동 생성
+    const businessType = store.business_type || 'OTHER';
+    const storeName = store.store_name || '매장';
+    
+    // 업종별 기본 설정
+    const industryConfig: { [key: string]: { persona: string; tone: string; features: string } } = {
+      'BEAUTY_HAIR': {
+        persona: `${storeName}의 스타일링 전문가이자 뷰티 컨설턴트`,
+        tone: 'friendly',
+        features: '헤어 스타일 추천, 시술 소요시간 안내, 디자이너 매칭, 예약 관리'
+      },
+      'BEAUTY_SKIN': {
+        persona: `${storeName}의 피부 관리 전문가이자 뷰티 어드바이저`,
+        tone: 'professional',
+        features: '피부 타입 분석, 코스 추천, 홈케어 가이드, 예약 관리'
+      },
+      'BEAUTY_NAIL': {
+        persona: `${storeName}의 네일&속눈썹 아티스트이자 뷰티 상담사`,
+        tone: 'friendly',
+        features: '디자인 추천, 관리 팁, 예약 안내, 가격 문의'
+      },
+      'RESTAURANT': {
+        persona: `${storeName}의 레스토랑 매니저이자 메뉴 전문가`,
+        tone: 'friendly',
+        features: '메뉴 추천, 알레르기 정보, 단체 예약, 주차 안내'
+      },
+      'CAFE': {
+        persona: `${storeName}의 카페 매니저이자 음료 전문가`,
+        tone: 'casual',
+        features: '메뉴 추천, 원두 소개, 테이크아웃 안내, 영업시간 안내'
+      },
+      'FITNESS': {
+        persona: `${storeName}의 피트니스 컨설턴트이자 건강 코치`,
+        tone: 'professional',
+        features: '프로그램 안내, 트레이너 매칭, 회원권 상담, 예약 관리'
+      },
+      'MEDICAL': {
+        persona: `${storeName}의 의료 코디네이터이자 환자 케어 전문가`,
+        tone: 'formal',
+        features: '진료 안내, 예약 관리, 보험 상담, 주의사항 안내'
+      },
+      'CUSTOM_SECTOR': {
+        persona: `${storeName}의 비즈니스 전문 어시스턴트`,
+        tone: 'professional',
+        features: store.business_specialty || '고객 상담, 예약 관리, 문의 응대'
+      }
+    };
+    
+    const config = industryConfig[businessType] || industryConfig['CUSTOM_SECTOR'];
+    
+    // 3. Gemini 2.5 Flash로 인사말 생성 (옵션)
+    let greetingMessage = `안녕하세요! ${storeName}입니다. 무엇을 도와드릴까요?`;
+    
+    if (c.env.GEMINI_API_KEY) {
+      try {
+        const geminiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${c.env.GEMINI_API_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [{
+                  text: `당신은 ${store.business_type_name || '매장'}의 AI 상담사입니다.
+                  매장명: ${storeName}
+                  업종: ${store.business_type_name || businessType}
+                  
+                  고객이 처음 채팅을 시작했을 때 보낼 환영 인사말을 1문장으로 작성해주세요.
+                  친근하고 전문적인 톤으로, 매장 특성을 반영해주세요.
+                  50자 이내로 작성해주세요.`
+                }]
+              }],
+              generationConfig: { temperature: 0.7, maxOutputTokens: 100 }
+            })
+          }
+        );
+        
+        const geminiData = await geminiRes.json() as any;
+        if (geminiData?.candidates?.[0]?.content?.parts?.[0]?.text) {
+          greetingMessage = geminiData.candidates[0].content.parts[0].text.trim();
+        }
+      } catch (e) {
+        console.error('Gemini greeting generation failed:', e);
+      }
+    }
+    
+    // 4. DB 업데이트 - 원클릭으로 활성화
+    const today = new Date().toISOString().split('T')[0];
+    
+    await c.env.DB.prepare(`
+      UPDATE xivix_stores SET
+        ai_persona = ?,
+        ai_tone = ?,
+        ai_features = ?,
+        greeting_message = ?,
+        onboarding_status = 'active',
+        onboarding_progress = 100,
+        is_active = 1,
+        activated_at = CURRENT_TIMESTAMP,
+        activated_by = 'master',
+        bot_start_date = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).bind(
+      config.persona,
+      config.tone,
+      config.features,
+      greetingMessage,
+      today,
+      storeId
+    ).run();
+    
+    // 5. 관리자 로그
+    await c.env.DB.prepare(`
+      INSERT INTO xivix_admin_logs (admin_id, action, target_store_id, details)
+      VALUES ('master', 'quick_setup', ?, ?)
+    `).bind(storeId, JSON.stringify({
+      ai_persona: config.persona,
+      ai_tone: config.tone,
+      greeting_message: greetingMessage
+    })).run();
+    
+    console.log(`[QuickSetup] Store ${storeId} (${storeName}) activated with Gemini 2.5 Flash`);
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        store_id: storeId,
+        store_name: storeName,
+        ai_persona: config.persona,
+        ai_tone: config.tone,
+        ai_features: config.features,
+        greeting_message: greetingMessage,
+        status: 'active',
+        message: 'AI 셋팅이 완료되었습니다!'
+      },
+      timestamp: Date.now()
+    });
+    
+  } catch (error: any) {
+    console.error('Quick setup error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: 'AI 셋팅 실패: ' + error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// [7-2] 봇 기간 설정
+api.post('/master/bot-period/:id', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  const { start_date, end_date } = await c.req.json() as {
+    start_date?: string;
+    end_date?: string | null;
+  };
+  
+  try {
+    await c.env.DB.prepare(`
+      UPDATE xivix_stores SET
+        bot_start_date = ?,
+        bot_end_date = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).bind(start_date || null, end_date || null, storeId).run();
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        store_id: storeId,
+        bot_start_date: start_date,
+        bot_end_date: end_date,
+        message: '봇 기간이 설정되었습니다'
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '봇 기간 설정 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// [7-3] 봇 일시정지/재시작
+api.post('/master/bot-toggle/:id', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  const { active } = await c.req.json() as { active: boolean };
+  
+  try {
+    await c.env.DB.prepare(`
+      UPDATE xivix_stores SET
+        is_active = ?,
+        onboarding_status = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).bind(active ? 1 : 0, active ? 'active' : 'paused', storeId).run();
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        store_id: storeId,
+        is_active: active,
+        status: active ? 'active' : 'paused',
+        message: active ? '봇이 재시작되었습니다' : '봇이 일시정지되었습니다'
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '봇 상태 변경 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// [7-4] 봇 매장 목록 (통계 포함)
+api.get('/master/bots', async (c) => {
+  try {
+    const bots = await c.env.DB.prepare(`
+      SELECT 
+        s.*,
+        (SELECT COUNT(*) FROM xivix_conversation_logs WHERE store_id = s.id AND DATE(created_at) = DATE('now')) as today_conversations,
+        (SELECT COUNT(*) FROM xivix_conversation_logs WHERE store_id = s.id) as total_conversations,
+        (SELECT COUNT(*) FROM xivix_reservations WHERE store_id = s.id) as total_reservations
+      FROM xivix_stores s
+      WHERE s.onboarding_status = 'active' AND s.is_active = 1
+      ORDER BY s.activated_at DESC
+    `).all();
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: bots.results,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '봇 목록 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
 export default api;
