@@ -302,6 +302,9 @@ export function renderSuperMasterDashboard(): string {
                       <i class="fas fa-magic"></i>
                       원클릭 AI 셋팅
                     </button>
+                    <button onclick="deleteStore(\${store.id}, '\${store.store_name}')" class="btn-action w-10 h-10 glass rounded-xl flex items-center justify-center hover:bg-red-500/20 hover:border-red-500/30 text-white/40 hover:text-red-400" title="삭제">
+                      <i class="fas fa-trash-alt"></i>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -375,6 +378,9 @@ export function renderSuperMasterDashboard(): string {
                     <button onclick="toggleBot(\${store.id}, \${isRunning ? 'false' : 'true'})" class="btn-action px-4 py-2 \${isRunning ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-green-500/20 text-green-400 border border-green-500/30'} rounded-xl text-sm flex items-center gap-2">
                       <i class="fas \${isRunning ? 'fa-pause' : 'fa-play'}"></i>
                       \${isRunning ? '일시정지' : '재시작'}
+                    </button>
+                    <button onclick="deleteStore(\${store.id}, '\${store.store_name}')" class="btn-action w-10 h-10 glass rounded-xl flex items-center justify-center hover:bg-red-500/20 hover:border-red-500/30 text-white/40 hover:text-red-400" title="삭제">
+                      <i class="fas fa-trash-alt"></i>
                     </button>
                   </div>
                 </div>
@@ -527,6 +533,41 @@ export function renderSuperMasterDashboard(): string {
         }
       } catch (e) {
         alert('네트워크 오류');
+      }
+    }
+    
+    // ========== [V2.0] 매장 삭제 ==========
+    async function deleteStore(storeId, storeName) {
+      // 안전장치: 확인 창
+      const confirmed = confirm(\`정말 '\${storeName}' 매장을 삭제하시겠습니까?\\n\\n⚠️ 주의: 삭제 시 해당 매장의 모든 데이터(상담 로그, 예약, API 토큰)가 함께 삭제됩니다.\\n\\n이 작업은 되돌릴 수 없습니다.\`);
+      
+      if (!confirmed) return;
+      
+      // 2차 확인 (중요 데이터 보호)
+      const doubleConfirm = confirm(\`마지막 확인: '\${storeName}' 매장을 정말 삭제합니까?\`);
+      
+      if (!doubleConfirm) return;
+      
+      try {
+        const res = await fetch('/api/master/store/' + storeId, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          alert(\`'\${storeName}' 매장이 삭제되었습니다.\`);
+          // 모든 목록 새로고침
+          loadPendingStores();
+          loadBotStores();
+          loadStats();
+        } else {
+          alert('삭제 실패: ' + (data.error || '알 수 없는 오류'));
+        }
+      } catch (e) {
+        console.error('Delete store error:', e);
+        alert('네트워크 오류가 발생했습니다.');
       }
     }
     

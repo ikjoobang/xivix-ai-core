@@ -864,6 +864,81 @@ api.get('/master/stores', async (c) => {
   });
 });
 
+// ============ [V2.0] 매장 삭제 API ============
+api.delete('/master/store/:id', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    // 1. 매장 존재 여부 확인
+    const store = await c.env.DB.prepare(
+      'SELECT id, store_name FROM xivix_stores WHERE id = ?'
+    ).bind(storeId).first<{ id: number; store_name: string }>();
+    
+    if (!store) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '매장을 찾을 수 없습니다',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    // 2. 관련 데이터 삭제 (CASCADE 효과)
+    // 2-1. 상담 로그 삭제
+    await c.env.DB.prepare(
+      'DELETE FROM xivix_conversation_logs WHERE store_id = ?'
+    ).bind(storeId).run();
+    
+    // 2-2. 예약 데이터 삭제
+    await c.env.DB.prepare(
+      'DELETE FROM xivix_reservations WHERE store_id = ?'
+    ).bind(storeId).run();
+    
+    // 2-3. API 토큰 삭제
+    await c.env.DB.prepare(
+      'DELETE FROM xivix_api_tokens WHERE store_id = ?'
+    ).bind(storeId).run();
+    
+    // 2-4. 알림 로그 삭제
+    await c.env.DB.prepare(
+      'DELETE FROM xivix_notification_logs WHERE store_id = ?'
+    ).bind(storeId).run();
+    
+    // 3. 매장 삭제
+    await c.env.DB.prepare(
+      'DELETE FROM xivix_stores WHERE id = ?'
+    ).bind(storeId).run();
+    
+    // 4. 관리자 로그 기록
+    await c.env.DB.prepare(`
+      INSERT INTO xivix_admin_logs (admin_id, action, target_store_id, details)
+      VALUES ('master', 'delete_store', ?, ?)
+    `).bind(storeId, JSON.stringify({ 
+      store_name: store.store_name,
+      deleted_at: new Date().toISOString()
+    })).run();
+    
+    console.log(`[Master] Store ${storeId} (${store.store_name}) deleted`);
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: { 
+        message: `'${store.store_name}' 매장이 삭제되었습니다`,
+        store_id: storeId,
+        store_name: store.store_name
+      },
+      timestamp: Date.now()
+    });
+    
+  } catch (error: any) {
+    console.error('Store delete error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: '매장 삭제 중 오류가 발생했습니다: ' + error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
 // 매장 활성화 (마스터가 세팅 완료 후 호출)
 api.post('/master/activate/:id', async (c) => {
   const storeId = parseInt(c.req.param('id'), 10);
