@@ -5,8 +5,363 @@ import { Hono } from 'hono';
 import type { Env, Store, User, ConversationLog, Reservation, DashboardStats, ApiResponse } from '../types';
 import { getStoreStats, cacheStoreStats } from '../lib/kv-context';
 import { getImage, deleteImage, cleanupOldImages } from '../lib/r2-storage';
+import {
+  masterLogin,
+  ownerLogin,
+  registerOwner,
+  validateSession,
+  deleteSession,
+  getCurrentUser,
+  changePassword,
+  cleanupExpiredSessions,
+  hashPassword
+} from '../lib/auth';
 
 const api = new Hono<{ Bindings: Env }>();
+
+// ============ Authentication API ============
+
+// 마스터 로그인
+api.post('/auth/master/login', async (c) => {
+  const { email, password } = await c.req.json() as { email: string; password: string };
+  const ipAddress = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
+  const userAgent = c.req.header('User-Agent') || 'unknown';
+  
+  if (!email || !password) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '이메일과 비밀번호를 입력해주세요.',
+      timestamp: Date.now()
+    }, 400);
+  }
+  
+  const result = await masterLogin(c.env.DB, email, password, ipAddress, userAgent);
+  
+  if (!result.success) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: result.error,
+      timestamp: Date.now()
+    }, 401);
+  }
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: {
+      token: result.token,
+      user: result.user,
+      userType: 'master'
+    },
+    timestamp: Date.now()
+  });
+});
+
+// 사장님 로그인
+api.post('/auth/owner/login', async (c) => {
+  const { email, password } = await c.req.json() as { email: string; password: string };
+  const ipAddress = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
+  const userAgent = c.req.header('User-Agent') || 'unknown';
+  
+  if (!email || !password) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '이메일과 비밀번호를 입력해주세요.',
+      timestamp: Date.now()
+    }, 400);
+  }
+  
+  const result = await ownerLogin(c.env.DB, email, password, ipAddress, userAgent);
+  
+  if (!result.success) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: result.error,
+      timestamp: Date.now()
+    }, 401);
+  }
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: {
+      token: result.token,
+      user: result.user,
+      userType: 'owner',
+      storeId: result.storeId
+    },
+    timestamp: Date.now()
+  });
+});
+
+// 사장님 회원가입
+api.post('/auth/owner/register', async (c) => {
+  const { email, password, name, phone } = await c.req.json() as {
+    email: string;
+    password: string;
+    name: string;
+    phone?: string;
+  };
+  
+  if (!email || !password || !name) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '필수 정보를 모두 입력해주세요.',
+      timestamp: Date.now()
+    }, 400);
+  }
+  
+  if (password.length < 8) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '비밀번호는 8자 이상이어야 합니다.',
+      timestamp: Date.now()
+    }, 400);
+  }
+  
+  const result = await registerOwner(c.env.DB, email, password, name, phone);
+  
+  if (!result.success) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: result.error,
+      timestamp: Date.now()
+    }, 400);
+  }
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { userId: result.userId },
+    timestamp: Date.now()
+  });
+});
+
+// 로그아웃
+api.post('/auth/logout', async (c) => {
+  const token = c.req.header('Authorization')?.replace('Bearer ', '');
+  const ipAddress = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
+  const userAgent = c.req.header('User-Agent') || 'unknown';
+  
+  if (!token) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '인증 토큰이 필요합니다.',
+      timestamp: Date.now()
+    }, 401);
+  }
+  
+  await deleteSession(c.env.DB, token, ipAddress, userAgent);
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { message: '로그아웃되었습니다.' },
+    timestamp: Date.now()
+  });
+});
+
+// 현재 사용자 정보 조회
+api.get('/auth/me', async (c) => {
+  const token = c.req.header('Authorization')?.replace('Bearer ', '');
+  
+  if (!token) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '인증 토큰이 필요합니다.',
+      timestamp: Date.now()
+    }, 401);
+  }
+  
+  const currentUser = await getCurrentUser(c.env.DB, token);
+  
+  if (!currentUser) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '세션이 만료되었거나 유효하지 않습니다.',
+      timestamp: Date.now()
+    }, 401);
+  }
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: currentUser,
+    timestamp: Date.now()
+  });
+});
+
+// 비밀번호 변경
+api.post('/auth/change-password', async (c) => {
+  const token = c.req.header('Authorization')?.replace('Bearer ', '');
+  const { oldPassword, newPassword } = await c.req.json() as {
+    oldPassword: string;
+    newPassword: string;
+  };
+  
+  if (!token) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '인증 토큰이 필요합니다.',
+      timestamp: Date.now()
+    }, 401);
+  }
+  
+  if (!oldPassword || !newPassword) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '현재 비밀번호와 새 비밀번호를 입력해주세요.',
+      timestamp: Date.now()
+    }, 400);
+  }
+  
+  if (newPassword.length < 8) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '새 비밀번호는 8자 이상이어야 합니다.',
+      timestamp: Date.now()
+    }, 400);
+  }
+  
+  const session = await validateSession(c.env.DB, token);
+  if (!session) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '세션이 만료되었습니다.',
+      timestamp: Date.now()
+    }, 401);
+  }
+  
+  const result = await changePassword(
+    c.env.DB,
+    session.user_type as 'master' | 'owner',
+    session.user_id,
+    oldPassword,
+    newPassword
+  );
+  
+  if (!result.success) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: result.error,
+      timestamp: Date.now()
+    }, 400);
+  }
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { message: '비밀번호가 변경되었습니다.' },
+    timestamp: Date.now()
+  });
+});
+
+// 세션 검증 (프론트엔드용)
+api.get('/auth/verify', async (c) => {
+  const token = c.req.header('Authorization')?.replace('Bearer ', '');
+  
+  if (!token) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '인증 토큰이 필요합니다.',
+      timestamp: Date.now()
+    }, 401);
+  }
+  
+  const session = await validateSession(c.env.DB, token);
+  
+  if (!session) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '세션이 만료되었거나 유효하지 않습니다.',
+      timestamp: Date.now()
+    }, 401);
+  }
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: {
+      valid: true,
+      userType: session.user_type,
+      userId: session.user_id,
+      expiresAt: session.expires_at
+    },
+    timestamp: Date.now()
+  });
+});
+
+// 마스터 계정 초기 비밀번호 설정 (최초 1회용)
+api.post('/auth/master/init-password', async (c) => {
+  const { email, password } = await c.req.json() as { email: string; password: string };
+  
+  if (!email || !password) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '이메일과 비밀번호를 입력해주세요.',
+      timestamp: Date.now()
+    }, 400);
+  }
+  
+  // 마스터 계정 확인
+  const master = await c.env.DB.prepare(`
+    SELECT id, password_hash FROM xivix_master_accounts WHERE email = ?
+  `).bind(email).first<{ id: number; password_hash: string }>();
+  
+  if (!master) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '마스터 계정을 찾을 수 없습니다.',
+      timestamp: Date.now()
+    }, 404);
+  }
+  
+  // 이미 비밀번호가 설정되어 있으면 (sha256으로 시작하면) 거부
+  if (master.password_hash.startsWith('sha256:')) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '이미 비밀번호가 설정되어 있습니다. 로그인 페이지를 이용해주세요.',
+      timestamp: Date.now()
+    }, 400);
+  }
+  
+  // 새 비밀번호 해시 생성 및 저장
+  const newHash = await hashPassword(password);
+  await c.env.DB.prepare(`
+    UPDATE xivix_master_accounts SET password_hash = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `).bind(newHash, master.id).run();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { message: '비밀번호가 설정되었습니다. 이제 로그인할 수 있습니다.' },
+    timestamp: Date.now()
+  });
+});
+
+// 만료된 세션 정리 (관리용)
+api.post('/auth/cleanup-sessions', async (c) => {
+  const token = c.req.header('Authorization')?.replace('Bearer ', '');
+  
+  if (!token) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '인증 토큰이 필요합니다.',
+      timestamp: Date.now()
+    }, 401);
+  }
+  
+  // 마스터만 가능
+  const session = await validateSession(c.env.DB, token);
+  if (!session || session.user_type !== 'master') {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '마스터 권한이 필요합니다.',
+      timestamp: Date.now()
+    }, 403);
+  }
+  
+  const cleanedCount = await cleanupExpiredSessions(c.env.DB);
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { cleanedCount, message: `${cleanedCount}개의 만료된 세션이 정리되었습니다.` },
+    timestamp: Date.now()
+  });
+});
 
 // ============ Dashboard Stats ============
 
@@ -4259,6 +4614,447 @@ api.get('/master/bots', async (c) => {
     return c.json<ApiResponse>({
       success: false,
       error: '봇 목록 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// ============================================================================
+// [8] 예약 알림 리마인더 API
+// ============================================================================
+
+import { 
+  createReminderSchedules, 
+  getPendingReminders, 
+  processAllPendingReminders,
+  cancelReminders,
+  getReminderStats 
+} from '../lib/reminder';
+
+// [8-1] 대기 중인 리마인더 조회
+api.get('/reminders/pending', async (c) => {
+  try {
+    const limit = parseInt(c.req.query('limit') || '50', 10);
+    const reminders = await getPendingReminders(c.env.DB, limit);
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        count: reminders.length,
+        reminders
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// [8-2] 리마인더 일괄 처리 (Cron Job용)
+api.post('/reminders/process', async (c) => {
+  try {
+    const result = await processAllPendingReminders(c.env.DB, c.env);
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: result,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// [8-3] 매장별 리마인더 통계
+api.get('/reminders/stats/:storeId', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  
+  try {
+    const stats = await getReminderStats(c.env.DB, storeId);
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: stats,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// [8-4] 예약 확정 시 리마인더 자동 생성
+api.post('/reservations/:id/confirm-with-reminder', async (c) => {
+  const reservationId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    // 예약 정보 조회
+    const reservation = await c.env.DB.prepare(`
+      SELECT * FROM xivix_reservations WHERE id = ?
+    `).bind(reservationId).first<{
+      id: number;
+      store_id: number;
+      reservation_date: string;
+      reservation_time: string;
+      status: string;
+    }>();
+    
+    if (!reservation) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '예약을 찾을 수 없습니다',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    // 예약 상태 업데이트
+    await c.env.DB.prepare(`
+      UPDATE xivix_reservations SET status = 'confirmed', updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `).bind(reservationId).run();
+    
+    // 리마인더 스케줄 생성
+    const reminderResult = await createReminderSchedules(
+      c.env.DB,
+      reservationId,
+      reservation.store_id,
+      reservation.reservation_date,
+      reservation.reservation_time
+    );
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        reservation_id: reservationId,
+        status: 'confirmed',
+        reminders_created: reminderResult.created,
+        reminder_schedules: reminderResult.schedules
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// [8-5] 예약 취소 시 리마인더 취소
+api.post('/reservations/:id/cancel', async (c) => {
+  const reservationId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    // 예약 상태 업데이트
+    await c.env.DB.prepare(`
+      UPDATE xivix_reservations SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `).bind(reservationId).run();
+    
+    // 리마인더 취소
+    const cancelledCount = await cancelReminders(c.env.DB, reservationId);
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        reservation_id: reservationId,
+        status: 'cancelled',
+        reminders_cancelled: cancelledCount
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// ============================================================================
+// [9] 월간 수익 리포트 API
+// ============================================================================
+
+// [9-1] 월간 리포트 생성
+api.post('/reports/monthly/:storeId', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  const { month } = await c.req.json() as { month?: string }; // YYYY-MM 형식
+  
+  const reportMonth = month || new Date().toISOString().slice(0, 7);
+  
+  try {
+    // 해당 월 데이터 집계
+    const startDate = `${reportMonth}-01`;
+    const endDate = `${reportMonth}-31`;
+    
+    // 대화 통계
+    const conversationStats = await c.env.DB.prepare(`
+      SELECT 
+        COUNT(*) as total_conversations,
+        AVG(response_time_ms) as avg_response_time,
+        SUM(CASE WHEN converted_to_reservation = 1 THEN 1 ELSE 0 END) as converted_conversations
+      FROM xivix_conversation_logs
+      WHERE store_id = ? AND DATE(created_at) BETWEEN ? AND ?
+    `).bind(storeId, startDate, endDate).first<{
+      total_conversations: number;
+      avg_response_time: number;
+      converted_conversations: number;
+    }>();
+    
+    // 예약 통계
+    const reservationStats = await c.env.DB.prepare(`
+      SELECT 
+        COUNT(*) as total_reservations,
+        SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed,
+        SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed
+      FROM xivix_reservations
+      WHERE store_id = ? AND DATE(created_at) BETWEEN ? AND ?
+    `).bind(storeId, startDate, endDate).first<{
+      total_reservations: number;
+      confirmed: number;
+      cancelled: number;
+      completed: number;
+    }>();
+    
+    // 고객 통계
+    const customerStats = await c.env.DB.prepare(`
+      SELECT COUNT(DISTINCT customer_id) as total_customers
+      FROM xivix_conversation_logs
+      WHERE store_id = ? AND DATE(created_at) BETWEEN ? AND ?
+    `).bind(storeId, startDate, endDate).first<{ total_customers: number }>();
+    
+    // 재방문 고객 (이전 달에도 대화한 고객)
+    const previousMonth = new Date(reportMonth + '-01');
+    previousMonth.setMonth(previousMonth.getMonth() - 1);
+    const prevMonthStr = previousMonth.toISOString().slice(0, 7);
+    
+    const returningCustomers = await c.env.DB.prepare(`
+      SELECT COUNT(DISTINCT c1.customer_id) as returning_customers
+      FROM xivix_conversation_logs c1
+      WHERE c1.store_id = ? 
+        AND DATE(c1.created_at) BETWEEN ? AND ?
+        AND c1.customer_id IN (
+          SELECT DISTINCT customer_id 
+          FROM xivix_conversation_logs 
+          WHERE store_id = ? AND DATE(created_at) BETWEEN ? AND ?
+        )
+    `).bind(
+      storeId, startDate, endDate,
+      storeId, `${prevMonthStr}-01`, `${prevMonthStr}-31`
+    ).first<{ returning_customers: number }>();
+    
+    // 피크 시간대
+    const peakHours = await c.env.DB.prepare(`
+      SELECT strftime('%H', created_at) as hour, COUNT(*) as count
+      FROM xivix_conversation_logs
+      WHERE store_id = ? AND DATE(created_at) BETWEEN ? AND ?
+      GROUP BY hour
+      ORDER BY count DESC
+    `).bind(storeId, startDate, endDate).all<{ hour: string; count: number }>();
+    
+    // 인기 서비스 (예약 기준)
+    const popularServices = await c.env.DB.prepare(`
+      SELECT service_name, COUNT(*) as count
+      FROM xivix_reservations
+      WHERE store_id = ? AND DATE(created_at) BETWEEN ? AND ? AND service_name IS NOT NULL
+      GROUP BY service_name
+      ORDER BY count DESC
+      LIMIT 10
+    `).bind(storeId, startDate, endDate).all<{ service_name: string; count: number }>();
+    
+    // 전환율 계산
+    const conversionRate = conversationStats?.total_conversations 
+      ? ((conversationStats.converted_conversations || 0) / conversationStats.total_conversations * 100).toFixed(1)
+      : 0;
+    
+    // 리포트 저장
+    const reportData = {
+      total_conversations: conversationStats?.total_conversations || 0,
+      total_reservations: reservationStats?.total_reservations || 0,
+      confirmed_reservations: reservationStats?.confirmed || 0,
+      cancelled_reservations: reservationStats?.cancelled || 0,
+      conversion_rate: parseFloat(conversionRate as string),
+      avg_response_time_ms: Math.round(conversationStats?.avg_response_time || 0),
+      total_customers: customerStats?.total_customers || 0,
+      returning_customers: returningCustomers?.returning_customers || 0,
+      peak_hours: JSON.stringify(peakHours.results?.slice(0, 5) || []),
+      popular_services: JSON.stringify(popularServices.results || [])
+    };
+    
+    // Upsert
+    await c.env.DB.prepare(`
+      INSERT INTO xivix_monthly_reports (
+        store_id, report_month, total_conversations, total_reservations,
+        confirmed_reservations, cancelled_reservations, conversion_rate,
+        avg_response_time_ms, total_customers, returning_customers,
+        peak_hours, popular_services, generated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(store_id, report_month) DO UPDATE SET
+        total_conversations = excluded.total_conversations,
+        total_reservations = excluded.total_reservations,
+        confirmed_reservations = excluded.confirmed_reservations,
+        cancelled_reservations = excluded.cancelled_reservations,
+        conversion_rate = excluded.conversion_rate,
+        avg_response_time_ms = excluded.avg_response_time_ms,
+        total_customers = excluded.total_customers,
+        returning_customers = excluded.returning_customers,
+        peak_hours = excluded.peak_hours,
+        popular_services = excluded.popular_services,
+        generated_at = datetime('now')
+    `).bind(
+      storeId, reportMonth,
+      reportData.total_conversations,
+      reportData.total_reservations,
+      reportData.confirmed_reservations,
+      reportData.cancelled_reservations,
+      reportData.conversion_rate,
+      reportData.avg_response_time_ms,
+      reportData.total_customers,
+      reportData.returning_customers,
+      reportData.peak_hours,
+      reportData.popular_services
+    ).run();
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        store_id: storeId,
+        report_month: reportMonth,
+        ...reportData,
+        peak_hours: peakHours.results?.slice(0, 5) || [],
+        popular_services: popularServices.results || []
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// [9-2] 월간 리포트 조회
+api.get('/reports/monthly/:storeId', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  const month = c.req.query('month'); // YYYY-MM 형식
+  
+  try {
+    let query = `SELECT * FROM xivix_monthly_reports WHERE store_id = ?`;
+    const params: any[] = [storeId];
+    
+    if (month) {
+      query += ` AND report_month = ?`;
+      params.push(month);
+    }
+    
+    query += ` ORDER BY report_month DESC LIMIT 12`;
+    
+    const result = await c.env.DB.prepare(query).bind(...params).all();
+    
+    // JSON 필드 파싱
+    const reports = result.results?.map((r: any) => ({
+      ...r,
+      peak_hours: r.peak_hours ? JSON.parse(r.peak_hours) : [],
+      popular_services: r.popular_services ? JSON.parse(r.popular_services) : []
+    })) || [];
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: month ? reports[0] : reports,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// [9-3] 전체 매장 월간 리포트 생성 (마스터용)
+api.post('/reports/generate-all', async (c) => {
+  const { month } = await c.req.json() as { month?: string };
+  const reportMonth = month || new Date().toISOString().slice(0, 7);
+  
+  try {
+    // 활성 매장 목록 조회
+    const stores = await c.env.DB.prepare(`
+      SELECT id FROM xivix_stores WHERE is_active = 1 AND onboarding_status = 'active'
+    `).all<{ id: number }>();
+    
+    let generated = 0;
+    let failed = 0;
+    
+    for (const store of stores.results || []) {
+      try {
+        // 각 매장에 대해 리포트 생성 API 호출
+        // (내부적으로 처리하므로 실제로는 직접 생성 로직 실행)
+        const startDate = `${reportMonth}-01`;
+        const endDate = `${reportMonth}-31`;
+        
+        const conversationStats = await c.env.DB.prepare(`
+          SELECT COUNT(*) as total, AVG(response_time_ms) as avg_time
+          FROM xivix_conversation_logs
+          WHERE store_id = ? AND DATE(created_at) BETWEEN ? AND ?
+        `).bind(store.id, startDate, endDate).first<{ total: number; avg_time: number }>();
+        
+        const reservationStats = await c.env.DB.prepare(`
+          SELECT COUNT(*) as total, SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed
+          FROM xivix_reservations
+          WHERE store_id = ? AND DATE(created_at) BETWEEN ? AND ?
+        `).bind(store.id, startDate, endDate).first<{ total: number; confirmed: number }>();
+        
+        await c.env.DB.prepare(`
+          INSERT INTO xivix_monthly_reports (store_id, report_month, total_conversations, total_reservations, confirmed_reservations)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(store_id, report_month) DO UPDATE SET
+            total_conversations = excluded.total_conversations,
+            total_reservations = excluded.total_reservations,
+            confirmed_reservations = excluded.confirmed_reservations,
+            generated_at = datetime('now')
+        `).bind(
+          store.id, reportMonth,
+          conversationStats?.total || 0,
+          reservationStats?.total || 0,
+          reservationStats?.confirmed || 0
+        ).run();
+        
+        generated++;
+      } catch (e) {
+        failed++;
+        console.error(`Report generation failed for store ${store.id}:`, e);
+      }
+    }
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        report_month: reportMonth,
+        total_stores: stores.results?.length || 0,
+        generated,
+        failed
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
       timestamp: Date.now()
     }, 500);
   }

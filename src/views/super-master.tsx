@@ -73,6 +73,10 @@ export function renderSuperMasterDashboard(): string {
           <span class="w-2 h-2 rounded-full bg-green-400 pulse-dot"></span>
           시스템 정상
         </div>
+        <button onclick="logout()" class="px-4 py-2 bg-red-500/20 text-red-400 rounded-xl text-sm hover:bg-red-500/30 flex items-center gap-2">
+          <i class="fas fa-sign-out-alt"></i>
+          <span>로그아웃</span>
+        </button>
       </div>
     </div>
   </header>
@@ -571,8 +575,67 @@ export function renderSuperMasterDashboard(): string {
       }
     }
     
+    // ========== 인증 관리 ==========
+    function getAuthToken() {
+      return localStorage.getItem('xivix_token') || sessionStorage.getItem('xivix_token');
+    }
+    
+    function getAuthHeaders() {
+      const token = getAuthToken();
+      return token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+    }
+    
+    async function checkAuth() {
+      const token = getAuthToken();
+      if (!token) {
+        window.location.href = '/login';
+        return false;
+      }
+      
+      try {
+        const res = await fetch('/api/auth/verify', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        
+        if (!data.success || data.data.userType !== 'master') {
+          alert('마스터 권한이 필요합니다.');
+          window.location.href = '/login';
+          return false;
+        }
+        
+        return true;
+      } catch (e) {
+        console.error('Auth check failed:', e);
+        window.location.href = '/login';
+        return false;
+      }
+    }
+    
+    function logout() {
+      const token = getAuthToken();
+      if (token) {
+        fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token }
+        }).catch(console.error);
+      }
+      
+      localStorage.removeItem('xivix_token');
+      localStorage.removeItem('xivix_user_type');
+      localStorage.removeItem('xivix_user');
+      sessionStorage.removeItem('xivix_token');
+      sessionStorage.removeItem('xivix_user_type');
+      sessionStorage.removeItem('xivix_user');
+      
+      window.location.href = '/login';
+    }
+    
     // 초기 로드
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
+      const isAuthed = await checkAuth();
+      if (!isAuthed) return;
+      
       loadPendingStores();
       loadBotStores();
       loadStats();

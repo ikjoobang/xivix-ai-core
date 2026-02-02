@@ -1,4 +1,4 @@
-# XIVIX AI Core V1.0
+# XIVIX AI Core V2.0
 
 > **Gemini 2.5 Flash 기반 초고속 AI 상담 자동화 엔진**
 > 
@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Engine-Gemini%202.5%20Flash-blue?style=for-the-badge" alt="Gemini">
   <img src="https://img.shields.io/badge/Framework-Hono-orange?style=for-the-badge" alt="Hono">
   <img src="https://img.shields.io/badge/Platform-Cloudflare-yellow?style=for-the-badge" alt="Cloudflare">
-  <img src="https://img.shields.io/badge/Version-2026.01.21-green?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/Version-2.0.0-green?style=for-the-badge" alt="Version">
 </p>
 
 ---
@@ -18,238 +18,237 @@
 | 서비스 | URL | 설명 |
 |--------|-----|------|
 | **🏠 메인 페이지** | https://xivix-ai-core.pages.dev | 랜딩 페이지 |
+| **🔑 로그인** | https://xivix-ai-core.pages.dev/login | **마스터/사장님 로그인** |
 | **🔗 고객 연동 페이지** | https://xivix-ai-core.pages.dev/connect | **사장님 30초 연동** |
-| **👑 슈퍼 마스터** | https://xivix-ai-core.pages.dev/master | **방대표님 전용 관리** |
+| **👑 마스터 대시보드** | https://xivix-ai-core.pages.dev/master | **방대표님 전용 관리** |
 | **📊 대시보드** | https://xivix-ai-core.pages.dev/dashboard | 매장별 통계 |
-| **⚙️ 어드민** | https://xivix-ai-core.pages.dev/admin | 업체 설정 마법사 |
-| **🔗 네이버 Webhook** | https://xivix-ai-core.pages.dev/v1/naver/callback | 톡톡 메시지 수신 |
+| **🔗 네이버 Webhook** | https://xivix-ai-core.pages.dev/v1/naver/callback/{storeId} | 톡톡 메시지 수신 |
 | **❤️ 헬스체크** | https://xivix-ai-core.pages.dev/api/system/health | 시스템 상태 |
 
 ---
 
-## 🚀 Zero-Touch Onboarding 플로우
+## 🆕 V2.0 신규 기능
 
-### 고객 사장님용 (/connect)
+### ✅ 인증 시스템 (완료)
+- **마스터 로그인**: 마스터 계정 전용 인증
+- **사장님 로그인**: 매장 사장님 인증
+- **세션 관리**: 서버사이드 세션 기반
+- **로그인 보안**: 5회 실패 시 30분 계정 잠금
 
-**3단계 간편 연동 - 30초만에 완료!**
+### ✅ 네이버 톡톡 API 연동 (완료)
+- **텍스트 메시지 발송**: 자동 AI 응답 발송
+- **버튼 메시지 발송**: 예약 유도 버튼
+- **복합 메시지**: 이미지 + 버튼 조합
+- **테스트 모드**: IS_TEST_MODE=true 시 실제 발송 차단
 
-| 단계 | 내용 | 사장님 액션 |
-|------|------|------------|
-| **Step 1** | 톡톡 계정 ID 확인 | 파트너센터에서 6자리 코드 복사 (예: @wc92cf) |
-| **Step 2** | XIVIX 관리자 초대 | 설정 → 상담 멤버관리 → `partner@xivix.kr` 초대 |
-| **Step 3** | 연동 요청 | 매장 정보 + **업종 선택** 후 버튼 클릭 |
+### ✅ 예약 알림 리마인더 (완료)
+- **자동 스케줄링**: 예약 확정 시 24h/2h/1h 전 알림 자동 생성
+- **일괄 발송**: Cron Job으로 대기 알림 일괄 처리
+- **취소 연동**: 예약 취소 시 리마인더 자동 취소
 
-### 방대표님용 (/master)
-
-**슈퍼 마스터 대시보드 - 모든 매장 관리**
-
-| 기능 | 설명 |
-|------|------|
-| **연동 대기 목록** | 사장님들이 요청한 매장 리스트 (업종 + 톡톡ID 표시) |
-| **원클릭 세팅** | Authorization Key + Webhook + **AI 페르소나 자동 생성** |
-| **카카오톡 알림** | 세팅 완료 시 사장님께 알림 발송 |
-| **실시간 모니터링** | 모든 매장 AI 상담 현황 |
-
----
-
-## 🏭 Dynamic_Industry_Persona_Engine (신규!)
-
-### 지원 업종 (13개 카테고리)
-
-| 카테고리 | 업종명 | AI 전문 분야 |
-|----------|--------|--------------|
-| 🪒 | **미용실/헤어숍** | 스타일 추천, 시술 소요시간 안내, 디자이너 매칭 |
-| 💆 | **피부관리/에스테틱** | 피부 타입 분석, 홈케어 가이드, 코스별 효능 안내 |
-| 💅 | **네일아트/속눈썹** | 디자인 추천, 관리 팁, 예약 안내 |
-| 🍽️ | **일반 식당/카페** | 메뉴 추천, 주차 안내, 단체 예약, 알레르기 정보 |
-| 🏋️ | **피트니스/요가/PT** | 프로그램 안내, 트레이너 매칭, 회원권 상담 |
-| 🏥 | **병원/의원/치과** | 진료 안내, 보험 상담, 예약 관리 |
-| ⚖️ | **법률/세무/보험** | 서류 요약, 상담 예약, 기초 법률/보험 상식 안내 |
-| 🎓 | **학원/교육/과외** | 수강료 안내, 커리큘럼 상담, 레벨 테스트 예약 |
-| 🐕 | **애견/반려동물** | 미용 예약, 호텔 예약, 건강 상담 |
-| 🏠 | **부동산/인테리어** | 매물 안내, 상담 예약, 시공 문의 |
-| 🚗 | **자동차 정비/세차** | 정비 예약, 견적 안내, 부품 상담 |
-| 📷 | **사진관/스튜디오** | 촬영 예약, 패키지 안내, 포트폴리오 상담 |
-| ✏️ | **직접 입력 (커스텀)** | 사장님이 정의한 특정 비즈니스 로직에 맞춤 최적화 |
-
-### AI 프롬프트 빌더 기능
-
-- **업종별 자동 생성 버튼**: 클릭 한 번으로 업종에 맞는 AI 페르소나 자동 설정
-- **basePrompt 자동 생성**: 업종별 전문가 역할 자동 설정
-- **specialty 힌트 표시**: 업종별 전문 분야 가이드 제공
-- **말투 스타일 자동 추천**: 업종 특성에 맞는 어조 추천
-
-### 확장성 포인트
-
-```
-"세상의 모든 사장님을 위해"
-
-✅ 업종 제한 없이 누구나 매니저 초대 가능
-✅ 업종별 최적화된 AI 페르소나, 클릭 한 번으로 배치
-✅ 모든 업종에 대해 30분 내 세팅 가능 목표
-✅ 커스텀 업종 지원 - Gemini 2.5 Flash가 즉시 해당 분야 전문가로 변신
-```
+### ✅ 월간 수익 리포트 (완료)
+- **자동 통계 집계**: 대화 수, 예약 수, 전환율
+- **고객 분석**: 총 고객, 재방문 고객
+- **시간대 분석**: 피크 시간대 파악
+- **인기 서비스**: 예약 기준 인기 서비스 TOP 10
 
 ---
 
-## 📖 사용 가이드
+## 📡 V2.0 API 엔드포인트
 
-### ❶ 신규 매장 연동 (사장님)
-
-1. https://xivix-ai-core.pages.dev/connect 접속
-2. **Step 1**: 네이버 톡톡 파트너센터에서 계정 ID 확인 (좌측 상단 프로필 아래 @xxx 코드)
-3. **Step 2**: 파트너센터 > 설정 > 상담 멤버관리 > `partner@xivix.kr` 초대
-4. **Step 3**: 매장 정보 입력 후 "연동 요청하기" 클릭
-5. **완료**: 30분 이내 세팅 완료 알림 수신
-
-### ❷ 매장 세팅 (방대표님)
-
-1. https://xivix-ai-core.pages.dev/master 접속
-2. **연동 대기** 목록에서 매장 선택
-3. **세팅하기** 버튼 클릭
-4. 네이버 API 설정:
-   - Authorization Key 입력 (파트너센터에서 복사)
-   - Webhook URL 복사하여 파트너센터에 등록
-5. AI 페르소나 설정 (역할, 특징, 말투)
-6. **세팅 완료 & 활성화** 클릭
-7. **카카오톡 알림 발송** 버튼으로 사장님께 완료 알림
-
-### ❸ 카카오톡 알림 설정
-
-1. /master > 알림 설정 메뉴
-2. 솔라피 API Key/Secret 입력
-3. 발신 번호 설정
-4. 마스터 수신 번호 설정 (새 연동 요청 알림용)
-
----
-
-## 🔑 등록된 API 키 (Cloudflare Secrets)
-
-| 키 이름 | 상태 | 용도 |
-|---------|------|------|
-| `GEMINI_API_KEY` | ✅ 등록됨 | Google AI Studio 인증 |
-| `NAVER_CLIENT_ID` | ✅ 등록됨 | 네이버 파트너 인증 |
-| `NAVER_CLIENT_SECRET` | ✅ 등록됨 | 네이버 파트너 인증 |
-| `NAVER_ACCESS_TOKEN` | ⚠️ 매장별 저장 | 메시지 발송 인증 |
-
----
-
-## 📡 API 엔드포인트 목록
-
-### Zero-Touch Onboarding API
+### 인증 API
 
 ```bash
-# 연동 요청 (고객 페이지에서 호출)
-curl -X POST https://xivix-ai-core.pages.dev/api/onboarding/request \
+# 마스터 로그인
+curl -X POST https://xivix-ai-core.pages.dev/api/auth/master/login \
   -H "Content-Type: application/json" \
-  -d '{
-    "store_name": "뷰티플 헤어샵",
-    "owner_name": "홍길동",
-    "owner_phone": "010-1234-5678",
-    "business_type": "beauty",
-    "naver_talktalk_id": "wc92cf"
-  }'
+  -d '{"email":"master@xivix.kr","password":"your-password"}'
 
-# 대기 중인 매장 목록 (마스터용)
-curl https://xivix-ai-core.pages.dev/api/master/pending
-
-# 전체 매장 목록 (마스터용)
-curl https://xivix-ai-core.pages.dev/api/master/stores
-
-# 매장 활성화 (마스터용)
-curl -X POST https://xivix-ai-core.pages.dev/api/master/activate/1 \
+# 사장님 로그인
+curl -X POST https://xivix-ai-core.pages.dev/api/auth/owner/login \
   -H "Content-Type: application/json" \
-  -d '{
-    "auth_key": "Bearer xxx...",
-    "ai_persona": "뷰티 컨설턴트",
-    "ai_features": "10년 경력, 친절한 어조",
-    "ai_tone": "professional"
-  }'
+  -d '{"email":"owner@example.com","password":"your-password"}'
 
-# 사장님에게 알림 발송 (마스터용)
-curl -X POST https://xivix-ai-core.pages.dev/api/master/notify/1 \
+# 로그아웃
+curl -X POST https://xivix-ai-core.pages.dev/api/auth/logout \
+  -H "Authorization: Bearer {token}"
+
+# 세션 검증
+curl https://xivix-ai-core.pages.dev/api/auth/verify \
+  -H "Authorization: Bearer {token}"
+
+# 현재 사용자 정보
+curl https://xivix-ai-core.pages.dev/api/auth/me \
+  -H "Authorization: Bearer {token}"
+
+# 비밀번호 변경
+curl -X POST https://xivix-ai-core.pages.dev/api/auth/change-password \
+  -H "Authorization: Bearer {token}" \
   -H "Content-Type: application/json" \
-  -d '{
-    "notification_type": "onboarding_complete",
-    "message": "AI 지배인 세팅이 완료되었습니다!"
-  }'
+  -d '{"oldPassword":"current","newPassword":"new-password"}'
 ```
 
-### 테스트용 API
+### 예약 알림 리마인더 API
 
 ```bash
-# AI 채팅 테스트
-curl -X POST https://xivix-ai-core.pages.dev/v1/test/chat \
+# 대기 중인 리마인더 조회
+curl https://xivix-ai-core.pages.dev/api/reminders/pending
+
+# 리마인더 일괄 처리 (Cron Job용)
+curl -X POST https://xivix-ai-core.pages.dev/api/reminders/process
+
+# 매장별 리마인더 통계
+curl https://xivix-ai-core.pages.dev/api/reminders/stats/1
+
+# 예약 확정 + 리마인더 생성
+curl -X POST https://xivix-ai-core.pages.dev/api/reservations/1/confirm-with-reminder
+
+# 예약 취소 + 리마인더 취소
+curl -X POST https://xivix-ai-core.pages.dev/api/reservations/1/cancel
+```
+
+### 월간 리포트 API
+
+```bash
+# 월간 리포트 생성
+curl -X POST https://xivix-ai-core.pages.dev/api/reports/monthly/1 \
   -H "Content-Type: application/json" \
-  -d '{"message": "예약 가능한 시간 알려주세요", "customer_id": "test-001"}'
+  -d '{"month":"2026-01"}'
 
-# 시스템 정보
-curl https://xivix-ai-core.pages.dev/api/system/info
+# 월간 리포트 조회
+curl "https://xivix-ai-core.pages.dev/api/reports/monthly/1?month=2026-01"
 
-# 헬스체크
-curl https://xivix-ai-core.pages.dev/api/system/health
+# 최근 12개월 리포트
+curl https://xivix-ai-core.pages.dev/api/reports/monthly/1
+
+# 전체 매장 리포트 생성 (마스터용)
+curl -X POST https://xivix-ai-core.pages.dev/api/reports/generate-all \
+  -H "Content-Type: application/json" \
+  -d '{"month":"2026-01"}'
+```
+
+---
+
+## 📁 프로젝트 구조 (V2.0)
+
+```
+/home/user/webapp/
+├── src/
+│   ├── index.tsx              # 메인 앱 엔트리 (라우팅)
+│   ├── types.ts               # TypeScript 타입 정의
+│   ├── routes/
+│   │   ├── api.ts             # REST API 엔드포인트 (4600+ 줄)
+│   │   └── webhook.ts         # 네이버 톡톡 웹훅 핸들러
+│   ├── views/
+│   │   ├── super-master.tsx   # 마스터 대시보드 V2.0
+│   │   ├── client-onboarding.tsx  # 사장님 연동 페이지
+│   │   ├── dashboard.tsx      # 매장 대시보드
+│   │   └── login.tsx          # 로그인 페이지 V2.0
+│   └── lib/
+│       ├── auth.ts            # 인증 라이브러리 (V2.0 신규)
+│       ├── naver-talktalk.ts  # 톡톡 API 클라이언트 (V2.0 강화)
+│       ├── reminder.ts        # 예약 알림 리마인더 (V2.0 신규)
+│       ├── gemini.ts          # Gemini AI 연동
+│       ├── kv-context.ts      # KV 캐시 유틸
+│       └── r2-storage.ts      # R2 이미지 저장 유틸
+├── migrations/
+│   ├── 0001_initial_schema.sql
+│   ├── 0002_xivix_tables.sql
+│   ├── ...
+│   └── 0010_auth_system.sql   # V2.0 인증/리마인더/리포트 테이블
+├── wrangler.jsonc
+├── vite.config.ts
+├── package.json
+└── ecosystem.config.cjs       # PM2 설정 (로컬 개발용)
+```
+
+---
+
+## 🗄️ 데이터베이스 스키마 (V2.0 추가)
+
+### xivix_master_accounts (마스터 계정)
+```sql
+id, email, name, phone, password_hash, is_active, last_login_at
+```
+
+### xivix_sessions (세션 관리)
+```sql
+id, session_token, user_type, user_id, ip_address, user_agent, expires_at
+```
+
+### xivix_auth_logs (인증 로그)
+```sql
+id, user_type, user_id, action, ip_address, user_agent, details
+```
+
+### xivix_reminder_schedules (리마인더 스케줄)
+```sql
+id, store_id, reservation_id, reminder_type, scheduled_at, sent_at, status
+```
+
+### xivix_monthly_reports (월간 리포트)
+```sql
+id, store_id, report_month, total_conversations, total_reservations,
+confirmed_reservations, cancelled_reservations, conversion_rate,
+avg_response_time_ms, total_customers, returning_customers, peak_hours, popular_services
+```
+
+### xivix_naver_talktalk_config (톡톡 API 설정)
+```sql
+id, store_id, partner_id, account_id, access_token, webhook_verified
 ```
 
 ---
 
 ## ✅ 구현 완료 기능
 
-### Zero-Touch Onboarding (신규!)
-- [x] 고객용 30초 연동 페이지 (/connect)
-- [x] 톡톡 계정 ID 입력 방식
-- [x] XIVIX 매니저 초대 가이드
-- [x] 슈퍼 마스터 대시보드 (/master)
-- [x] 연동 대기 목록 관리
-- [x] 원클릭 매장 세팅
-- [x] Solapi 카카오톡 알림 연동
+### V2.0 (2026-02-02)
+- [x] 마스터/사장님 로그인 인증 시스템
+- [x] 서버사이드 세션 관리
+- [x] 네이버 톡톡 메시지 발송 API
+- [x] 예약 알림 자동 발송 (리마인더)
+- [x] 월간 수익 리포트 생성
+- [x] 로그인 페이지 UI 개선
+- [x] 마스터 대시보드 인증 연동
 
-### AI 상담 엔진
-- [x] Gemini 2.5 Flash API 연동
-- [x] 텍스트 + 이미지 멀티모달 처리
-- [x] 스트리밍 응답 (첫 토큰 ~0.5초)
-- [x] 전문가급 시스템 프롬프트
-- [x] 개인정보 마스킹 처리
-
-### 네이버 톡톡 연동
-- [x] Webhook 엔드포인트
-- [x] 메시지 수신/발송
-- [x] 버튼형 예약 유도 메시지
-- [x] Rate Limiting (분당 30회)
-
-### 관리자 대시보드
-- [x] Deep Black 테마 UI
-- [x] 실시간 통계 조회
-- [x] AI 테스트 채팅
-- [x] 상담 이력 조회
-- [x] 예약 관리
-- [x] 10단계 설정 마법사
-
-### 데이터 저장소
-- [x] D1 Database (SQLite)
-- [x] KV Storage (컨텍스트)
-- [x] R2 Storage (이미지)
+### V1.0 (기존)
+- [x] Zero-Touch Onboarding
+- [x] Gemini 2.5 Flash AI 상담
+- [x] 원클릭 AI 셋팅
+- [x] 봇 기간 관리
+- [x] 매장 삭제 기능
+- [x] 할루시네이션 가드
 
 ---
 
-## 🚧 예정 기능 (Phase 2)
+## 🚧 예정 기능 (Phase 3)
 
-- [ ] Cron Triggers (토큰 자동 갱신)
-- [ ] 일일 성과 리포트 자동 발송
+- [ ] Cron Triggers (리마인더 자동 발송)
+- [ ] 실시간 대화 모니터링 (WebSocket)
 - [ ] 2단계 인증 (2FA)
-- [ ] 불만 감지 시 푸시 알림
+- [ ] 비밀번호 찾기 (이메일 인증)
 - [ ] 네이버 OAuth 자동 연동
 
 ---
 
-## 🎨 디자인 시스템
+## 🔧 개발 환경 설정
 
-| 요소 | 값 |
-|------|-----|
-| **Theme** | Deep Black (#050505) |
-| **Accent** | Gold (#D4AF37) |
-| **Secondary** | Electric Blue (#007AFF) |
-| **Font** | Pretendard (Wide Spacing) |
-| **Layout** | Grid-based Glassmorphism |
+```bash
+# 1. 의존성 설치
+npm install
+
+# 2. 로컬 D1 마이그레이션
+npx wrangler d1 migrations apply xivix-production --local
+
+# 3. 빌드
+npm run build
+
+# 4. 개발 서버 시작
+pm2 start ecosystem.config.cjs
+
+# 5. 테스트
+curl http://localhost:3000/api/system/health
+```
 
 ---
 
@@ -260,6 +259,7 @@ curl https://xivix-ai-core.pages.dev/api/system/health
 | 첫 토큰 응답 | < 0.5s | ~0.4s |
 | 전체 응답 | < 3s | ~2s |
 | 예약 전환율 | > 25% | 66.7% |
+| 인증 응답 | < 100ms | ~50ms |
 
 ---
 
@@ -267,7 +267,7 @@ curl https://xivix-ai-core.pages.dev/api/system/health
 
 | 구분 | 기술 |
 |------|------|
-| **AI Engine** | Gemini 2.5 Flash (Single Engine Mode) |
+| **AI Engine** | Gemini 2.5 Flash |
 | **Runtime** | Cloudflare Workers (Hono Framework) |
 | **Database** | Cloudflare D1 (SQLite) |
 | **Cache** | Cloudflare KV |
@@ -283,5 +283,5 @@ curl https://xivix-ai-core.pages.dev/api/system/health
 
 ---
 
-**Last Updated**: 2026-01-21  
-**Version**: 2026.01.21 (Dynamic_Industry_Persona_Engine v2)
+**Last Updated**: 2026-02-02  
+**Version**: 2.0.0 (Authentication + Reminder + Report)
