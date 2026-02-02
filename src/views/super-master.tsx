@@ -375,6 +375,10 @@ export function renderSuperMasterDashboard(): string {
                   </div>
                   
                   <div class="flex items-center gap-2">
+                    <a href="/store/\${store.id}/settings" class="btn-action px-4 py-2 gold-bg rounded-xl text-sm flex items-center gap-2 text-black font-medium">
+                      <i class="fas fa-cog"></i>
+                      설정
+                    </a>
                     <button onclick="openBotModal(\${store.id})" class="btn-action px-4 py-2 glass rounded-xl text-sm flex items-center gap-2 hover:bg-white/10">
                       <i class="fas fa-calendar-alt"></i>
                       기간 설정
