@@ -422,11 +422,12 @@ export async function sendTextMessage(
   }
 
   try {
+    // 네이버 톡톡 API는 Bearer prefix 없이 토큰만 사용
     const response = await fetch(`${TALKTALK_API_BASE}/event`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json;charset=UTF-8',
-        'Authorization': `Bearer ${accessToken}`
+        'Authorization': accessToken
       },
       body: JSON.stringify({
         event: 'send',
@@ -484,11 +485,12 @@ export async function sendButtonMessage(
   }));
 
   try {
+    // 네이버 톡톡 API는 Bearer prefix 없이 토큰만 사용
     const response = await fetch(`${TALKTALK_API_BASE}/event`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json;charset=UTF-8',
-        'Authorization': `Bearer ${accessToken}`
+        'Authorization': accessToken
       },
       body: JSON.stringify({
         event: 'send',
