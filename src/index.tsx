@@ -9,9 +9,7 @@ import { serveStatic } from 'hono/cloudflare-workers';
 import type { Env } from './types';
 import webhookRoutes from './routes/webhook';
 import apiRoutes from './routes/api';
-import { renderDashboard } from './views/dashboard';
 import { renderLogin } from './views/login';
-import { renderAdminDashboard } from './views/admin-dashboard';
 import { renderClientOnboarding } from './views/client-onboarding';
 import { renderSuperMasterDashboard } from './views/super-master';
 import { renderStoreSettings } from './views/store-settings';
@@ -84,22 +82,11 @@ app.get('/login', async (c) => {
   return c.html(renderLogin());
 });
 
-// Main dashboard
-app.get('/dashboard', async (c) => {
-  // In production, check auth token from cookie/header
-  const storeId = 1; // Default store
-  return c.html(renderDashboard(storeId, c.env.XIVIX_VERSION));
-});
-
-// Dashboard with store ID
-app.get('/dashboard/:storeId', async (c) => {
-  const storeId = parseInt(c.req.param('storeId'), 10);
-  return c.html(renderDashboard(storeId, c.env.XIVIX_VERSION));
-});
-
-// Admin Dashboard (멀티테넌트 업체 관리) - 기존 (폐기 예정)
-app.get('/admin-old', async (c) => {
-  return c.html(renderAdminDashboard());
+// Dashboard → Master로 리다이렉트 (폐기됨)
+app.get('/dashboard', (c) => c.redirect('/master'));
+app.get('/dashboard/:storeId', (c) => {
+  const storeId = c.req.param('storeId');
+  return c.redirect(`/store/${storeId}/settings`);
 });
 
 // ============ Zero-Touch Onboarding Pages ============
