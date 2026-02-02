@@ -1112,8 +1112,14 @@ export function renderStoreSettings(storeId: number): string {
           const result = generateData.data.extractedInfo;
           
           if (result.storeName) document.getElementById('store-name-input').value = result.storeName;
-          if (result.address) document.getElementById('store-address')?.value = result.address || '';
-          if (result.phone) document.getElementById('store-phone')?.value = result.phone || '';
+          if (result.address) {
+            const addrEl = document.getElementById('store-address');
+            if (addrEl) addrEl.value = result.address || '';
+          }
+          if (result.phone) {
+            const phoneEl = document.getElementById('store-phone');
+            if (phoneEl) phoneEl.value = result.phone || '';
+          }
           if (result.operatingHours) document.getElementById('operating-hours-text').value = result.operatingHours;
           if (result.businessType) document.getElementById('business-type').value = result.businessType;
           if (result.systemPrompt) document.getElementById('system-prompt').value = result.systemPrompt;
