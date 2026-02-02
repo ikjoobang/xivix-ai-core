@@ -6057,4 +6057,365 @@ api.post('/request/:id/status', async (c) => {
   }
 });
 
+// ============ 예약 API ============
+
+// 매장의 예약 가능 시간 조회
+api.get('/stores/:storeId/booking/available', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  const days = parseInt(c.req.query('days') || '7', 10);
+  const date = c.req.query('date'); // 특정 날짜 필터
+
+  try {
+    // 매장 정보 조회
+    const store = await c.env.DB.prepare(
+      'SELECT * FROM xivix_stores WHERE id = ?'
+    ).bind(storeId).first<Store>();
+
+    if (!store) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '매장을 찾을 수 없습니다.',
+        timestamp: Date.now()
+      }, 404);
+    }
+
+    // 영업시간 파싱
+    const businessHours = parseOperatingHoursAPI(store.operating_hours);
+
+    // 기존 예약 조회
+    const startDate = date || new Date().toISOString().split('T')[0];
+    const endDateObj = new Date(startDate);
+    endDateObj.setDate(endDateObj.getDate() + days);
+    const endDate = endDateObj.toISOString().split('T')[0];
+
+    const bookings = await c.env.DB.prepare(`
+      SELECT reservation_date, reservation_time, service_name
+      FROM xivix_reservations
+      WHERE store_id = ?
+        AND reservation_date >= ?
+        AND reservation_date <= ?
+        AND status NOT IN ('cancelled', 'no_show')
+    `).bind(storeId, startDate, endDate).all();
+
+    // 예약된 시간대
+    const bookedSlots = (bookings.results || []).map((b: any) => ({
+      date: b.reservation_date,
+      time: b.reservation_time
+    }));
+
+    // 날짜별 가용 슬롯 계산
+    const availableSlots: { [date: string]: string[] } = {};
+    const slotDuration = 30; // 30분 단위
+
+    for (let i = 0; i < days; i++) {
+      const currentDate = new Date(startDate);
+      currentDate.setDate(currentDate.getDate() + i);
+      const dateStr = currentDate.toISOString().split('T')[0];
+      const dayOfWeek = currentDate.getDay();
+      
+      const dayHours = businessHours.find(h => h.dayOfWeek === dayOfWeek);
+      if (!dayHours || dayHours.isOff) continue;
+
+      const [openH, openM] = dayHours.open.split(':').map(Number);
+      const [closeH, closeM] = dayHours.close.split(':').map(Number);
+      const openMin = openH * 60 + openM;
+      const closeMin = closeH * 60 + closeM;
+
+      const dayBookedTimes = new Set(
+        bookedSlots.filter(b => b.date === dateStr).map(b => b.time)
+      );
+
+      const slots: string[] = [];
+      let currentMin = openMin;
+
+      // 오늘인 경우 현재 시간 이후만
+      const now = new Date();
+      const today = now.toISOString().split('T')[0];
+      if (dateStr === today) {
+        const nowMin = now.getHours() * 60 + now.getMinutes();
+        currentMin = Math.max(openMin, Math.ceil(nowMin / slotDuration) * slotDuration + slotDuration);
+      }
+
+      while (currentMin + slotDuration <= closeMin) {
+        const timeStr = `${Math.floor(currentMin / 60).toString().padStart(2, '0')}:${(currentMin % 60).toString().padStart(2, '0')}`;
+        if (!dayBookedTimes.has(timeStr)) {
+          slots.push(timeStr);
+        }
+        currentMin += slotDuration;
+      }
+
+      if (slots.length > 0) {
+        availableSlots[dateStr] = slots;
+      }
+    }
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        storeId,
+        storeName: store.store_name,
+        operatingHours: store.operating_hours,
+        availableSlots,
+        bookedCount: bookedSlots.length
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    console.error('[API] Get available slots error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '예약 가능 시간 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 예약 생성
+api.post('/stores/:storeId/booking', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  const { date, time, customer_name, customer_phone, service_name, staff_name, customer_id } = await c.req.json() as {
+    date: string;
+    time: string;
+    customer_name?: string;
+    customer_phone?: string;
+    service_name?: string;
+    staff_name?: string;
+    customer_id?: string;
+  };
+
+  if (!date || !time) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '날짜와 시간은 필수입니다.',
+      timestamp: Date.now()
+    }, 400);
+  }
+
+  try {
+    // 중복 체크
+    const existing = await c.env.DB.prepare(`
+      SELECT id FROM xivix_reservations
+      WHERE store_id = ? AND reservation_date = ? AND reservation_time = ?
+        AND status NOT IN ('cancelled', 'no_show')
+    `).bind(storeId, date, time).first();
+
+    if (existing) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '해당 시간에 이미 예약이 있습니다.',
+        timestamp: Date.now()
+      }, 409);
+    }
+
+    // 매장 정보 조회 (네이버 예약 ID)
+    const store = await c.env.DB.prepare(
+      'SELECT naver_reservation_id FROM xivix_stores WHERE id = ?'
+    ).bind(storeId).first<{ naver_reservation_id: string }>();
+
+    // 예약 생성 (실제 테이블 스키마에 맞춤)
+    const result = await c.env.DB.prepare(`
+      INSERT INTO xivix_reservations (
+        store_id, customer_id, customer_name, customer_phone,
+        reservation_date, reservation_time, service_name, status, notes, created_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed', '', 'ai')
+    `).bind(
+      storeId,
+      customer_id || `WEB_${Date.now()}`,
+      customer_name || null,
+      customer_phone || null,
+      date,
+      time,
+      service_name || '일반 서비스'
+    ).run();
+
+    const bookingId = `BK${Date.now().toString(36).toUpperCase()}`;
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        bookingId,
+        storeId,
+        date,
+        time,
+        status: 'confirmed'
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    console.error('[API] Create booking error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '예약 생성 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 예약 목록 조회 (매장별)
+api.get('/stores/:storeId/booking/list', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  const status = c.req.query('status') || 'all';
+  const date = c.req.query('date');
+  const limit = parseInt(c.req.query('limit') || '50', 10);
+
+  try {
+    let query = `
+      SELECT * FROM xivix_reservations
+      WHERE store_id = ?
+    `;
+    const params: any[] = [storeId];
+
+    if (status !== 'all') {
+      query += ' AND status = ?';
+      params.push(status);
+    }
+
+    if (date) {
+      query += ' AND reservation_date = ?';
+      params.push(date);
+    }
+
+    query += ' ORDER BY reservation_date ASC, reservation_time ASC LIMIT ?';
+    params.push(limit);
+
+    const bookings = await c.env.DB.prepare(query).bind(...params).all();
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: bookings.results || [],
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    console.error('[API] Get bookings error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '예약 목록 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 예약 상태 변경
+api.patch('/stores/:storeId/booking/:bookingId', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  const bookingId = parseInt(c.req.param('bookingId'), 10);
+  const { status, note } = await c.req.json() as {
+    status: 'confirmed' | 'cancelled' | 'completed' | 'no_show';
+    note?: string;
+  };
+
+  if (!status) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '상태값은 필수입니다.',
+      timestamp: Date.now()
+    }, 400);
+  }
+
+  try {
+    await c.env.DB.prepare(`
+      UPDATE xivix_reservations
+      SET status = ?, admin_note = ?, updated_at = datetime('now')
+      WHERE id = ? AND store_id = ?
+    `).bind(status, note || null, bookingId, storeId).run();
+
+    return c.json<ApiResponse>({
+      success: true,
+      message: '예약 상태가 변경되었습니다.',
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    console.error('[API] Update booking error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '예약 상태 변경 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 예약 삭제
+api.delete('/stores/:storeId/booking/:bookingId', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  const bookingId = parseInt(c.req.param('bookingId'), 10);
+
+  try {
+    await c.env.DB.prepare(`
+      DELETE FROM xivix_reservations WHERE id = ? AND store_id = ?
+    `).bind(bookingId, storeId).run();
+
+    return c.json<ApiResponse>({
+      success: true,
+      message: '예약이 삭제되었습니다.',
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    console.error('[API] Delete booking error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '예약 삭제 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 영업시간 파싱 헬퍼 함수 (API용)
+function parseOperatingHoursAPI(operatingHours: string | null): { dayOfWeek: number; open: string; close: string; isOff: boolean }[] {
+  if (!operatingHours) {
+    return [
+      { dayOfWeek: 0, open: '', close: '', isOff: true },
+      { dayOfWeek: 1, open: '10:00', close: '21:00', isOff: false },
+      { dayOfWeek: 2, open: '10:00', close: '21:00', isOff: false },
+      { dayOfWeek: 3, open: '10:00', close: '21:00', isOff: false },
+      { dayOfWeek: 4, open: '10:00', close: '21:00', isOff: false },
+      { dayOfWeek: 5, open: '10:00', close: '21:00', isOff: false },
+      { dayOfWeek: 6, open: '10:00', close: '18:00', isOff: false },
+    ];
+  }
+
+  const dayMap: { [key: string]: number[] } = {
+    '일': [0], '월': [1], '화': [2], '수': [3], '목': [4], '금': [5], '토': [6],
+    '월-금': [1, 2, 3, 4, 5],
+    '월-토': [1, 2, 3, 4, 5, 6],
+    '평일': [1, 2, 3, 4, 5],
+    '주말': [0, 6],
+  };
+
+  const result = Array(7).fill(null).map((_, i) => ({
+    dayOfWeek: i,
+    open: '',
+    close: '',
+    isOff: true
+  }));
+
+  const rules = operatingHours.split(/[,，]/).map(r => r.trim());
+  
+  for (const rule of rules) {
+    if (rule.includes('휴무')) {
+      const dayMatch = rule.match(/(월|화|수|목|금|토|일)/);
+      if (dayMatch) {
+        const days = dayMap[dayMatch[1]] || [];
+        days.forEach(d => { result[d].isOff = true; });
+      }
+      continue;
+    }
+
+    const timeMatch = rule.match(/(\d{1,2}:\d{2})\s*[-~]\s*(\d{1,2}:\d{2})/);
+    if (timeMatch) {
+      const open = timeMatch[1];
+      const close = timeMatch[2];
+
+      for (const [dayKey, days] of Object.entries(dayMap)) {
+        if (rule.includes(dayKey)) {
+          days.forEach(d => {
+            result[d] = { dayOfWeek: d, open, close, isOff: false };
+          });
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
 export default api;

@@ -27,6 +27,20 @@ import {
   classifyConsultation,
   streamSimpleConsultation 
 } from '../lib/ai-router';
+import {
+  detectBookingIntent,
+  getAvailableSlotsForDays,
+  generateAvailableSlotsMessage,
+  generateBookingConfirmMessage,
+  generateBookingCompleteMessage,
+  createBooking,
+  getBookingState,
+  setBookingState,
+  clearBookingState,
+  getNaverBookingUrl,
+  BookingIntent,
+  BookingConversationState
+} from '../lib/naver-booking';
 
 // ============ [XIVIX WATCHDOG] 이벤트 타입 정의 ============
 type NaverTalkTalkEventType = 'open' | 'leave' | 'friend' | 'send' | 'echo' | 'profile';
@@ -314,16 +328,138 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       }
     }
     
-    // 예약 유도 메시지 (특정 키워드 감지)
-    const needsReservation = /예약|방문|언제|시간|가격/.test(userMessage);
-    if (needsReservation && storeResult?.naver_reservation_id) {
-      await sendButtonMessage(env, customerId, 
-        '바로 예약하시겠어요?',
-        [
-          { type: 'LINK', title: '지금 예약하기', linkUrl: `https://booking.naver.com/booking/12/bizes/${storeResult.naver_reservation_id}` },
-          { type: 'TEXT', title: '더 알아보기', value: '상담' }
-        ]
-      );
+    // ============ [Phase 04] 네이버 예약 연동 처리 ============
+    const bookingIntent = detectBookingIntent(userMessage);
+    const bookingState = await getBookingState(env.KV, storeId, customerId);
+    
+    // 예약 의도가 있거나 예약 흐름 중인 경우
+    if (bookingIntent.hasBookingIntent || bookingState.isBookingFlow) {
+      console.log(`[Webhook] Booking intent detected: ${bookingIntent.intentType}, state: ${bookingState.step}`);
+      
+      const storeName = storeResult?.store_name || '매장';
+      const naverReservationId = storeResult?.naver_reservation_id;
+      
+      // 예약 가능 시간 조회 요청
+      if (bookingIntent.intentType === 'check_available' || bookingIntent.intentType === 'inquiry') {
+        try {
+          const availableSlots = await getAvailableSlotsForDays(
+            env.DB,
+            storeId,
+            storeResult?.operating_hours || null,
+            7,
+            30
+          );
+          
+          const slotsMessage = generateAvailableSlotsMessage(
+            storeName,
+            availableSlots,
+            bookingIntent.extractedDate
+          );
+          
+          await sendTextMessage(env, customerId, slotsMessage);
+          
+          // 네이버 예약 ID가 있으면 버튼도 전송
+          if (naverReservationId) {
+            await sendButtonMessage(env, customerId,
+              '네이버에서 바로 예약하실 수도 있어요!',
+              [
+                { type: 'LINK', title: '네이버 예약하기', linkUrl: getNaverBookingUrl(naverReservationId) },
+                { type: 'TEXT', title: '여기서 예약할게요', value: '톡톡예약' }
+              ]
+            );
+          }
+          
+          // 예약 흐름 상태 저장
+          await setBookingState(env.KV, storeId, customerId, {
+            isBookingFlow: true,
+            step: 'checking_date',
+            targetDate: bookingIntent.extractedDate
+          });
+          
+        } catch (bookingError) {
+          console.error('[Webhook] Booking slots error:', bookingError);
+          await sendTextMessage(env, customerId, 
+            '예약 가능 시간을 조회하는 중 문제가 발생했어요. 잠시 후 다시 시도해주세요. 😅'
+          );
+        }
+      }
+      // 예약 생성 요청 (날짜/시간이 있는 경우)
+      else if (bookingIntent.intentType === 'make_booking' && bookingIntent.extractedDate && bookingIntent.extractedTime) {
+        // 예약 확인 메시지 전송
+        const confirmMsg = generateBookingConfirmMessage(
+          storeName,
+          bookingIntent.extractedDate,
+          bookingIntent.extractedTime,
+          bookingIntent.extractedService
+        );
+        
+        await sendTextMessage(env, customerId, confirmMsg);
+        await sendButtonMessage(env, customerId,
+          '예약을 확정할까요?',
+          [
+            { type: 'TEXT', title: '✅ 예약 확정', value: '예약확정' },
+            { type: 'TEXT', title: '❌ 취소', value: '예약취소' },
+            { type: 'TEXT', title: '🔄 시간 변경', value: '시간변경' }
+          ]
+        );
+        
+        // 예약 흐름 상태 저장
+        await setBookingState(env.KV, storeId, customerId, {
+          isBookingFlow: true,
+          step: 'confirming',
+          targetDate: bookingIntent.extractedDate,
+          targetTime: bookingIntent.extractedTime,
+          targetService: bookingIntent.extractedService
+        });
+      }
+      // 예약 확정 처리 (상태가 confirming인 경우)
+      else if (bookingState.step === 'confirming' && /예약확정|확정|네|예|좋아/.test(userMessage)) {
+        if (bookingState.targetDate && bookingState.targetTime) {
+          const result = await createBooking(env.DB, {
+            storeId,
+            naverReservationId: naverReservationId || '',
+            customerId,
+            date: bookingState.targetDate,
+            time: bookingState.targetTime,
+            serviceName: bookingState.targetService,
+            status: 'confirmed'
+          });
+          
+          if (result.success) {
+            const completeMsg = generateBookingCompleteMessage(
+              storeName,
+              bookingState.targetDate,
+              bookingState.targetTime,
+              result.bookingId,
+              bookingState.targetService
+            );
+            
+            await sendTextMessage(env, customerId, completeMsg);
+            
+            // 예약 흐름 종료
+            await clearBookingState(env.KV, storeId, customerId);
+          } else {
+            await sendTextMessage(env, customerId, 
+              `예약 처리 중 문제가 발생했어요. ${result.error || ''} 다시 시도해주세요. 😅`
+            );
+          }
+        }
+      }
+      // 예약 취소 처리
+      else if (/예약취소|취소/.test(userMessage) && bookingState.isBookingFlow) {
+        await sendTextMessage(env, customerId, '예약이 취소되었습니다. 다른 문의사항이 있으시면 말씀해주세요! 😊');
+        await clearBookingState(env.KV, storeId, customerId);
+      }
+      // 일반 예약 문의 (네이버 예약 버튼 제공)
+      else if (naverReservationId) {
+        await sendButtonMessage(env, customerId, 
+          '바로 예약하시겠어요?',
+          [
+            { type: 'LINK', title: '지금 예약하기', linkUrl: getNaverBookingUrl(naverReservationId) },
+            { type: 'TEXT', title: '예약 가능 시간 확인', value: '예약가능시간' }
+          ]
+        );
+      }
     }
     
     // 대화 컨텍스트 저장
