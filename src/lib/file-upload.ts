@@ -220,7 +220,7 @@ export async function fetchUrlContent(url: string): Promise<{
   }
 }
 
-// Gemini를 이용한 파일 분석
+// Gemini를 이용한 파일 분석 (Gemini 2.5 Pro - 정확도 우선)
 export async function analyzeWithGemini(
   apiKey: string,
   content: {
@@ -231,7 +231,8 @@ export async function analyzeWithGemini(
   prompt: string
 ): Promise<{ success: boolean; result?: string; error?: string }> {
   try {
-    const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+    // 전문 상담/분석에는 Gemini 2.5 Pro 사용 (느리지만 정확도 높음)
+    const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-05-06:generateContent';
     
     let parts: any[] = [{ text: prompt }];
     

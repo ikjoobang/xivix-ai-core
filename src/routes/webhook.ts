@@ -22,6 +22,11 @@ import {
   checkRateLimit 
 } from '../lib/kv-context';
 import { uploadImageFromUrl } from '../lib/r2-storage';
+import { 
+  routeAIRequest, 
+  classifyConsultation,
+  streamSimpleConsultation 
+} from '../lib/ai-router';
 
 // ============ [XIVIX WATCHDOG] 이벤트 타입 정의 ============
 type NaverTalkTalkEventType = 'open' | 'leave' | 'friend' | 'send' | 'echo' | 'profile';
@@ -222,49 +227,90 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     // 대화 컨텍스트 조회
     const context = await getConversationContext(env.KV, storeId, customerId);
     
-    // Gemini 메시지 구성
-    const messages = buildGeminiMessages(context, userMessage, imageBase64, imageMimeType);
-    const systemInstruction = buildSystemInstruction(storeResult ? {
-      store_name: storeResult.store_name,
-      menu_data: storeResult.menu_data,
-      operating_hours: storeResult.operating_hours,
-      ai_persona: storeResult.ai_persona,
-      ai_tone: storeResult.ai_tone
-    } : undefined);
+    // ============ AI Router: 상담 유형별 처리 ============
+    // 전문 상담 (의료/법률/보험): GPT-4o → Gemini Pro 검증
+    // 일반 문의: Gemini Flash (빠른 응답)
     
-    // AI 응답 생성 (스트리밍 또는 일반)
+    const businessType = storeResult?.business_type || 'OTHER';
+    const hasImage = !!(imageBase64 && imageMimeType);
+    const consultationType = classifyConsultation(userMessage, businessType, hasImage);
+    
+    console.log(`[Webhook] Consultation type: ${consultationType}, Business: ${businessType}`);
+    
     let aiResponse = '';
+    let aiModel = '';
+    let verified = false;
     
-    // 짧은 메시지는 일반 응답, 긴 메시지는 스트리밍
-    if (userMessage.length < 20 && !imageBase64) {
-      aiResponse = await getGeminiResponse(env, messages, systemInstruction);
-      await sendTextMessage(env, customerId, aiResponse);
-    } else {
-      // 스트리밍 응답 (청크 단위 전송)
-      const chunks: string[] = [];
-      let currentChunk = '';
+    // 전문 상담 또는 이미지 분석: AI Router 사용
+    if (consultationType === 'expert' || consultationType === 'image') {
+      console.log(`[Webhook] Using AI Router for ${consultationType} consultation`);
       
-      for await (const text of streamGeminiResponse(env, messages, systemInstruction)) {
-        currentChunk += text;
+      const result = await routeAIRequest(
+        env,
+        storeResult,
+        userMessage,
+        context,
+        imageBase64,
+        imageMimeType
+      );
+      
+      aiResponse = result.response;
+      aiModel = result.model;
+      verified = result.verified || false;
+      
+      // 응답 전송
+      await sendTextMessage(env, customerId, aiResponse);
+      
+      console.log(`[Webhook] AI Response (${aiModel}, verified: ${verified}): ${aiResponse.slice(0, 50)}...`);
+    } 
+    // 일반 문의: Gemini Flash (짧은 메시지는 일반, 긴 메시지는 스트리밍)
+    else {
+      console.log('[Webhook] Using Gemini Flash for simple consultation');
+      aiModel = 'gemini-flash';
+      
+      // Gemini 메시지 구성
+      const messages = buildGeminiMessages(context, userMessage, imageBase64, imageMimeType);
+      const systemInstruction = buildSystemInstruction(storeResult ? {
+        store_name: storeResult.store_name,
+        menu_data: storeResult.menu_data,
+        operating_hours: storeResult.operating_hours,
+        ai_persona: storeResult.ai_persona,
+        ai_tone: storeResult.ai_tone
+      } : undefined);
+      
+      // 짧은 메시지는 일반 응답, 긴 메시지는 스트리밍
+      if (userMessage.length < 20 && !imageBase64) {
+        aiResponse = await getGeminiResponse(env, messages, systemInstruction, 'gemini');
+        await sendTextMessage(env, customerId, aiResponse);
+      } else {
+        // 스트리밍 응답 (청크 단위 전송)
+        const chunks: string[] = [];
+        let currentChunk = '';
         
-        // 문장 완료 시 전송
-        if (currentChunk.includes('다.') || currentChunk.includes('요.') || 
-            currentChunk.includes('니다.') || currentChunk.includes('세요.') ||
-            currentChunk.length > 100) {
+        for await (const text of streamGeminiResponse(env, messages, systemInstruction, 'gemini')) {
+          currentChunk += text;
+          
+          // 문장 완료 시 전송
+          if (currentChunk.includes('다.') || currentChunk.includes('요.') || 
+              currentChunk.includes('니다.') || currentChunk.includes('세요.') ||
+              currentChunk.length > 100) {
+            chunks.push(currentChunk);
+            aiResponse += currentChunk;
+            await sendTextMessage(env, customerId, currentChunk.trim());
+            currentChunk = '';
+            // 타이핑 효과를 위한 짧은 딜레이
+            await new Promise(r => setTimeout(r, 100));
+          }
+        }
+        
+        // 남은 텍스트 전송
+        if (currentChunk.trim()) {
           chunks.push(currentChunk);
           aiResponse += currentChunk;
           await sendTextMessage(env, customerId, currentChunk.trim());
-          currentChunk = '';
-          // 타이핑 효과를 위한 짧은 딜레이
-          await new Promise(r => setTimeout(r, 100));
         }
-      }
-      
-      // 남은 텍스트 전송
-      if (currentChunk.trim()) {
-        chunks.push(currentChunk);
-        aiResponse += currentChunk;
-        await sendTextMessage(env, customerId, currentChunk.trim());
+        
+        aiModel = 'gemini-flash-stream';
       }
     }
     
@@ -283,7 +329,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     // 대화 컨텍스트 저장
     await updateConversationContext(env.KV, storeId, customerId, userMessage, aiResponse);
     
-    // 로그 저장
+    // 로그 저장 (AI 모델 정보 포함)
     const responseTime = Date.now() - startTime;
     await env.DB.prepare(`
       INSERT INTO xivix_conversation_logs 
@@ -294,14 +340,17 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       customerId,
       imageBase64 ? 'mixed' : 'text',
       userMessage.slice(0, 500),
-      aiResponse.slice(0, 1000),
+      `[${aiModel}${verified ? ',verified' : ''}] ${aiResponse}`.slice(0, 1000),
       responseTime
     ).run();
     
     return c.json({ 
       success: true, 
       store_id: storeId,
-      response_time_ms: responseTime 
+      response_time_ms: responseTime,
+      ai_model: aiModel,
+      consultation_type: consultationType,
+      verified
     });
     
   } catch (error) {

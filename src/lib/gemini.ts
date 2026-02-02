@@ -114,11 +114,24 @@ export function buildSystemInstruction(store?: {
   return instruction;
 }
 
-// Streaming response generator for Gemini 2.5 Flash
+// 모델명 매핑 (환경변수/선택값 → Gemini API 모델명)
+function getGeminiModelId(modelSetting: string): string {
+  const modelMap: Record<string, string> = {
+    'gemini': 'gemini-2.5-flash-preview-05-20',      // 일반 상담 - 빠른 응답
+    'gemini-flash': 'gemini-2.5-flash-preview-05-20',
+    'gemini-2.5-flash': 'gemini-2.5-flash-preview-05-20',
+    'gemini-pro': 'gemini-2.5-pro-preview-05-06',    // 전문 상담 - 정확도 우선
+    'gemini-2.5-pro': 'gemini-2.5-pro-preview-05-06',
+  };
+  return modelMap[modelSetting] || 'gemini-2.5-flash-preview-05-20';
+}
+
+// Streaming response generator for Gemini
 export async function* streamGeminiResponse(
   env: Env,
   messages: GeminiMessage[],
-  systemInstruction: string
+  systemInstruction: string,
+  modelOverride?: string  // 매장별 모델 설정 지원
 ): AsyncGenerator<string, void, unknown> {
   const apiKey = env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -126,7 +139,9 @@ export async function* streamGeminiResponse(
     return;
   }
   
-  const model = env.AI_MODEL || 'gemini-2.5-flash';
+  const modelSetting = modelOverride || env.AI_MODEL || 'gemini-2.5-flash';
+  const model = getGeminiModelId(modelSetting);
+  console.log(`[Gemini] Using model: ${model} (setting: ${modelSetting})`);
   const url = `${GEMINI_API_BASE}/${model}:streamGenerateContent?key=${apiKey}&alt=sse`;
   
   const request: GeminiRequest = {
@@ -202,14 +217,17 @@ export async function* streamGeminiResponse(
 export async function getGeminiResponse(
   env: Env,
   messages: GeminiMessage[],
-  systemInstruction: string
+  systemInstruction: string,
+  modelOverride?: string  // 매장별 모델 설정 지원
 ): Promise<string> {
   const apiKey = env.GEMINI_API_KEY;
   if (!apiKey) {
     return 'API 키가 설정되지 않았습니다.';
   }
   
-  const model = env.AI_MODEL || 'gemini-2.5-flash';
+  const modelSetting = modelOverride || env.AI_MODEL || 'gemini-2.5-flash';
+  const model = getGeminiModelId(modelSetting);
+  console.log(`[Gemini] Using model: ${model} (setting: ${modelSetting})`);
   const url = `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`;
   
   const request: GeminiRequest = {

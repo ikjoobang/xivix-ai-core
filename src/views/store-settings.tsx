@@ -382,16 +382,16 @@ export function renderStoreSettings(storeId: number): string {
           </h2>
           
           <div class="space-y-4">
-            <!-- Gemini -->
+            <!-- Gemini Flash (일반 상담) -->
             <label class="block cursor-pointer">
               <div class="flex items-center gap-4 p-4 bg-white/5 rounded-xl border-2 border-transparent hover:border-white/20 transition-all model-option" data-model="gemini">
                 <input type="radio" name="ai-model" value="gemini" class="hidden" checked>
                 <div class="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center">
-                  <i class="fas fa-gem text-blue-400 text-xl"></i>
+                  <i class="fas fa-bolt text-blue-400 text-xl"></i>
                 </div>
                 <div class="flex-1">
-                  <h3 class="font-bold">Google Gemini 2.5 Flash</h3>
-                  <p class="text-sm text-white/60">빠른 응답, 멀티모달 지원, 한국어 우수</p>
+                  <h3 class="font-bold">Gemini 2.5 Flash <span class="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full ml-2">빠름</span></h3>
+                  <p class="text-sm text-white/60">일반 상담용 - 빠른 응답, 한국어 우수</p>
                 </div>
                 <div class="w-6 h-6 rounded-full border-2 border-white/30 flex items-center justify-center model-check">
                   <i class="fas fa-check text-xs hidden"></i>
@@ -399,7 +399,24 @@ export function renderStoreSettings(storeId: number): string {
               </div>
             </label>
             
-            <!-- OpenAI GPT-4 -->
+            <!-- Gemini Pro (전문 상담) - 권장 -->
+            <label class="block cursor-pointer">
+              <div class="flex items-center gap-4 p-4 bg-white/5 rounded-xl border-2 border-transparent hover:border-white/20 transition-all model-option" data-model="gemini-pro">
+                <input type="radio" name="ai-model" value="gemini-pro" class="hidden">
+                <div class="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center">
+                  <i class="fas fa-gem text-indigo-400 text-xl"></i>
+                </div>
+                <div class="flex-1">
+                  <h3 class="font-bold">Gemini 2.5 Pro <span class="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full ml-2">★ 권장</span></h3>
+                  <p class="text-sm text-white/60">전문 상담용 - 보험/의료/법률 정확도 최고</p>
+                </div>
+                <div class="w-6 h-6 rounded-full border-2 border-white/30 flex items-center justify-center model-check">
+                  <i class="fas fa-check text-xs hidden"></i>
+                </div>
+              </div>
+            </label>
+            
+            <!-- OpenAI GPT-4o -->
             <label class="block cursor-pointer">
               <div class="flex items-center gap-4 p-4 bg-white/5 rounded-xl border-2 border-transparent hover:border-white/20 transition-all model-option" data-model="openai">
                 <input type="radio" name="ai-model" value="openai" class="hidden">
@@ -408,7 +425,7 @@ export function renderStoreSettings(storeId: number): string {
                 </div>
                 <div class="flex-1">
                   <h3 class="font-bold">OpenAI GPT-4o</h3>
-                  <p class="text-sm text-white/60">정확한 정보, 전문 분야 강점 (보험/법률)</p>
+                  <p class="text-sm text-white/60">이미지 분석/OCR 우수, 영문 정보 강점</p>
                 </div>
                 <div class="w-6 h-6 rounded-full border-2 border-white/30 flex items-center justify-center model-check">
                   <i class="fas fa-check text-xs hidden"></i>
@@ -424,7 +441,7 @@ export function renderStoreSettings(storeId: number): string {
                   <i class="fas fa-brain text-purple-400 text-xl"></i>
                 </div>
                 <div class="flex-1">
-                  <h3 class="font-bold">Anthropic Claude 3.5</h3>
+                  <h3 class="font-bold">Claude 3.5 Sonnet <span class="text-xs bg-gray-500/20 text-gray-400 px-2 py-0.5 rounded-full ml-2">예정</span></h3>
                   <p class="text-sm text-white/60">안전한 응답, 긴 문맥 처리 우수</p>
                 </div>
                 <div class="w-6 h-6 rounded-full border-2 border-white/30 flex items-center justify-center model-check">
