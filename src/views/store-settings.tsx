@@ -349,22 +349,28 @@ export function renderStoreSettings(storeId: number): string {
             </button>
           </div>
           
-          <div id="menu-items" class="space-y-3">
-            <!-- 메뉴 항목은 JS로 동적 생성 -->
+          <!-- 쉬운 입력 폼 -->
+          <div id="menu-items" class="space-y-3 mb-4">
+            <!-- 기본 항목들 -->
+          </div>
+          
+          <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-4">
+            <p class="text-sm text-yellow-400">
+              <i class="fas fa-lightbulb mr-2"></i>
+              <strong>입력 팁:</strong> "서비스명 / 가격 / 소요시간" 순으로 입력하세요. AI가 고객 문의 시 활용합니다.
+            </p>
           </div>
           
           <div class="mt-4">
-            <label class="block text-sm text-white/60 mb-2">또는 텍스트로 직접 입력</label>
+            <label class="block text-sm text-white/60 mb-2">텍스트로 직접 입력 (자유 형식)</label>
             <textarea id="menu-data-text" rows="8"
-              class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white resize-none font-mono text-sm"
-              placeholder="예:
-[커트]
-- 여성 커트: 30,000원 (30분)
-- 남성 커트: 20,000원 (20분)
-
-[펌]
-- 디지털 펌: 150,000원 (2시간)
-- 볼륨 펌: 120,000원 (2시간)"></textarea>
+              class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white resize-none text-sm"
+              placeholder="예시:
+커트 - 30,000원 (30분)
+남성 커트 - 20,000원 (20분)
+디지털 펌 - 150,000원~ (2시간)
+볼륨 펌 - 120,000원~ (2시간)
+염색 - 60,000원~ (1시간 30분)"></textarea>
           </div>
         </div>
       </div>
@@ -504,13 +510,29 @@ export function renderStoreSettings(storeId: number): string {
               <div>
                 <label class="block text-sm text-white/60 mb-2">Temperature (창의성): <span id="temp-value">0.7</span></label>
                 <input type="range" id="temperature" min="0" max="1" step="0.1" value="0.7"
-                  class="w-full" oninput="document.getElementById('temp-value').textContent=this.value">
+                  class="w-full" oninput="updateTempValue(this.value)">
+                <div class="flex justify-between text-xs text-white/40 mt-1">
+                  <span>정확함 (0.0)</span>
+                  <span class="text-yellow-400">★ 권장 (0.7)</span>
+                  <span>창의적 (1.0)</span>
+                </div>
+                <p class="text-xs text-white/40 mt-2">
+                  <i class="fas fa-info-circle mr-1"></i>
+                  높을수록 창의적이지만 할루시네이션(오답) 위험 증가. 일반 상담은 0.7 권장.
+                </p>
               </div>
               
               <div>
                 <label class="block text-sm text-white/60 mb-2">Max Tokens (최대 응답 길이)</label>
-                <input type="number" id="max-tokens" value="1024"
-                  class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white">
+                <select id="max-tokens" class="w-full px-4 py-3 bg-[#1a1a1a] border border-white/10 rounded-xl text-white cursor-pointer">
+                  <option value="512">짧은 답변 (~300자)</option>
+                  <option value="1024" selected>★ 일반 답변 (~600자) - 권장</option>
+                  <option value="2048">상세 설명 (~1200자)</option>
+                </select>
+                <p class="text-xs text-white/40 mt-2">
+                  <i class="fas fa-info-circle mr-1"></i>
+                  토큰 = AI 응답 길이. 너무 길면 비용 증가, 너무 짧으면 답변 불충분.
+                </p>
               </div>
             </div>
           </div>
@@ -537,38 +559,99 @@ export function renderStoreSettings(storeId: number): string {
             
             <p class="text-sm text-white/60">
               고객이 이미지를 보내면 텍스트를 자동으로 추출하여 AI가 분석합니다.
-              (영수증, 메뉴판, 서류 등)
+              (헤어스타일 사진, 메뉴판, 영수증, 반려동물 사진, 차량 사진 등)
             </p>
             
             <div>
-              <label class="block text-sm text-white/60 mb-2">OCR 후 AI 지침</label>
-              <textarea id="ocr-instruction" rows="3"
-                class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white resize-none"
+              <label class="block text-sm text-white/60 mb-2">OCR 후 AI 지침 (업종별 프리셋)</label>
+              <select id="ocr-preset" onchange="applyOcrPreset()" class="w-full px-4 py-3 bg-[#1a1a1a] border border-white/10 rounded-xl text-white cursor-pointer mb-3">
+                <option value="default">직접 입력</option>
+                <option value="beauty_hair">🔹 미용실/헤어숍 - 헤어스타일 분석</option>
+                <option value="beauty_skin">🔹 피부관리/에스테틱 - 피부 상태 분석</option>
+                <option value="restaurant">🔹 식당/카페 - 메뉴판 분석</option>
+                <option value="pet">🔹 반려동물 - 애완동물 사진 분석</option>
+                <option value="auto">🔹 자동차 영업 - 차량 사진 분석</option>
+                <option value="medical">🔹 병원/의원 - 서류/진료표 분석</option>
+                <option value="freelancer">🔹 프리랜서/1인샵 - 포트폴리오 분석</option>
+              </select>
+              <textarea id="ocr-instruction" rows="4"
+                class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white resize-none text-sm"
                 placeholder="예: 이미지에서 추출된 텍스트를 바탕으로 친절하게 답변해주세요."></textarea>
             </div>
           </div>
         </div>
         
-        <!-- 네이버 연동 설정 -->
+        <!-- 예약/연락처 연동 설정 -->
         <div class="glass rounded-2xl p-6">
           <h2 class="text-lg font-bold flex items-center gap-2 mb-4">
             <i class="fas fa-link gold"></i>
-            네이버 연동
+            예약/연락 연동
           </h2>
           
           <div class="space-y-4">
+            <!-- 예약 방식 선택 -->
             <div>
-              <label class="block text-sm text-white/60 mb-2">네이버 톡톡 ID</label>
-              <input type="text" id="naver-talktalk-id"
-                class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white"
-                placeholder="예: WC92CF">
+              <label class="block text-sm text-white/60 mb-2">예약/연락 방식 선택</label>
+              <select id="booking-method" onchange="toggleBookingOptions()" class="w-full px-4 py-3 bg-[#1a1a1a] border border-white/10 rounded-xl text-white cursor-pointer">
+                <option value="naver">네이버 예약 연동</option>
+                <option value="phone">전화 연결</option>
+                <option value="kakao">카카오톡 연결</option>
+                <option value="instagram">인스타그램 DM</option>
+                <option value="sms">문자 예약</option>
+                <option value="callback">시술 후 콜백 (프리랜서용)</option>
+              </select>
             </div>
             
-            <div>
-              <label class="block text-sm text-white/60 mb-2">네이버 예약 ID</label>
-              <input type="text" id="naver-reservation-id"
-                class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white"
-                placeholder="네이버 예약 시스템 연동 ID">
+            <!-- 네이버 예약 옵션 -->
+            <div id="naver-options" class="space-y-4">
+              <div>
+                <label class="block text-sm text-white/60 mb-2">네이버 톡톡 ID</label>
+                <input type="text" id="naver-talktalk-id"
+                  class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white"
+                  placeholder="예: WC92CF">
+              </div>
+              
+              <div>
+                <label class="block text-sm text-white/60 mb-2">네이버 예약 ID (숫자)</label>
+                <input type="text" id="naver-reservation-id"
+                  class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white"
+                  placeholder="예: 262580 (네이버 플레이스 ID)">
+                <p class="text-xs text-white/40 mt-1">
+                  <i class="fas fa-info-circle mr-1"></i>
+                  네이버 예약 페이지 URL에서 확인 가능
+                </p>
+              </div>
+            </div>
+            
+            <!-- 프리랜서/1인샵 옵션 -->
+            <div id="freelancer-options" class="space-y-4 hidden">
+              <div>
+                <label class="block text-sm text-white/60 mb-2">연락처 (전화번호)</label>
+                <input type="text" id="contact-phone"
+                  class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white"
+                  placeholder="예: 010-1234-5678">
+              </div>
+              
+              <div>
+                <label class="block text-sm text-white/60 mb-2">카카오톡 오픈채팅 ID (선택)</label>
+                <input type="text" id="kakao-id"
+                  class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white"
+                  placeholder="예: @design_studio">
+              </div>
+              
+              <div>
+                <label class="block text-sm text-white/60 mb-2">인스타그램 ID (선택)</label>
+                <input type="text" id="instagram-id"
+                  class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white"
+                  placeholder="예: @hair_artist_kim">
+              </div>
+              
+              <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+                <p class="text-sm text-blue-400">
+                  <i class="fas fa-info-circle mr-2"></i>
+                  <strong>프리랜서/1인샵 모드:</strong> "현재 시술 중이시라면, 완료 후 연락드리겠습니다"라고 안내합니다.
+                </p>
+              </div>
             </div>
             
             <div>
@@ -802,8 +885,91 @@ export function renderStoreSettings(storeId: number): string {
       \`;
     }
     
+    // Temperature 값 업데이트
+    function updateTempValue(value) {
+      document.getElementById('temp-value').textContent = value;
+    }
+    
+    // OCR 프리셋 적용
+    function applyOcrPreset() {
+      const preset = document.getElementById('ocr-preset').value;
+      const instruction = document.getElementById('ocr-instruction');
+      
+      const presets = {
+        'default': '',
+        'beauty_hair': '고객이 헤어스타일 사진을 보내면:\\n1. 어떤 스타일인지 분석해주세요 (레이어드컷, 펌 종류 등)\\n2. 저희 매장에서 시술 가능한지 안내해주세요\\n3. 예상 가격과 소요시간을 안내해주세요\\n4. "원하시는 스타일로 예약 도와드릴까요?"로 마무리해주세요',
+        'beauty_skin': '고객이 피부 사진을 보내면:\\n1. 피부 상태를 간단히 분석해주세요 (건성/지성/복합성 등)\\n2. 추천 관리 코스를 안내해주세요\\n3. 가격과 예상 효과를 설명해주세요\\n4. "피부 상담 예약 도와드릴까요?"로 마무리해주세요',
+        'restaurant': '고객이 메뉴판 사진을 보내면:\\n1. 메뉴와 가격을 확인해주세요\\n2. 인기 메뉴나 추천 메뉴를 안내해주세요\\n3. 예약이나 주문 가능 여부를 안내해주세요',
+        'pet': '고객이 반려동물 사진을 보내면:\\n1. 반려동물 종류와 상태를 확인해주세요\\n2. 적합한 서비스(미용/호텔/진료 등)를 추천해주세요\\n3. 예약 가능 시간을 안내해주세요\\n4. "우리 아이 케어 예약 도와드릴까요?"로 마무리해주세요',
+        'auto': '고객이 차량 사진을 보내면:\\n1. 차량 종류와 상태를 확인해주세요\\n2. 관심 있으신 부분을 여쭤보세요\\n3. 해당 차량 정보나 서비스를 안내해주세요\\n4. "상담 예약이나 시승 예약 도와드릴까요?"로 마무리해주세요',
+        'medical': '고객이 서류나 진료표 사진을 보내면:\\n1. 내용을 확인하고 간단히 설명해주세요\\n2. 추가로 필요한 정보가 있으면 안내해주세요\\n3. 진료 예약이나 상담 예약을 안내해주세요\\n※ 의료 진단은 하지 않습니다',
+        'freelancer': '고객이 포트폴리오나 작업물 사진을 보내면:\\n1. 원하시는 스타일/작업을 확인해주세요\\n2. 비슷한 작업 가능 여부를 안내해주세요\\n3. "현재 시술 중이시라면 완료 후 연락드리겠습니다" 또는 가능한 시간을 안내해주세요'
+      };
+      
+      if (presets[preset]) {
+        instruction.value = presets[preset];
+      }
+    }
+    
+    // 예약 방식에 따른 옵션 토글
+    function toggleBookingOptions() {
+      const method = document.getElementById('booking-method').value;
+      const naverOptions = document.getElementById('naver-options');
+      const freelancerOptions = document.getElementById('freelancer-options');
+      
+      // 네이버 옵션: naver 선택 시만 표시
+      naverOptions.classList.toggle('hidden', method !== 'naver');
+      
+      // 프리랜서 옵션: phone, kakao, instagram, sms, callback 시 표시
+      const showFreelancer = ['phone', 'kakao', 'instagram', 'sms', 'callback'].includes(method);
+      freelancerOptions.classList.toggle('hidden', !showFreelancer);
+    }
+    
+    // 메뉴 항목 추가
+    function addMenuItem() {
+      const container = document.getElementById('menu-items');
+      const index = container.children.length;
+      
+      const itemDiv = document.createElement('div');
+      itemDiv.className = 'flex gap-2 items-center';
+      itemDiv.innerHTML = \`
+        <input type="text" placeholder="서비스명 (예: 커트)" 
+          class="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+        <input type="text" placeholder="가격 (예: 30,000원)" 
+          class="w-32 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+        <input type="text" placeholder="시간 (예: 30분)" 
+          class="w-24 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+        <button onclick="this.parentElement.remove()" class="text-white/40 hover:text-red-400 px-2">
+          <i class="fas fa-times"></i>
+        </button>
+      \`;
+      container.appendChild(itemDiv);
+    }
+    
     // 전체 저장
     async function saveAllSettings() {
+      // 메뉴 항목 수집
+      const menuItems = [];
+      document.querySelectorAll('#menu-items > div').forEach(item => {
+        const inputs = item.querySelectorAll('input');
+        if (inputs[0].value) {
+          menuItems.push({
+            name: inputs[0].value,
+            price: inputs[1].value,
+            time: inputs[2].value
+          });
+        }
+      });
+      
+      // 텍스트 영역의 데이터와 합치기
+      let menuData = document.getElementById('menu-data-text').value;
+      if (menuItems.length > 0) {
+        const menuItemsText = menuItems.map(m => 
+          \`\${m.name} - \${m.price}\${m.time ? ' (' + m.time + ')' : ''}\`
+        ).join('\\n');
+        menuData = menuData ? menuData + '\\n' + menuItemsText : menuItemsText;
+      }
+      
       const settings = {
         store_name: document.getElementById('store-name-input').value,
         business_type: document.getElementById('business-type').value,
@@ -812,11 +978,16 @@ export function renderStoreSettings(storeId: number): string {
         greeting_message: document.getElementById('greeting-message').value,
         system_prompt: document.getElementById('system-prompt').value,
         operating_hours: document.getElementById('operating-hours-text').value,
-        menu_data: document.getElementById('menu-data-text').value,
+        menu_data: menuData,
         ai_model: document.querySelector('input[name="ai-model"]:checked')?.value || 'gemini',
         naver_talktalk_id: document.getElementById('naver-talktalk-id').value,
         naver_reservation_id: document.getElementById('naver-reservation-id').value,
         ocr_enabled: document.getElementById('ocr-enabled').checked,
+        ocr_instruction: document.getElementById('ocr-instruction').value,
+        booking_method: document.getElementById('booking-method').value,
+        contact_phone: document.getElementById('contact-phone')?.value || '',
+        kakao_id: document.getElementById('kakao-id')?.value || '',
+        instagram_id: document.getElementById('instagram-id')?.value || '',
         temperature: parseFloat(document.getElementById('temperature').value),
         max_tokens: parseInt(document.getElementById('max-tokens').value)
       };
