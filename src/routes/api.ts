@@ -16,7 +16,21 @@ import {
   cleanupExpiredSessions,
   hashPassword
 } from '../lib/auth';
-import { notifyMasterOnboarding, notifyOwnerSetupComplete } from '../lib/notification';
+import { 
+  notifyMasterOnboarding, 
+  notifyOwnerSetupComplete,
+  notifyReservationConfirmed,
+  notifyReservationReminder,
+  sendSMS
+} from '../lib/notification';
+import {
+  createReminderSchedules,
+  getPendingReminders,
+  processAllPendingReminders,
+  cancelReminders,
+  getReminderStats,
+  sendReminder
+} from '../lib/reminder';
 import { 
   getOpenAIResponse, 
   validateOpenAIKey, 
@@ -6613,6 +6627,855 @@ api.post('/stores/quick-setup', async (c) => {
     return c.json<ApiResponse>({
       success: false,
       error: error.message || '매장 생성 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// ============ 예약 SMS 알림 자동화 API ============
+
+// 예약 확정 + SMS 알림 발송
+api.post('/stores/:storeId/booking/:bookingId/confirm-with-sms', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  const bookingId = parseInt(c.req.param('bookingId'), 10);
+
+  try {
+    // 예약 정보 조회
+    const reservation = await c.env.DB.prepare(`
+      SELECT r.*, s.store_name, s.phone as store_phone
+      FROM xivix_reservations r
+      JOIN xivix_stores s ON r.store_id = s.id
+      WHERE r.id = ? AND r.store_id = ?
+    `).bind(bookingId, storeId).first<any>();
+
+    if (!reservation) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '예약을 찾을 수 없습니다.',
+        timestamp: Date.now()
+      }, 404);
+    }
+
+    // 예약 상태 업데이트
+    await c.env.DB.prepare(`
+      UPDATE xivix_reservations 
+      SET status = 'confirmed', updated_at = datetime('now')
+      WHERE id = ?
+    `).bind(bookingId).run();
+
+    // SMS 발송 (고객 전화번호가 있는 경우)
+    let smsResult = { success: false, error: '고객 전화번호 없음' };
+    
+    if (reservation.customer_phone) {
+      const { notifyReservationConfirmed } = await import('../lib/notification');
+      
+      const dateStr = reservation.reservation_date;
+      const timeStr = reservation.reservation_time;
+      
+      smsResult = await notifyReservationConfirmed(
+        c.env,
+        reservation.customer_phone,
+        reservation.store_name,
+        dateStr,
+        timeStr,
+        reservation.service_name
+      );
+    }
+
+    // 리마인더 스케줄 생성 (24h, 2h 전)
+    let reminderCount = 0;
+    try {
+      const { createReminderSchedules } = await import('../lib/reminder');
+      const result = await createReminderSchedules(
+        c.env.DB,
+        bookingId,
+        storeId,
+        reservation.reservation_date,
+        reservation.reservation_time
+      );
+      reminderCount = result.created;
+    } catch (e) {
+      console.error('[API] Reminder schedule error:', e);
+    }
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        bookingId,
+        status: 'confirmed',
+        smsResult,
+        remindersCreated: reminderCount
+      },
+      message: smsResult.success 
+        ? '예약 확정 및 SMS 알림 발송 완료'
+        : '예약 확정 완료 (SMS 발송 실패)',
+      timestamp: Date.now()
+    });
+
+  } catch (error: any) {
+    console.error('[API] Confirm with SMS error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '예약 확정 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 리마인더 발송 (Cron Job 또는 수동 트리거)
+api.post('/reminders/send-due', async (c) => {
+  try {
+    const now = new Date().toISOString();
+    
+    // 발송 대기 중인 리마인더 조회
+    const pendingReminders = await c.env.DB.prepare(`
+      SELECT rs.*, r.customer_phone, r.customer_name, r.service_name,
+             r.reservation_date, r.reservation_time, s.store_name
+      FROM xivix_reminder_schedules rs
+      JOIN xivix_reservations r ON rs.reservation_id = r.id
+      JOIN xivix_stores s ON rs.store_id = s.id
+      WHERE rs.status = 'pending' 
+        AND rs.scheduled_at <= ?
+        AND r.status = 'confirmed'
+      ORDER BY rs.scheduled_at
+      LIMIT 50
+    `).bind(now).all();
+
+    if (!pendingReminders.results || pendingReminders.results.length === 0) {
+      return c.json<ApiResponse>({
+        success: true,
+        data: { sent: 0, failed: 0 },
+        message: '발송할 리마인더가 없습니다.',
+        timestamp: Date.now()
+      });
+    }
+
+    const { notifyReservationReminder } = await import('../lib/notification');
+    
+    let sent = 0;
+    let failed = 0;
+
+    for (const reminder of pendingReminders.results as any[]) {
+      if (!reminder.customer_phone) {
+        // 전화번호 없으면 실패 처리
+        await c.env.DB.prepare(`
+          UPDATE xivix_reminder_schedules 
+          SET status = 'failed', error_message = '고객 전화번호 없음'
+          WHERE id = ?
+        `).bind(reminder.id).run();
+        failed++;
+        continue;
+      }
+
+      // 알림 텍스트 생성
+      const hoursMap: Record<string, string> = {
+        '24h': '내일',
+        '2h': '2시간 후',
+        '1h': '1시간 후'
+      };
+      const hoursText = hoursMap[reminder.reminder_type] || '곧';
+
+      // SMS 발송
+      const result = await notifyReservationReminder(
+        c.env,
+        reminder.customer_phone,
+        reminder.store_name,
+        reminder.reservation_date,
+        reminder.reservation_time,
+        hoursText
+      );
+
+      if (result.success) {
+        await c.env.DB.prepare(`
+          UPDATE xivix_reminder_schedules 
+          SET status = 'sent', sent_at = datetime('now')
+          WHERE id = ?
+        `).bind(reminder.id).run();
+        sent++;
+      } else {
+        await c.env.DB.prepare(`
+          UPDATE xivix_reminder_schedules 
+          SET status = 'failed', error_message = ?
+          WHERE id = ?
+        `).bind(result.error || 'SMS 발송 실패', reminder.id).run();
+        failed++;
+      }
+    }
+
+    // 알림 로그 기록
+    await c.env.DB.prepare(`
+      INSERT INTO xivix_notification_logs (notification_type, sent_count, failed_count, executed_at)
+      VALUES ('reminder_batch', ?, ?, datetime('now'))
+    `).bind(sent, failed).run().catch(() => {});
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: { sent, failed, total: pendingReminders.results.length },
+      message: `리마인더 발송 완료: 성공 ${sent}건, 실패 ${failed}건`,
+      timestamp: Date.now()
+    });
+
+  } catch (error: any) {
+    console.error('[API] Send reminders error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '리마인더 발송 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 매장별 리마인더 설정 조회/수정
+api.get('/stores/:storeId/reminder-settings', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+
+  try {
+    // 기본 설정값 (향후 DB 테이블로 관리 가능)
+    const settings = {
+      enabled: true,
+      reminders: [
+        { type: '24h', enabled: true, message: '내일 예약이 있습니다.' },
+        { type: '2h', enabled: true, message: '2시간 후 예약이 있습니다.' },
+        { type: '1h', enabled: false, message: '1시간 후 예약이 있습니다.' }
+      ],
+      smsEnabled: true,
+      talkTalkEnabled: false
+    };
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: settings,
+      timestamp: Date.now()
+    });
+
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '설정 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 예약 취소 + SMS 알림
+api.post('/stores/:storeId/booking/:bookingId/cancel-with-sms', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  const bookingId = parseInt(c.req.param('bookingId'), 10);
+  const { reason } = await c.req.json().catch(() => ({ reason: '' }));
+
+  try {
+    // 예약 정보 조회
+    const reservation = await c.env.DB.prepare(`
+      SELECT r.*, s.store_name
+      FROM xivix_reservations r
+      JOIN xivix_stores s ON r.store_id = s.id
+      WHERE r.id = ? AND r.store_id = ?
+    `).bind(bookingId, storeId).first<any>();
+
+    if (!reservation) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '예약을 찾을 수 없습니다.',
+        timestamp: Date.now()
+      }, 404);
+    }
+
+    // 예약 상태 업데이트
+    await c.env.DB.prepare(`
+      UPDATE xivix_reservations 
+      SET status = 'cancelled', notes = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).bind(reason || '고객 요청으로 취소', bookingId).run();
+
+    // 리마인더 스케줄 취소
+    await c.env.DB.prepare(`
+      UPDATE xivix_reminder_schedules 
+      SET status = 'cancelled'
+      WHERE reservation_id = ? AND status = 'pending'
+    `).bind(bookingId).run();
+
+    // SMS 발송 (고객 전화번호가 있는 경우)
+    let smsResult = { success: false, error: '고객 전화번호 없음' };
+    
+    if (reservation.customer_phone) {
+      const { sendSMS } = await import('../lib/notification');
+      
+      const text = `[${reservation.store_name}] 예약 취소 안내
+📅 ${reservation.reservation_date} ${reservation.reservation_time}
+예약이 취소되었습니다.
+${reason ? `사유: ${reason}\n` : ''}다음에 또 방문해주세요!`;
+
+      smsResult = await sendSMS(c.env, reservation.customer_phone, text);
+    }
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        bookingId,
+        status: 'cancelled',
+        smsResult
+      },
+      message: '예약 취소 완료',
+      timestamp: Date.now()
+    });
+
+  } catch (error: any) {
+    console.error('[API] Cancel with SMS error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '예약 취소 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 정밀 프롬프트 조회 API
+api.get('/stores/:storeId/precision-prompt', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+
+  try {
+    const store = await c.env.DB.prepare(
+      'SELECT * FROM xivix_stores WHERE id = ?'
+    ).bind(storeId).first<Store>();
+
+    if (!store) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '매장을 찾을 수 없습니다.',
+        timestamp: Date.now()
+      }, 404);
+    }
+
+    const { buildPrecisionPrompt } = await import('../lib/precision-prompt');
+    const { getIndustryTemplate } = await import('../lib/industry-templates');
+    
+    const template = getIndustryTemplate(store.business_type || 'default');
+    const prompt = buildPrecisionPrompt({
+      store,
+      industryTemplate: template || undefined,
+      includeConversionStrategies: true,
+      includeComplaintHandler: true
+    });
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        storeId,
+        storeName: store.store_name,
+        industryId: store.business_type,
+        industryName: template?.name || '일반',
+        promptLength: prompt.length,
+        prompt
+      },
+      timestamp: Date.now()
+    });
+
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '프롬프트 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 정밀 프롬프트 미리보기 (업종별)
+api.get('/industries/:industryId/preview-prompt', async (c) => {
+  const industryId = c.req.param('industryId');
+
+  try {
+    const { getIndustryTemplate } = await import('../lib/industry-templates');
+    const { buildPrecisionPrompt } = await import('../lib/precision-prompt');
+    
+    const template = getIndustryTemplate(industryId);
+    
+    if (!template) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '해당 업종을 찾을 수 없습니다.',
+        timestamp: Date.now()
+      }, 404);
+    }
+
+    // 샘플 매장 데이터로 프롬프트 생성
+    const sampleStore = {
+      id: 0,
+      user_id: 0,
+      store_name: `${template.name} 샘플 매장`,
+      business_type: industryId,
+      address: '서울시 강남구 테헤란로 123',
+      phone: '02-1234-5678',
+      operating_hours: '월-금 10:00-21:00, 토 10:00-18:00, 일 휴무',
+      menu_data: JSON.stringify(template.sampleMenu),
+      ai_persona: template.persona.name,
+      ai_tone: template.persona.tone,
+      greeting_message: template.automation.cta.initialMessage,
+      is_active: 1,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    } as Store;
+
+    const prompt = buildPrecisionPrompt({
+      store: sampleStore,
+      industryTemplate: template,
+      includeConversionStrategies: true,
+      includeComplaintHandler: true
+    });
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        industryId,
+        industryName: template.name,
+        category: template.category,
+        icon: template.icon,
+        promptLength: prompt.length,
+        preview: prompt.substring(0, 2000) + (prompt.length > 2000 ? '\n\n... (생략됨)' : ''),
+        fullPrompt: prompt
+      },
+      timestamp: Date.now()
+    });
+
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '프롬프트 미리보기 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// ============ SMS 예약 알림 API ============
+
+// 대기 중인 리마인더 조회
+api.get('/reminders/pending', async (c) => {
+  try {
+    const limit = parseInt(c.req.query('limit') || '50', 10);
+    const reminders = await getPendingReminders(c.env.DB, limit);
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        count: reminders.length,
+        reminders
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '리마인더 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 리마인더 배치 처리 (Cron Job 또는 수동 실행)
+api.post('/reminders/process', async (c) => {
+  try {
+    const result = await processAllPendingReminders(c.env.DB, c.env);
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: result,
+      message: `${result.processed}개 리마인더 처리 완료 (성공: ${result.success}, 실패: ${result.failed})`,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '리마인더 처리 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 매장별 리마인더 통계
+api.get('/reminders/stats/:storeId', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  
+  try {
+    const stats = await getReminderStats(c.env.DB, storeId);
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: stats,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '리마인더 통계 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 예약 확정 + 리마인더 자동 생성
+api.post('/reservations/:id/confirm-with-reminder', async (c) => {
+  const reservationId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const { sendSmsNow } = await c.req.json() as { sendSmsNow?: boolean };
+    
+    // 예약 정보 조회
+    const reservation = await c.env.DB.prepare(`
+      SELECT r.*, s.store_name, s.phone as store_phone
+      FROM xivix_reservations r
+      JOIN xivix_stores s ON r.store_id = s.id
+      WHERE r.id = ?
+    `).bind(reservationId).first<any>();
+    
+    if (!reservation) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '예약을 찾을 수 없습니다.',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    // 예약 상태를 confirmed로 변경
+    await c.env.DB.prepare(`
+      UPDATE xivix_reservations 
+      SET status = 'confirmed', updated_at = datetime('now')
+      WHERE id = ?
+    `).bind(reservationId).run();
+    
+    // 리마인더 스케줄 생성
+    const reminderResult = await createReminderSchedules(
+      c.env.DB,
+      reservationId,
+      reservation.store_id,
+      reservation.reservation_date,
+      reservation.reservation_time
+    );
+    
+    // 즉시 SMS 발송 (옵션)
+    let smsResult = null;
+    if (sendSmsNow && reservation.customer_phone) {
+      smsResult = await notifyReservationConfirmed(
+        c.env,
+        reservation.customer_phone,
+        reservation.store_name,
+        reservation.reservation_date,
+        reservation.reservation_time,
+        reservation.service_name
+      );
+    }
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        reservationId,
+        status: 'confirmed',
+        reminders: {
+          created: reminderResult.created,
+          schedules: reminderResult.schedules
+        },
+        smsNotification: smsResult ? {
+          sent: smsResult.success,
+          error: smsResult.error
+        } : null
+      },
+      message: `예약 확정 완료. ${reminderResult.created}개 리마인더가 예약되었습니다.`,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '예약 확정 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 예약 취소 + 리마인더 취소
+api.post('/reservations/:id/cancel', async (c) => {
+  const reservationId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const { reason, notifyCustomer } = await c.req.json() as { 
+      reason?: string; 
+      notifyCustomer?: boolean;
+    };
+    
+    // 예약 정보 조회
+    const reservation = await c.env.DB.prepare(`
+      SELECT r.*, s.store_name
+      FROM xivix_reservations r
+      JOIN xivix_stores s ON r.store_id = s.id
+      WHERE r.id = ?
+    `).bind(reservationId).first<any>();
+    
+    if (!reservation) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '예약을 찾을 수 없습니다.',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    // 예약 상태를 cancelled로 변경
+    await c.env.DB.prepare(`
+      UPDATE xivix_reservations 
+      SET status = 'cancelled', admin_note = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).bind(reason || '취소됨', reservationId).run();
+    
+    // 리마인더 취소
+    const cancelledCount = await cancelReminders(c.env.DB, reservationId);
+    
+    // 고객에게 취소 알림 (옵션)
+    let smsResult = null;
+    if (notifyCustomer && reservation.customer_phone) {
+      const cancelMessage = `[${reservation.store_name}] 예약 취소 안내\n\n${reservation.reservation_date} ${reservation.reservation_time} 예약이 취소되었습니다.\n${reason ? `사유: ${reason}` : ''}\n\n문의사항은 매장으로 연락 부탁드립니다.`;
+      
+      smsResult = await sendSMS(c.env, reservation.customer_phone, cancelMessage);
+    }
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        reservationId,
+        status: 'cancelled',
+        cancelledReminders: cancelledCount,
+        customerNotified: smsResult ? smsResult.success : false
+      },
+      message: `예약 취소 완료. ${cancelledCount}개 리마인더가 취소되었습니다.`,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '예약 취소 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 수동 SMS 알림 발송
+api.post('/notifications/sms/send', async (c) => {
+  try {
+    const { 
+      storeId, 
+      customerPhone, 
+      message, 
+      reservationId,
+      notificationType 
+    } = await c.req.json() as {
+      storeId: number;
+      customerPhone: string;
+      message: string;
+      reservationId?: number;
+      notificationType?: string;
+    };
+    
+    if (!customerPhone || !message) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '수신 전화번호와 메시지는 필수입니다.',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // SMS 발송
+    const smsResult = await sendSMS(c.env, customerPhone, message);
+    
+    // 알림 로그 기록
+    if (storeId) {
+      await c.env.DB.prepare(`
+        INSERT INTO xivix_notification_logs 
+        (store_id, notification_type, recipient_phone, recipient_type, content, status, sent_at)
+        VALUES (?, ?, ?, 'customer', ?, ?, datetime('now'))
+      `).bind(
+        storeId, 
+        notificationType || 'manual_sms',
+        customerPhone,
+        message.substring(0, 500),
+        smsResult.success ? 'sent' : 'failed'
+      ).run();
+    }
+    
+    return c.json<ApiResponse>({
+      success: smsResult.success,
+      data: {
+        messageId: smsResult.messageId,
+        customerPhone
+      },
+      error: smsResult.error,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || 'SMS 발송 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 예약 리마인더 미리 발송 테스트
+api.post('/reminders/test/:reservationId', async (c) => {
+  const reservationId = parseInt(c.req.param('reservationId'), 10);
+  
+  try {
+    // 예약 정보 조회
+    const reservation = await c.env.DB.prepare(`
+      SELECT r.*, s.store_name, s.phone as store_phone
+      FROM xivix_reservations r
+      JOIN xivix_stores s ON r.store_id = s.id
+      WHERE r.id = ?
+    `).bind(reservationId).first<any>();
+    
+    if (!reservation) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '예약을 찾을 수 없습니다.',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    if (!reservation.customer_phone) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '고객 전화번호가 없습니다.',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // 테스트 리마인더 발송
+    const result = await notifyReservationReminder(
+      c.env,
+      reservation.customer_phone,
+      reservation.store_name,
+      reservation.reservation_date,
+      reservation.reservation_time,
+      '(테스트 발송)'
+    );
+    
+    return c.json<ApiResponse>({
+      success: result.success,
+      data: {
+        reservationId,
+        customerPhone: reservation.customer_phone,
+        storeName: reservation.store_name
+      },
+      error: result.error,
+      message: result.success ? '테스트 리마인더 발송 완료' : '테스트 리마인더 발송 실패',
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '테스트 발송 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 전체 리마인더 스케줄 조회 (관리용)
+api.get('/reminders/all', async (c) => {
+  try {
+    const limit = parseInt(c.req.query('limit') || '100', 10);
+    const status = c.req.query('status'); // pending, sent, failed, cancelled
+    const storeId = c.req.query('storeId');
+    
+    let query = `
+      SELECT 
+        rs.*,
+        r.customer_name,
+        r.customer_phone,
+        r.service_name,
+        r.reservation_date,
+        r.reservation_time,
+        r.status as reservation_status,
+        s.store_name
+      FROM xivix_reminder_schedules rs
+      JOIN xivix_reservations r ON rs.reservation_id = r.id
+      JOIN xivix_stores s ON rs.store_id = s.id
+      WHERE 1=1
+    `;
+    
+    const params: any[] = [];
+    
+    if (status) {
+      query += ` AND rs.status = ?`;
+      params.push(status);
+    }
+    
+    if (storeId) {
+      query += ` AND rs.store_id = ?`;
+      params.push(parseInt(storeId, 10));
+    }
+    
+    query += ` ORDER BY rs.scheduled_at DESC LIMIT ?`;
+    params.push(limit);
+    
+    const result = await c.env.DB.prepare(query).bind(...params).all<any>();
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        count: result.results?.length || 0,
+        reminders: result.results || []
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '리마인더 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 예약 시 자동 리마인더 생성 (예약 생성 후 호출)
+api.post('/stores/:storeId/booking/:bookingId/setup-reminders', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  const bookingId = parseInt(c.req.param('bookingId'), 10);
+  
+  try {
+    // 예약 정보 조회
+    const reservation = await c.env.DB.prepare(`
+      SELECT * FROM xivix_reservations WHERE id = ? AND store_id = ?
+    `).bind(bookingId, storeId).first<any>();
+    
+    if (!reservation) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '예약을 찾을 수 없습니다.',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    // 리마인더 스케줄 생성
+    const result = await createReminderSchedules(
+      c.env.DB,
+      bookingId,
+      storeId,
+      reservation.reservation_date,
+      reservation.reservation_time
+    );
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        bookingId,
+        storeId,
+        created: result.created,
+        schedules: result.schedules.map(s => ({
+          type: s.reminder_type,
+          scheduledAt: s.scheduled_at
+        }))
+      },
+      message: `${result.created}개 리마인더 예약 완료`,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '리마인더 설정 실패',
       timestamp: Date.now()
     }, 500);
   }
