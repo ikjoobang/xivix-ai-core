@@ -86,6 +86,12 @@ async function sendSMS(
     const normalizedTo = to.replace(/-/g, '');
     const normalizedFrom = env.SOLAPI_SENDER_PHONE.replace(/-/g, '');
     
+    // 한글 바이트 계산 (한글 2바이트, 영문/숫자 1바이트)
+    const textBytes = Buffer.from(text, 'utf-8').length;
+    const messageType = textBytes > 90 ? 'LMS' : 'SMS';
+    
+    console.log(`[XIVIX] 메시지 타입: ${messageType} (${textBytes} bytes)`);
+    
     const response = await fetch('https://api.solapi.com/messages/v4/send', {
       method: 'POST',
       headers: {
@@ -97,7 +103,8 @@ async function sendSMS(
           to: normalizedTo,
           from: normalizedFrom,
           text: text,
-          type: 'SMS'  // 80바이트 이하면 SMS, 초과하면 LMS 자동 변환
+          type: messageType,  // 90바이트 초과 시 LMS 자동 전환
+          ...(messageType === 'LMS' && { subject: '[XIVIX AI]' })
         }
       })
     });
