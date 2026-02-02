@@ -16,6 +16,7 @@ import {
   cleanupExpiredSessions,
   hashPassword
 } from '../lib/auth';
+import { notifyMasterOnboarding, notifyOwnerSetupComplete } from '../lib/notification';
 
 const api = new Hono<{ Bindings: Env }>();
 
@@ -851,25 +852,54 @@ api.post('/onboarding/request', async (c) => {
     
     const storeId = result.meta.last_row_id;
     
-    // 마스터에게 카카오톡 알림 발송 (솔라피)
+    // 마스터에게 SMS + 이메일 알림 발송 (V2.0 신규)
+    let notificationResult = null;
     try {
-      await sendNotificationToMaster(c.env, {
-        store_id: storeId as number,
-        store_name: data.store_name,
-        owner_name: data.owner_name,
-        owner_phone: data.owner_phone,
-        naver_talktalk_id: data.naver_talktalk_id || '-'
+      notificationResult = await notifyMasterOnboarding(c.env, {
+        storeName: data.store_name,
+        ownerName: data.owner_name,
+        ownerPhone: data.owner_phone,
+        businessType: data.business_type_name || data.business_type || '기타',
+        storeId: storeId as number
       });
+      
+      console.log(`[XIVIX] 연동 요청 알림 발송: ${notificationResult.success ? '성공' : '실패'}`, {
+        channel: notificationResult.channel,
+        sms: notificationResult.smsResult?.success,
+        email: notificationResult.emailResult?.success
+      });
+      
+      // 알림 로그 저장 (기존 테이블 호환)
+      await c.env.DB.prepare(`
+        INSERT INTO xivix_notification_logs (store_id, notification_type, recipient_phone, recipient_type, content, status, sent_at)
+        VALUES (?, 'onboarding_request', ?, 'master', ?, ?, CURRENT_TIMESTAMP)
+      `).bind(
+        storeId,
+        c.env.MASTER_PHONE || '010-4845-3065',
+        JSON.stringify({ 
+          storeName: data.store_name, 
+          ownerName: data.owner_name,
+          channel: notificationResult.channel,
+          smsSuccess: notificationResult.smsResult?.success,
+          emailSuccess: notificationResult.emailResult?.success
+        }),
+        notificationResult.success ? 'sent' : 'failed'
+      ).run();
+      
     } catch (notifyError) {
       // 알림 실패해도 요청은 성공 처리
-      console.error('Notification failed:', notifyError);
+      console.error('[XIVIX] Notification failed:', notifyError);
     }
     
     return c.json<ApiResponse>({
       success: true,
       data: { 
         id: storeId,
-        message: '연동 요청이 완료되었습니다. 곧 연락드리겠습니다.'
+        message: '연동 요청이 완료되었습니다. 곧 연락드리겠습니다.',
+        notification: notificationResult ? {
+          sent: notificationResult.success,
+          channel: notificationResult.channel
+        } : null
       },
       timestamp: Date.now()
     });

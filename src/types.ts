@@ -12,6 +12,16 @@ export interface Env {
   XIVIX_VERSION: string;
   AI_MODEL: string;
   IS_TEST_MODE?: string; // 테스트 모드 (true일 때 솔라피 API 호출 차단)
+  
+  // Solapi SMS API
+  SOLAPI_API_KEY?: string;
+  SOLAPI_API_SECRET?: string;
+  SOLAPI_SENDER_PHONE?: string;  // 발신번호
+  MASTER_PHONE?: string;         // 마스터 휴대폰 (010-4845-3065)
+  
+  // Email (Resend)
+  RESEND_API_KEY?: string;
+  MASTER_EMAIL?: string;         // 마스터 이메일 (xivix.kr@gmail.com)
 }
 
 // Database Models
