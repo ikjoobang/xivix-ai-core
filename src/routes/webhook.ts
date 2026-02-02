@@ -88,7 +88,229 @@ webhook.get('/v1/naver/callback/:storeId', (c) => {
   return c.text('OK', 200);
 });
 
-// Webhook message handler (POST)
+// Webhook message handler (POST) - storeId 포함 경로 (네이버 파트너센터 등록용)
+webhook.post('/v1/naver/callback/:storeId', async (c) => {
+  const urlStoreId = parseInt(c.req.param('storeId'), 10);
+  console.log(`[Webhook] POST with Store ID: ${urlStoreId}`);
+  
+  const startTime = Date.now();
+  const env = c.env;
+  
+  try {
+    const body = await c.req.json();
+    const message = parseWebhookMessage(body);
+    
+    if (!message) {
+      return c.json({ success: false, error: 'Invalid message format' }, 400);
+    }
+    
+    const { event, user: customerId, textContent, imageContent } = message;
+    const eventType = event as NaverTalkTalkEventType;
+    
+    // ============ [XIVIX_WATCHDOG] 이벤트 로깅 ============
+    console.log(`[Webhook] Event: ${eventType}, Store: ${urlStoreId}, Customer: ${customerId?.slice(0, 8)}...`);
+    
+    // ============ URL에서 받은 storeId로 매장 조회 ============
+    const storeResult = await env.DB.prepare(
+      'SELECT * FROM xivix_stores WHERE id = ? AND is_active = 1'
+    ).bind(urlStoreId).first<Store>();
+    
+    if (!storeResult) {
+      console.log(`[Webhook] Store not found for ID: ${urlStoreId}`);
+      // 매장이 없어도 기본 응답 처리
+    }
+    
+    const storeId = storeResult?.id || urlStoreId;
+    
+    // ============ [Phase 03-21] 이벤트 타입별 처리 ============
+    
+    // [open] 채팅방 입장 - 매장별 환영 메시지
+    if (eventType === 'open') {
+      console.log(`[Webhook] OPEN event - Sending welcome message for Store ${storeId}`);
+      
+      const welcomeMsg = generateWelcomeMessage(storeResult);
+      await sendTextMessage(env, customerId, welcomeMsg);
+      
+      // [WATCHDOG] 입장 로그 기록
+      await env.DB.prepare(`
+        INSERT INTO xivix_conversation_logs 
+        (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
+        VALUES (?, ?, 'system', '[OPEN] 채팅방 입장', ?, ?, 0)
+      `).bind(
+        storeId,
+        customerId,
+        welcomeMsg,
+        Date.now() - startTime
+      ).run();
+      
+      return c.json({ success: true, event: 'open', store_id: storeId, message_sent: true });
+    }
+    
+    // [friend] 친구 추가 - 감사 메시지 + 쿠폰/혜택 안내
+    if (eventType === 'friend') {
+      console.log(`[Webhook] FRIEND event - Sending friend add message for Store ${storeId}`);
+      
+      const friendMsg = generateFriendAddMessage(storeResult);
+      await sendTextMessage(env, customerId, friendMsg);
+      
+      // [WATCHDOG] 친구 추가 로그 기록
+      await env.DB.prepare(`
+        INSERT INTO xivix_conversation_logs 
+        (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
+        VALUES (?, ?, 'system', '[FRIEND] 친구 추가', ?, ?, 0)
+      `).bind(
+        storeId,
+        customerId,
+        friendMsg,
+        Date.now() - startTime
+      ).run();
+      
+      return c.json({ success: true, event: 'friend', store_id: storeId, message_sent: true });
+    }
+    
+    // [leave] 채팅방 퇴장
+    if (eventType === 'leave') {
+      console.log(`[Webhook] LEAVE event - Customer left Store ${storeId}`);
+      return c.json({ success: true, event: 'leave', store_id: storeId });
+    }
+    
+    // [echo] 본인 메시지 에코 - 무시
+    if (eventType === 'echo') {
+      return c.json({ success: true, event: 'echo', ignored: true });
+    }
+    
+    // [profile] 프로필 변경 - 무시
+    if (eventType === 'profile') {
+      return c.json({ success: true, event: 'profile', ignored: true });
+    }
+    
+    // [send] 외 이벤트는 무시
+    if (eventType !== 'send') {
+      console.log(`[Webhook] Unknown event type: ${eventType}`);
+      return c.json({ success: true, event: eventType, ignored: true });
+    }
+    
+    // ============ [Phase 03-22] send 이벤트 처리 ============
+    console.log(`[Webhook] SEND event - Processing message for Store ${storeId}`);
+    
+    // Rate limiting
+    const rateLimit = await checkRateLimit(env.KV, customerId, 30, 60);
+    if (!rateLimit.allowed) {
+      await sendTextMessage(env, customerId, 
+        '잠시 후 다시 문의해주세요. (요청이 너무 많습니다)'
+      );
+      return c.json({ success: true, store_id: storeId });
+    }
+    
+    // 메시지 처리
+    let userMessage = textContent?.text || '';
+    let imageBase64: string | undefined;
+    let imageMimeType: string | undefined;
+    
+    // 개인정보 마스킹
+    userMessage = maskPersonalInfo(userMessage);
+    
+    // 이미지 처리
+    if (imageContent?.imageUrl) {
+      const uploaded = await uploadImageFromUrl(env.R2, imageContent.imageUrl, 'customer');
+      if (uploaded) {
+        imageBase64 = uploaded.base64;
+        imageMimeType = uploaded.mimeType;
+      }
+    }
+    
+    // 대화 컨텍스트 조회
+    const context = await getConversationContext(env.KV, storeId, customerId);
+    
+    // Gemini 메시지 구성
+    const messages = buildGeminiMessages(context, userMessage, imageBase64, imageMimeType);
+    const systemInstruction = buildSystemInstruction(storeResult ? {
+      store_name: storeResult.store_name,
+      menu_data: storeResult.menu_data,
+      operating_hours: storeResult.operating_hours,
+      ai_persona: storeResult.ai_persona,
+      ai_tone: storeResult.ai_tone
+    } : undefined);
+    
+    // AI 응답 생성 (스트리밍 또는 일반)
+    let aiResponse = '';
+    
+    // 짧은 메시지는 일반 응답, 긴 메시지는 스트리밍
+    if (userMessage.length < 20 && !imageBase64) {
+      aiResponse = await getGeminiResponse(env, messages, systemInstruction);
+      await sendTextMessage(env, customerId, aiResponse);
+    } else {
+      // 스트리밍 응답 (청크 단위 전송)
+      const chunks: string[] = [];
+      let currentChunk = '';
+      
+      for await (const text of streamGeminiResponse(env, messages, systemInstruction)) {
+        currentChunk += text;
+        
+        // 문장 완료 시 전송
+        if (currentChunk.includes('다.') || currentChunk.includes('요.') || 
+            currentChunk.includes('니다.') || currentChunk.includes('세요.') ||
+            currentChunk.length > 100) {
+          chunks.push(currentChunk);
+          aiResponse += currentChunk;
+          await sendTextMessage(env, customerId, currentChunk.trim());
+          currentChunk = '';
+          // 타이핑 효과를 위한 짧은 딜레이
+          await new Promise(r => setTimeout(r, 100));
+        }
+      }
+      
+      // 남은 텍스트 전송
+      if (currentChunk.trim()) {
+        chunks.push(currentChunk);
+        aiResponse += currentChunk;
+        await sendTextMessage(env, customerId, currentChunk.trim());
+      }
+    }
+    
+    // 예약 유도 메시지 (특정 키워드 감지)
+    const needsReservation = /예약|방문|언제|시간|가격/.test(userMessage);
+    if (needsReservation && storeResult?.naver_reservation_id) {
+      await sendButtonMessage(env, customerId, 
+        '바로 예약하시겠어요?',
+        [
+          { type: 'LINK', title: '지금 예약하기', linkUrl: `https://booking.naver.com/booking/12/bizes/${storeResult.naver_reservation_id}` },
+          { type: 'TEXT', title: '더 알아보기', value: '상담' }
+        ]
+      );
+    }
+    
+    // 대화 컨텍스트 저장
+    await updateConversationContext(env.KV, storeId, customerId, userMessage, aiResponse);
+    
+    // 로그 저장
+    const responseTime = Date.now() - startTime;
+    await env.DB.prepare(`
+      INSERT INTO xivix_conversation_logs 
+      (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
+      VALUES (?, ?, ?, ?, ?, ?, 0)
+    `).bind(
+      storeId,
+      customerId,
+      imageBase64 ? 'mixed' : 'text',
+      userMessage.slice(0, 500),
+      aiResponse.slice(0, 1000),
+      responseTime
+    ).run();
+    
+    return c.json({ 
+      success: true, 
+      store_id: storeId,
+      response_time_ms: responseTime 
+    });
+    
+  } catch (error) {
+    console.error(`[Webhook] Error for Store ${urlStoreId}:`, error);
+    return c.json({ success: false, error: 'Internal server error', store_id: urlStoreId }, 500);
+  }
+});
+
+// Webhook message handler (POST) - 기본 경로 (fallback)
 webhook.post('/v1/naver/callback', async (c) => {
   const startTime = Date.now();
   const env = c.env;
