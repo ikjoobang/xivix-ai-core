@@ -422,7 +422,8 @@ export async function analyzeWithGemini(
 ): Promise<{ success: boolean; result?: string; error?: string }> {
   try {
     // 전문 상담/분석에는 Gemini 2.5 Pro 사용 (느리지만 정확도 높음)
-    const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-05-06:generateContent';
+    // Gemini 2.0 Flash 사용 (빠른 분석용)
+    const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
     
     let parts: any[] = [{ text: prompt }];
     
