@@ -226,7 +226,7 @@ export function renderClientOnboarding(storeId?: number): string {
             </div>
             <div>
               <p class="text-xs text-white/40 mb-1">초대할 이메일</p>
-              <p class="font-mono text-sm">partner@xivix.kr</p>
+              <p class="font-mono text-sm">comtnb@naver.com</p>
             </div>
           </div>
           <button onclick="copyInviteEmail()" id="copy-email-btn" class="w-full py-2 glass rounded-lg text-sm hover:bg-white/10 transition-all">
@@ -254,7 +254,7 @@ export function renderClientOnboarding(storeId?: number): string {
               <span class="w-6 h-6 rounded-full gold-bg text-black flex items-center justify-center text-xs shrink-0 font-bold">4</span>
               <div>
                 <span class="text-white/80">이름: <strong>XIVIX 지배인</strong></span><br>
-                <span class="text-white/80">이메일: <strong class="gold">partner@xivix.kr</strong></span>
+                <span class="text-white/80">이메일: <strong class="gold">comtnb@naver.com</strong></span>
               </div>
             </div>
           </div>
@@ -677,7 +677,7 @@ export function renderClientOnboarding(storeId?: number): string {
     
     // 이메일 복사
     function copyInviteEmail() {
-      const email = 'partner@xivix.kr';
+      const email = 'comtnb@naver.com';
       
       if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(email).then(onCopySuccess).catch(fallbackCopy);
