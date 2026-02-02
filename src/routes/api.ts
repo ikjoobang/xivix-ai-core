@@ -5872,4 +5872,188 @@ api.get('/files/supported-types', (c) => {
   });
 });
 
+// ============ 설정 변경 요청 API ============
+
+// 매장 확인 (톡톡 ID 또는 전화번호로)
+api.post('/request/verify-store', async (c) => {
+  try {
+    const { talktalk_id, phone } = await c.req.json() as {
+      talktalk_id?: string;
+      phone?: string;
+    };
+    
+    if (!talktalk_id && !phone) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '톡톡 ID 또는 전화번호를 입력해주세요',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    let store = null;
+    
+    // 톡톡 ID로 검색
+    if (talktalk_id) {
+      const cleanId = talktalk_id.replace('@', '').trim();
+      store = await c.env.DB.prepare(`
+        SELECT id, store_name, business_type_name, owner_phone, is_active, naver_talktalk_id
+        FROM xivix_stores 
+        WHERE naver_talktalk_id LIKE ? OR store_name LIKE ?
+        LIMIT 1
+      `).bind(`%${cleanId}%`, `%${cleanId}%`).first();
+    }
+    
+    // 전화번호로 검색
+    if (!store && phone) {
+      const cleanPhone = phone.replace(/-/g, '').trim();
+      store = await c.env.DB.prepare(`
+        SELECT id, store_name, business_type_name, owner_phone, is_active, naver_talktalk_id
+        FROM xivix_stores 
+        WHERE REPLACE(owner_phone, '-', '') = ? OR REPLACE(store_phone, '-', '') = ?
+        LIMIT 1
+      `).bind(cleanPhone, cleanPhone).first();
+    }
+    
+    if (!store) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '매장을 찾을 수 없습니다',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: store,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '매장 확인 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 설정 변경 요청 제출
+api.post('/request/submit', async (c) => {
+  try {
+    const { store_id, store_name, request_type, content, contact_time } = await c.req.json() as {
+      store_id: number;
+      store_name: string;
+      request_type: string;
+      content: string;
+      contact_time?: string;
+    };
+    
+    if (!store_id || !request_type || !content) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '필수 정보가 누락되었습니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // 요청 유형 한글 변환
+    const typeLabels: Record<string, string> = {
+      'prompt': 'AI 응대 변경',
+      'hours': '영업시간 수정',
+      'menu': '메뉴/가격 변경',
+      'info': '매장 정보 수정',
+      'pause': 'AI 일시 중지',
+      'other': '기타 요청'
+    };
+    
+    // DB에 요청 저장
+    await c.env.DB.prepare(`
+      INSERT INTO xivix_change_requests 
+      (store_id, store_name, request_type, request_type_label, content, contact_time, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'pending', datetime('now'))
+    `).bind(
+      store_id,
+      store_name,
+      request_type,
+      typeLabels[request_type] || request_type,
+      content,
+      contact_time || null
+    ).run();
+    
+    // 마스터에게 알림 (SMS)
+    const masterPhone = c.env.MASTER_PHONE;
+    if (masterPhone) {
+      // SMS 발송 로직 (간단히 로그만)
+      console.log(`[Request] 새 요청: ${store_name} - ${typeLabels[request_type]}`);
+    }
+    
+    return c.json<ApiResponse>({
+      success: true,
+      message: '요청이 전송되었습니다',
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    console.error('[Request Submit Error]', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '요청 전송 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 요청 목록 조회 (마스터용)
+api.get('/request/list', async (c) => {
+  try {
+    const status = c.req.query('status') || 'pending';
+    
+    const requests = await c.env.DB.prepare(`
+      SELECT * FROM xivix_change_requests 
+      WHERE status = ?
+      ORDER BY created_at DESC
+      LIMIT 50
+    `).bind(status).all();
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: requests.results,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '목록 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 요청 상태 변경 (마스터용)
+api.post('/request/:id/status', async (c) => {
+  try {
+    const id = parseInt(c.req.param('id'), 10);
+    const { status, note } = await c.req.json() as {
+      status: 'completed' | 'rejected';
+      note?: string;
+    };
+    
+    await c.env.DB.prepare(`
+      UPDATE xivix_change_requests 
+      SET status = ?, admin_note = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).bind(status, note || null, id).run();
+    
+    return c.json<ApiResponse>({
+      success: true,
+      message: '상태가 변경되었습니다',
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '상태 변경 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
 export default api;
