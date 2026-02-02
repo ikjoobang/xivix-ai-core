@@ -52,6 +52,22 @@
 - **시간대 분석**: 피크 시간대 파악
 - **인기 서비스**: 예약 기준 인기 서비스 TOP 10
 
+### ✅ 네이버 예약 API 연동 (완료)
+- **예약 가능 시간 조회**: 영업시간 기반 30분 단위 슬롯 자동 계산
+- **예약 생성/취소 API**: CRUD 완비
+- **예약 흐름 상태 관리**: KV 기반 10분 TTL
+- **Webhook 예약 의도 감지**: 자동 예약 안내
+
+### ✅ 20개 업종 템플릿 (완료)
+- **업종별 맞춤 AI 프롬프트**: 전문가/뷰티/헬스/음식/교육/서비스/소매
+- **자동화 설정 포함**:
+  - CTA: 유입 및 행동 유도
+  - Marketing: 자동 상담 및 전환
+  - Action: 예약/결제/DB확보
+  - Retention: 재방문/단골 관리
+  - Recall: 이탈 고객 리콜
+- **원클릭 매장 설정 API**: 업종 선택만으로 즉시 AI 챗봇 생성
+
 ---
 
 ## 📡 V2.0 API 엔드포인트
@@ -127,6 +143,63 @@ curl -X POST https://xivix-ai-core.pages.dev/api/reports/generate-all \
   -d '{"month":"2026-01"}'
 ```
 
+### 업종 템플릿 API
+
+```bash
+# 전체 업종 목록 조회 (20개)
+curl https://xivix-ai-core.pages.dev/api/industries
+
+# 특정 업종 템플릿 상세 조회
+curl https://xivix-ai-core.pages.dev/api/industries/BEAUTY_SALON
+
+# 카테고리별 업종 조회
+curl https://xivix-ai-core.pages.dev/api/industries/category/beauty
+# 카테고리: professional, beauty, health, food, retail, service, education
+
+# 원클릭 매장 설정 (업종 템플릿 기반)
+curl -X POST https://xivix-ai-core.pages.dev/api/stores/quick-setup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "industryId": "BEAUTY_SALON",
+    "storeName": "헤어플러스",
+    "ownerName": "박미용",
+    "ownerPhone": "01033334444",
+    "address": "서울시 마포구 홍대입구역 근처",
+    "operatingHours": "화-일 10:00-21:00, 월 휴무",
+    "naverTalktalkId": "HAIRPLUS",
+    "naverReservationId": "123456"
+  }'
+```
+
+### 예약 API
+
+```bash
+# 예약 가능 시간 조회 (7일)
+curl https://xivix-ai-core.pages.dev/api/stores/1/booking/available?days=7
+
+# 예약 생성
+curl -X POST https://xivix-ai-core.pages.dev/api/stores/1/booking \
+  -H "Content-Type: application/json" \
+  -d '{
+    "date": "2026-02-03",
+    "time": "14:00",
+    "customer_name": "홍길동",
+    "customer_phone": "01012345678",
+    "service_name": "커트"
+  }'
+
+# 예약 목록 조회
+curl https://xivix-ai-core.pages.dev/api/stores/1/booking/list
+
+# 예약 상태 변경
+curl -X PATCH https://xivix-ai-core.pages.dev/api/stores/1/booking/1 \
+  -H "Content-Type: application/json" \
+  -d '{"status": "confirmed"}'
+
+# 예약 삭제
+curl -X DELETE https://xivix-ai-core.pages.dev/api/stores/1/booking/1
+```
+
 ---
 
 ## 📁 프로젝트 구조 (V2.0)
@@ -147,6 +220,8 @@ curl -X POST https://xivix-ai-core.pages.dev/api/reports/generate-all \
 │   └── lib/
 │       ├── auth.ts            # 인증 라이브러리 (V2.0 신규)
 │       ├── naver-talktalk.ts  # 톡톡 API 클라이언트 (V2.0 강화)
+│       ├── naver-booking.ts   # 예약 기능 (V2.0 신규)
+│       ├── industry-templates.ts # 20개 업종 템플릿 (V2.0 신규)
 │       ├── reminder.ts        # 예약 알림 리마인더 (V2.0 신규)
 │       ├── gemini.ts          # Gemini AI 연동
 │       ├── kv-context.ts      # KV 캐시 유틸
@@ -210,6 +285,9 @@ id, store_id, partner_id, account_id, access_token, webhook_verified
 - [x] 월간 수익 리포트 생성
 - [x] 로그인 페이지 UI 개선
 - [x] 마스터 대시보드 인증 연동
+- [x] **네이버 예약 API 연동** (예약 가능 시간 조회/생성/관리)
+- [x] **20개 업종 템플릿** (업종별 맞춤 AI 프롬프트)
+- [x] **원클릭 매장 설정 API** (quick-setup)
 
 ### V1.0 (기존)
 - [x] Zero-Touch Onboarding
@@ -221,6 +299,20 @@ id, store_id, partner_id, account_id, access_token, webhook_verified
 
 ---
 
+## 📋 20개 업종 템플릿
+
+| 카테고리 | 업종 |
+|----------|------|
+| **professional** | 🛡️ 보험설계사, ⚖️ 변호사, 🏠 부동산, 📊 세무사 |
+| **beauty** | 💇 미용실, ✨ 피부관리, 💅 네일아트 |
+| **health** | 💪 헬스/PT, 🏥 치과/성형 |
+| **food** | 🍽️ 맛집/카페 |
+| **retail** | 🚗 중고차, 💐 꽃집 |
+| **service** | 🐕 펫훈련, 🏡 인테리어, 🚚 이사, 🧹 청소, 💒 웨딩, 🔧 수리 |
+| **education** | 📚 학원, ⛳ 스포츠레슨 |
+
+---
+
 ## 🚧 예정 기능 (Phase 3)
 
 - [ ] Cron Triggers (리마인더 자동 발송)
@@ -228,6 +320,8 @@ id, store_id, partner_id, account_id, access_token, webhook_verified
 - [ ] 2단계 인증 (2FA)
 - [ ] 비밀번호 찾기 (이메일 인증)
 - [ ] 네이버 OAuth 자동 연동
+- [ ] 실전 톡톡 Webhook 테스트
+- [ ] 예약 SMS 알림 자동화
 
 ---
 
@@ -284,4 +378,4 @@ curl http://localhost:3000/api/system/health
 ---
 
 **Last Updated**: 2026-02-02  
-**Version**: 2.0.0 (Authentication + Reminder + Report)
+**Version**: 2.1.0 (Authentication + Reminder + Report + Booking + Industry Templates)
