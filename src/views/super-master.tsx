@@ -48,6 +48,7 @@ export function renderSuperMasterDashboard(): string {
     .pulse-dot { animation: pulse 2s infinite; }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     .tab-btn.active { background: rgba(212, 175, 55, 0.2); color: #D4AF37; border-color: #D4AF37; }
+    .request-filter-btn.active { background: rgba(168, 85, 247, 0.2); color: #A855F7; border-color: #A855F7; }
   </style>
 </head>
 <body class="min-h-screen text-white">
@@ -98,6 +99,11 @@ export function renderSuperMasterDashboard(): string {
         <i class="fas fa-chart-bar"></i>
         통계
       </button>
+      <button onclick="showTab('requests')" class="tab-btn px-6 py-3 rounded-xl border border-white/10 text-sm font-medium flex items-center gap-2">
+        <i class="fas fa-inbox"></i>
+        요청 목록
+        <span class="bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full text-xs" id="requests-badge">0</span>
+      </button>
     </div>
   </div>
 
@@ -129,6 +135,37 @@ export function renderSuperMasterDashboard(): string {
       </div>
       
       <div id="bots-list" class="grid gap-4">
+        <div class="glass rounded-2xl p-8 text-center">
+          <i class="fas fa-spinner fa-spin text-3xl text-white/30 mb-4"></i>
+          <p class="text-white/50">로딩 중...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: 요청 목록 -->
+    <div id="tab-requests" class="tab-content hidden">
+      <div class="mb-6 flex items-center justify-between">
+        <div>
+          <h2 class="text-2xl font-bold mb-2">📬 설정 변경 요청</h2>
+          <p class="text-white/50">사장님들의 설정 변경 요청을 처리하세요</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="loadRequests('pending')" class="request-filter-btn active px-4 py-2 glass rounded-xl text-sm flex items-center gap-2">
+            <i class="fas fa-clock"></i>
+            대기중
+          </button>
+          <button onclick="loadRequests('completed')" class="request-filter-btn px-4 py-2 glass rounded-xl text-sm flex items-center gap-2">
+            <i class="fas fa-check"></i>
+            완료
+          </button>
+          <button onclick="loadRequests('rejected')" class="request-filter-btn px-4 py-2 glass rounded-xl text-sm flex items-center gap-2">
+            <i class="fas fa-times"></i>
+            거절
+          </button>
+        </div>
+      </div>
+      
+      <div id="requests-list" class="grid gap-4">
         <div class="glass rounded-2xl p-8 text-center">
           <i class="fas fa-spinner fa-spin text-3xl text-white/30 mb-4"></i>
           <p class="text-white/50">로딩 중...</p>
@@ -257,7 +294,7 @@ export function renderSuperMasterDashboard(): string {
       btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 새로고침 중...';
       btn.disabled = true;
       
-      await Promise.all([loadPendingStores(), loadBotStores(), loadStats()]);
+      await Promise.all([loadPendingStores(), loadBotStores(), loadStats(), loadRequests()]);
       
       btn.innerHTML = '<i class="fas fa-sync-alt"></i> 새로고침';
       btn.disabled = false;
@@ -635,6 +672,134 @@ export function renderSuperMasterDashboard(): string {
       window.location.href = '/login';
     }
     
+    // ========== [V2.0] 요청 목록 관리 ==========
+    let currentRequestFilter = 'pending';
+    
+    async function loadRequests(status = 'pending') {
+      currentRequestFilter = status;
+      
+      // 필터 버튼 상태 업데이트
+      document.querySelectorAll('.request-filter-btn').forEach(btn => btn.classList.remove('active'));
+      event?.currentTarget?.classList.add('active');
+      
+      try {
+        const res = await fetch('/api/request/list?status=' + status);
+        const data = await res.json();
+        
+        if (data.success && data.data) {
+          const requests = data.data;
+          
+          // 배지 업데이트 (pending 개수만)
+          if (status === 'pending') {
+            document.getElementById('requests-badge').textContent = requests.length;
+          }
+          
+          if (requests.length === 0) {
+            document.getElementById('requests-list').innerHTML = \`
+              <div class="glass rounded-2xl p-12 text-center">
+                <i class="fas fa-inbox text-5xl text-white/20 mb-4"></i>
+                <p class="text-xl font-semibold mb-2">\${status === 'pending' ? '대기 중인 요청이 없습니다' : status === 'completed' ? '완료된 요청이 없습니다' : '거절된 요청이 없습니다'}</p>
+              </div>
+            \`;
+            return;
+          }
+          
+          document.getElementById('requests-list').innerHTML = requests.map(req => {
+            const typeIcons = {
+              'ai_response': 'fa-robot',
+              'hours': 'fa-clock',
+              'menu': 'fa-utensils',
+              'info': 'fa-info-circle',
+              'pause': 'fa-pause-circle',
+              'other': 'fa-question-circle'
+            };
+            const typeColors = {
+              'ai_response': 'blue',
+              'hours': 'green',
+              'menu': 'orange',
+              'info': 'purple',
+              'pause': 'red',
+              'other': 'gray'
+            };
+            const icon = typeIcons[req.request_type] || 'fa-question-circle';
+            const color = typeColors[req.request_type] || 'gray';
+            const createdAt = new Date(req.created_at).toLocaleString('ko-KR');
+            
+            return \`
+              <div class="glass rounded-2xl p-6 card-hover">
+                <div class="flex items-start justify-between">
+                  <div class="flex items-center gap-4">
+                    <div class="w-14 h-14 rounded-2xl bg-\${color}-500/20 flex items-center justify-center">
+                      <i class="fas \${icon} text-\${color}-400 text-xl"></i>
+                    </div>
+                    <div>
+                      <h3 class="text-lg font-bold">\${req.store_name || '미확인 매장'}</h3>
+                      <p class="text-white/50">\${req.request_type_label || req.request_type}</p>
+                      <p class="text-xs text-white/30 mt-1">\${createdAt}</p>
+                    </div>
+                  </div>
+                  
+                  \${req.status === 'pending' ? \`
+                    <div class="flex items-center gap-2">
+                      <button onclick="updateRequestStatus(\${req.id}, 'completed')" class="btn-action px-4 py-2 bg-green-500/20 text-green-400 border border-green-500/30 rounded-xl text-sm flex items-center gap-2">
+                        <i class="fas fa-check"></i>
+                        처리 완료
+                      </button>
+                      <button onclick="updateRequestStatus(\${req.id}, 'rejected')" class="btn-action px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl text-sm flex items-center gap-2">
+                        <i class="fas fa-times"></i>
+                        거절
+                      </button>
+                    </div>
+                  \` : \`
+                    <span class="px-3 py-1 rounded-full text-xs \${req.status === 'completed' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">
+                      \${req.status === 'completed' ? '완료' : '거절'}
+                    </span>
+                  \`}
+                </div>
+                
+                <div class="mt-4 pt-4 border-t border-white/5">
+                  <p class="text-sm text-white/70 whitespace-pre-wrap">\${req.content}</p>
+                  \${req.contact_time ? \`<p class="text-xs text-white/40 mt-2"><i class="fas fa-phone mr-1"></i>연락 가능 시간: \${req.contact_time}</p>\` : ''}
+                  \${req.admin_note ? \`<p class="text-xs text-yellow-400 mt-2"><i class="fas fa-sticky-note mr-1"></i>관리자 메모: \${req.admin_note}</p>\` : ''}
+                </div>
+              </div>
+            \`;
+          }).join('');
+        }
+      } catch (e) {
+        console.error('Failed to load requests:', e);
+        document.getElementById('requests-list').innerHTML = \`
+          <div class="glass rounded-2xl p-8 text-center">
+            <i class="fas fa-exclamation-triangle text-3xl text-red-400 mb-4"></i>
+            <p class="text-white/50">요청 목록을 불러올 수 없습니다</p>
+          </div>
+        \`;
+      }
+    }
+    
+    async function updateRequestStatus(requestId, status) {
+      const note = status === 'rejected' ? prompt('거절 사유를 입력하세요 (선택):') : null;
+      
+      try {
+        const res = await fetch('/api/request/' + requestId + '/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status, note })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          alert(status === 'completed' ? '요청이 처리 완료되었습니다.' : '요청이 거절되었습니다.');
+          loadRequests(currentRequestFilter);
+        } else {
+          alert('상태 변경 실패: ' + (data.error || '알 수 없는 오류'));
+        }
+      } catch (e) {
+        alert('네트워크 오류');
+      }
+    }
+    
     // 초기 로드
     document.addEventListener('DOMContentLoaded', async () => {
       const isAuthed = await checkAuth();
@@ -643,6 +808,7 @@ export function renderSuperMasterDashboard(): string {
       loadPendingStores();
       loadBotStores();
       loadStats();
+      loadRequests();
     });
   </script>
   

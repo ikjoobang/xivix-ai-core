@@ -5958,6 +5958,7 @@ api.post('/request/submit', async (c) => {
     // 요청 유형 한글 변환
     const typeLabels: Record<string, string> = {
       'prompt': 'AI 응대 변경',
+      'ai_response': 'AI 응대 변경',
       'hours': '영업시간 수정',
       'menu': '메뉴/가격 변경',
       'info': '매장 정보 수정',
