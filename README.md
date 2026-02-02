@@ -46,6 +46,12 @@
 - **일괄 발송**: Cron Job으로 대기 알림 일괄 처리
 - **취소 연동**: 예약 취소 시 리마인더 자동 취소
 
+### ✅ SMS 예약 알림 자동화 (완료)
+- **예약 확정 알림**: 예약 확정 시 고객에게 자동 SMS 발송
+- **리마인더 SMS**: 24h/2h/1h 전 자동 리마인더 발송
+- **취소 알림**: 예약 취소 시 고객에게 취소 안내 SMS
+- **수동 SMS 발송**: 관리자 수동 SMS 발송 API
+
 ### ✅ 월간 수익 리포트 (완료)
 - **자동 통계 집계**: 대화 수, 예약 수, 전환율
 - **고객 분석**: 총 고객, 재방문 고객
@@ -116,11 +122,38 @@ curl -X POST https://xivix-ai-core.pages.dev/api/reminders/process
 # 매장별 리마인더 통계
 curl https://xivix-ai-core.pages.dev/api/reminders/stats/1
 
-# 예약 확정 + 리마인더 생성
-curl -X POST https://xivix-ai-core.pages.dev/api/reservations/1/confirm-with-reminder
+# 전체 리마인더 조회 (필터 가능)
+curl "https://xivix-ai-core.pages.dev/api/reminders/all?status=pending&storeId=1&limit=50"
+
+# 예약 확정 + 리마인더 자동 생성
+curl -X POST https://xivix-ai-core.pages.dev/api/reservations/1/confirm-with-reminder \
+  -H "Content-Type: application/json" \
+  -d '{"sendSmsNow": true}'
 
 # 예약 취소 + 리마인더 취소
-curl -X POST https://xivix-ai-core.pages.dev/api/reservations/1/cancel
+curl -X POST https://xivix-ai-core.pages.dev/api/reservations/1/cancel \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "고객 요청", "notifyCustomer": true}'
+
+# 예약에 리마인더 설정
+curl -X POST https://xivix-ai-core.pages.dev/api/stores/1/booking/1/setup-reminders
+
+# 리마인더 테스트 발송
+curl -X POST https://xivix-ai-core.pages.dev/api/reminders/test/1
+```
+
+### SMS 알림 API
+
+```bash
+# 수동 SMS 발송
+curl -X POST https://xivix-ai-core.pages.dev/api/notifications/sms/send \
+  -H "Content-Type: application/json" \
+  -d '{
+    "storeId": 1,
+    "customerPhone": "01012345678",
+    "message": "[매장명] 예약 안내 메시지입니다.",
+    "notificationType": "manual_sms"
+  }'
 ```
 
 ### 월간 리포트 API
@@ -320,8 +353,8 @@ id, store_id, partner_id, account_id, access_token, webhook_verified
 - [ ] 2단계 인증 (2FA)
 - [ ] 비밀번호 찾기 (이메일 인증)
 - [ ] 네이버 OAuth 자동 연동
-- [ ] 실전 톡톡 Webhook 테스트
-- [ ] 예약 SMS 알림 자동화
+- [x] ~~예약 SMS 알림 자동화~~ **(V2.1 완료)**
+- [ ] 실전 톡톡 Webhook 테스트 (네이버 파트너센터 등록 대기)
 
 ---
 
@@ -378,4 +411,4 @@ curl http://localhost:3000/api/system/health
 ---
 
 **Last Updated**: 2026-02-02  
-**Version**: 2.1.0 (Authentication + Reminder + Report + Booking + Industry Templates)
+**Version**: 2.1.1 (Authentication + Reminder + Report + Booking + Industry Templates + SMS Automation)
