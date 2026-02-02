@@ -44,6 +44,13 @@ import {
   extractStoreInfoFromContent,
   SUPPORTED_FILE_TYPES
 } from '../lib/file-upload';
+import {
+  getIndustryList,
+  getIndustryTemplate,
+  getIndustriesByCategory,
+  buildStoreSystemPrompt,
+  INDUSTRY_TEMPLATES
+} from '../lib/industry-templates';
 
 const api = new Hono<{ Bindings: Env }>();
 
@@ -6417,5 +6424,198 @@ function parseOperatingHoursAPI(operatingHours: string | null): { dayOfWeek: num
 
   return result;
 }
+
+// ============ 업종 템플릿 API ============
+
+// 전체 업종 목록 조회
+api.get('/industries', async (c) => {
+  try {
+    const list = getIndustryList();
+    return c.json<ApiResponse>({
+      success: true,
+      data: list,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '업종 목록 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 특정 업종 템플릿 조회
+api.get('/industries/:industryId', async (c) => {
+  const industryId = c.req.param('industryId');
+  
+  try {
+    const template = getIndustryTemplate(industryId);
+    
+    if (!template) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '해당 업종을 찾을 수 없습니다.',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: template,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '업종 템플릿 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 카테고리별 업종 조회
+api.get('/industries/category/:category', async (c) => {
+  const category = c.req.param('category');
+  
+  try {
+    const templates = getIndustriesByCategory(category);
+    return c.json<ApiResponse>({
+      success: true,
+      data: templates,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '카테고리별 업종 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 업종 템플릿 기반 매장 생성 (원클릭 설정)
+api.post('/stores/quick-setup', async (c) => {
+  const { 
+    industryId, 
+    storeName, 
+    ownerName, 
+    ownerPhone, 
+    address,
+    operatingHours,
+    naverTalktalkId,
+    naverReservationId
+  } = await c.req.json() as {
+    industryId: string;
+    storeName: string;
+    ownerName: string;
+    ownerPhone: string;
+    address?: string;
+    operatingHours?: string;
+    naverTalktalkId?: string;
+    naverReservationId?: string;
+  };
+
+  // 필수 값 검증
+  if (!industryId || !storeName || !ownerName || !ownerPhone) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '필수 정보가 누락되었습니다. (업종, 매장명, 대표자명, 연락처)',
+      timestamp: Date.now()
+    }, 400);
+  }
+
+  try {
+    // 업종 템플릿 조회
+    const template = getIndustryTemplate(industryId);
+    if (!template) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '지원하지 않는 업종입니다.',
+        timestamp: Date.now()
+      }, 400);
+    }
+
+    // 시스템 프롬프트 생성
+    const systemPrompt = buildStoreSystemPrompt(template, {
+      storeName,
+      address,
+      operatingHours
+    });
+
+    // 메뉴 데이터 생성
+    const menuData = JSON.stringify(template.sampleMenu);
+
+    // 임시 사용자 생성 (또는 기존 사용자 연결)
+    let userId = 1; // 기본값
+    
+    // 사용자 조회 또는 생성
+    const existingUser = await c.env.DB.prepare(
+      'SELECT id FROM xivix_users WHERE phone = ? OR email = ?'
+    ).bind(ownerPhone, `${ownerPhone}@xivix.temp`).first<{ id: number }>();
+    
+    if (existingUser) {
+      userId = existingUser.id;
+    } else {
+      const userResult = await c.env.DB.prepare(`
+        INSERT INTO xivix_users (email, password_hash, name, phone, role)
+        VALUES (?, 'temp_hash', ?, ?, 'owner')
+      `).bind(`${ownerPhone}@xivix.temp`, ownerName, ownerPhone).run();
+      userId = userResult.meta.last_row_id as number;
+    }
+
+    // 매장 생성
+    const storeResult = await c.env.DB.prepare(`
+      INSERT INTO xivix_stores (
+        user_id, store_name, business_type, address, phone, owner_name, owner_phone,
+        operating_hours, menu_data, ai_persona, ai_tone, greeting_message,
+        naver_talktalk_id, naver_reservation_id, is_active, onboarding_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active')
+    `).bind(
+      userId,
+      storeName,
+      industryId,
+      address || null,
+      ownerPhone,
+      ownerName,
+      ownerPhone,
+      operatingHours || template.automation.cta.initialMessage ? '월-금 10:00-21:00' : null,
+      menuData,
+      template.persona.name,
+      template.persona.tone,
+      template.automation.cta.initialMessage,
+      naverTalktalkId || null,
+      naverReservationId || null
+    ).run();
+
+    const storeId = storeResult.meta.last_row_id as number;
+
+    // 시스템 프롬프트 별도 저장 (필요시)
+    // KV에 저장하거나 별도 테이블에 저장
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        storeId,
+        storeName,
+        industryId,
+        industryName: template.name,
+        webhookUrl: `https://xivix-ai-core.pages.dev/v1/naver/callback/${storeId}`,
+        settingsUrl: `https://xivix-ai-core.pages.dev/store/${storeId}/settings`,
+        systemPrompt: systemPrompt.substring(0, 200) + '...'
+      },
+      message: `${template.icon} ${storeName} 매장이 생성되었습니다!`,
+      timestamp: Date.now()
+    });
+
+  } catch (error: any) {
+    console.error('[API] Quick setup error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '매장 생성 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
 
 export default api;
