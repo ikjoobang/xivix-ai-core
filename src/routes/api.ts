@@ -30,6 +30,20 @@ import {
   getGeminiResponse 
 } from '../lib/gemini';
 import { getConversationContext } from '../lib/kv-context';
+import {
+  validateFileType,
+  validateFileSize,
+  uploadFileToR2,
+  getFileFromR2,
+  listStoreFiles,
+  deleteFileFromR2,
+  fileToBase64,
+  fetchUrlContent,
+  analyzeWithGemini,
+  analyzeWithOpenAI,
+  extractStoreInfoFromContent,
+  SUPPORTED_FILE_TYPES
+} from '../lib/file-upload';
 
 const api = new Hono<{ Bindings: Env }>();
 
@@ -5363,6 +5377,499 @@ api.post('/ocr/analyze', async (c) => {
       timestamp: Date.now()
     }, 500);
   }
+});
+
+// ============ File Upload & AI Analysis API ============
+
+// 파일 업로드 (대용량 지원 - PDF 50MB, 이미지 20MB)
+api.post('/stores/:id/files/upload', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const formData = await c.req.formData();
+    const file = formData.get('file') as File | null;
+    const category = formData.get('category') as string || 'documents';
+    
+    if (!file) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '파일이 필요합니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // 파일 타입 검증
+    const typeValidation = validateFileType(file.type, file.name);
+    if (!typeValidation.valid) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: typeValidation.error,
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // 파일 크기 검증
+    const sizeValidation = validateFileSize(file.size, typeValidation.category);
+    if (!sizeValidation.valid) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: sizeValidation.error,
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // R2에 업로드
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await uploadFileToR2(
+      c.env.R2,
+      arrayBuffer,
+      file.name,
+      file.type,
+      storeId,
+      category
+    );
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        key: result.key,
+        url: result.url,
+        size: result.size,
+        fileName: file.name,
+        mimeType: file.type,
+        category: typeValidation.category
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '파일 업로드 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 매장 파일 목록 조회
+api.get('/stores/:id/files', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  const category = c.req.query('category');
+  
+  try {
+    const files = await listStoreFiles(c.env.R2, storeId, category);
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: { files },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '파일 목록 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 파일 조회/다운로드
+api.get('/files/*', async (c) => {
+  const key = c.req.path.replace('/api/files/', '');
+  
+  try {
+    const file = await getFileFromR2(c.env.R2, key);
+    
+    if (!file) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '파일을 찾을 수 없습니다',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    return new Response(file.body, {
+      headers: {
+        'Content-Type': file.contentType,
+        'Cache-Control': 'public, max-age=86400'
+      }
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '파일 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 파일 삭제
+api.delete('/stores/:id/files', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  const { key } = await c.req.json() as { key: string };
+  
+  if (!key || !key.includes(`stores/${storeId}/`)) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '유효하지 않은 파일 키입니다',
+      timestamp: Date.now()
+    }, 400);
+  }
+  
+  try {
+    const deleted = await deleteFileFromR2(c.env.R2, key);
+    
+    return c.json<ApiResponse>({
+      success: deleted,
+      data: deleted ? { message: '파일이 삭제되었습니다' } : { message: '파일 삭제 실패' },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '파일 삭제 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 파일 AI 분석 (업로드된 파일 분석)
+api.post('/stores/:id/files/analyze', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const { fileKey, analysisType, aiModel } = await c.req.json() as {
+      fileKey: string;
+      analysisType: 'extract_info' | 'ocr' | 'summarize' | 'custom';
+      aiModel?: 'gemini' | 'openai';
+      customPrompt?: string;
+    };
+    
+    // 파일 가져오기
+    const file = await getFileFromR2(c.env.R2, fileKey);
+    if (!file) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '파일을 찾을 수 없습니다',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    // 파일 데이터 읽기
+    const chunks: Uint8Array[] = [];
+    const reader = file.body.getReader();
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    
+    const fileData = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
+    let offset = 0;
+    for (const chunk of chunks) {
+      fileData.set(chunk, offset);
+      offset += chunk.length;
+    }
+    
+    const base64 = await fileToBase64(fileData.buffer);
+    const model = aiModel || 'gemini';
+    const apiKey = model === 'openai' ? c.env.OPENAI_API_KEY : c.env.GEMINI_API_KEY;
+    
+    if (!apiKey) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: `${model.toUpperCase()} API 키가 설정되지 않았습니다`,
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // 분석 타입에 따른 프롬프트 설정
+    let prompt = '';
+    let contentType: 'text' | 'image' | 'pdf' = 'text';
+    
+    if (file.contentType.includes('image')) {
+      contentType = 'image';
+    } else if (file.contentType.includes('pdf')) {
+      contentType = 'pdf';
+    }
+    
+    switch (analysisType) {
+      case 'extract_info':
+        prompt = '이 문서/이미지에서 매장 운영에 필요한 정보를 추출해주세요: 매장명, 주소, 전화번호, 메뉴/서비스, 가격, 영업시간 등';
+        break;
+      case 'ocr':
+        prompt = '이 이미지/문서에서 모든 텍스트를 정확하게 추출해주세요. 원본 형식을 최대한 유지해주세요.';
+        break;
+      case 'summarize':
+        prompt = '이 문서의 핵심 내용을 요약해주세요. 주요 포인트와 중요한 세부사항을 포함해주세요.';
+        break;
+      default:
+        prompt = '이 내용을 분석해주세요.';
+    }
+    
+    // AI 분석 실행
+    let result;
+    if (model === 'openai') {
+      result = await analyzeWithOpenAI(
+        apiKey,
+        { type: contentType === 'pdf' ? 'text' : contentType, data: base64, mimeType: file.contentType },
+        prompt
+      );
+    } else {
+      result = await analyzeWithGemini(
+        apiKey,
+        { type: contentType, data: base64, mimeType: file.contentType },
+        prompt
+      );
+    }
+    
+    return c.json<ApiResponse>({
+      success: result.success,
+      data: result.success ? { analysis: result.result, model, analysisType } : undefined,
+      error: result.error,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || 'AI 분석 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// URL 분석 및 매장 정보 자동 추출
+api.post('/stores/:id/analyze-url', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const { url, aiModel } = await c.req.json() as {
+      url: string;
+      aiModel?: 'gemini' | 'openai';
+    };
+    
+    if (!url) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'URL이 필요합니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // URL 콘텐츠 가져오기
+    const urlContent = await fetchUrlContent(url);
+    
+    if (!urlContent.success || !urlContent.content) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: urlContent.error || 'URL 콘텐츠를 가져올 수 없습니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // AI로 매장 정보 추출
+    const model = aiModel || 'gemini';
+    const apiKey = model === 'openai' ? c.env.OPENAI_API_KEY : c.env.GEMINI_API_KEY;
+    
+    if (!apiKey) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: `${model.toUpperCase()} API 키가 설정되지 않았습니다`,
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    const extractResult = await extractStoreInfoFromContent(apiKey, urlContent.content, model);
+    
+    if (!extractResult.success) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: extractResult.error || '정보 추출 실패',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        url,
+        title: urlContent.title,
+        extractedInfo: extractResult.data,
+        model
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || 'URL 분석 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 자동 프롬프트 생성 (URL 또는 파일에서)
+api.post('/stores/:id/auto-generate-prompt', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const { url, fileKey, aiModel } = await c.req.json() as {
+      url?: string;
+      fileKey?: string;
+      aiModel?: 'gemini' | 'openai';
+    };
+    
+    if (!url && !fileKey) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'URL 또는 파일 키가 필요합니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    const model = aiModel || 'gemini';
+    const apiKey = model === 'openai' ? c.env.OPENAI_API_KEY : c.env.GEMINI_API_KEY;
+    
+    if (!apiKey) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: `${model.toUpperCase()} API 키가 설정되지 않았습니다`,
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    let content = '';
+    
+    // URL에서 콘텐츠 가져오기
+    if (url) {
+      const urlContent = await fetchUrlContent(url);
+      if (urlContent.success && urlContent.content) {
+        content = urlContent.content;
+      }
+    }
+    
+    // 파일에서 콘텐츠 가져오기
+    if (fileKey) {
+      const file = await getFileFromR2(c.env.R2, fileKey);
+      if (file) {
+        // 텍스트 파일인 경우 직접 읽기
+        if (file.contentType.includes('text') || file.contentType.includes('json')) {
+          const text = await new Response(file.body).text();
+          content += '\n\n' + text;
+        } else {
+          // 이미지/PDF는 AI로 텍스트 추출
+          const chunks: Uint8Array[] = [];
+          const reader = file.body.getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+          }
+          const fileData = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
+          let offset = 0;
+          for (const chunk of chunks) {
+            fileData.set(chunk, offset);
+            offset += chunk.length;
+          }
+          const base64 = await fileToBase64(fileData.buffer);
+          
+          const contentType = file.contentType.includes('pdf') ? 'pdf' : 'image';
+          const extractResult = model === 'openai'
+            ? await analyzeWithOpenAI(apiKey, { type: contentType as 'image', data: base64, mimeType: file.contentType }, '이 문서의 모든 텍스트와 정보를 추출해주세요.')
+            : await analyzeWithGemini(apiKey, { type: contentType, data: base64, mimeType: file.contentType }, '이 문서의 모든 텍스트와 정보를 추출해주세요.');
+          
+          if (extractResult.success && extractResult.result) {
+            content += '\n\n' + extractResult.result;
+          }
+        }
+      }
+    }
+    
+    if (!content.trim()) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '분석할 콘텐츠가 없습니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // 매장 정보 추출
+    const extractResult = await extractStoreInfoFromContent(apiKey, content, model);
+    
+    if (!extractResult.success) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: extractResult.error || '정보 추출 실패',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // 추출된 정보로 매장 업데이트
+    const info = extractResult.data!;
+    
+    await c.env.DB.prepare(`
+      UPDATE xivix_stores SET
+        store_name = COALESCE(?, store_name),
+        business_type = COALESCE(?, business_type),
+        address = COALESCE(?, address),
+        phone = COALESCE(?, phone),
+        operating_hours = COALESCE(?, operating_hours),
+        menu_data = COALESCE(?, menu_data),
+        ai_persona = COALESCE(?, ai_persona),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).bind(
+      info.storeName || null,
+      info.businessType || null,
+      info.address || null,
+      info.phone || null,
+      info.operatingHours || null,
+      info.menuData ? JSON.stringify(info.menuData) : null,
+      info.systemPrompt || null,
+      storeId
+    ).run();
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        extractedInfo: info,
+        message: '매장 정보가 자동으로 업데이트되었습니다',
+        model
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '자동 생성 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 지원 파일 타입 조회
+api.get('/files/supported-types', (c) => {
+  return c.json<ApiResponse>({
+    success: true,
+    data: {
+      image: {
+        extensions: SUPPORTED_FILE_TYPES.image.extensions,
+        maxSize: '20MB',
+        maxSizeBytes: SUPPORTED_FILE_TYPES.image.maxSize
+      },
+      pdf: {
+        extensions: SUPPORTED_FILE_TYPES.pdf.extensions,
+        maxSize: '50MB',
+        maxSizeBytes: SUPPORTED_FILE_TYPES.pdf.maxSize
+      },
+      document: {
+        extensions: SUPPORTED_FILE_TYPES.document.extensions,
+        maxSize: '10MB',
+        maxSizeBytes: SUPPORTED_FILE_TYPES.document.maxSize
+      }
+    },
+    timestamp: Date.now()
+  });
 });
 
 export default api;

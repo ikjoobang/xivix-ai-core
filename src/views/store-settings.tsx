@@ -25,6 +25,8 @@ export function renderStoreSettings(storeId: number): string {
     .chat-bubble-bot { background: rgba(255,255,255,0.1); }
     .tab-active { border-bottom: 2px solid #D4AF37; color: #D4AF37; }
     textarea:focus, input:focus, select:focus { outline: none; border-color: #D4AF37; }
+    select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; background-size: 16px; padding-right: 40px; }
+    select option { background: #1a1a1a; color: white; padding: 12px; }
     .btn-primary { background: linear-gradient(135deg, #D4AF37 0%, #B8960C 100%); color: #000; }
     .btn-primary:hover { opacity: 0.9; }
     .btn-secondary { background: rgba(255,255,255,0.1); }
@@ -84,6 +86,77 @@ export function renderStoreSettings(storeId: number): string {
     
     <!-- Tab 1: AI 프롬프트 설정 -->
     <div id="tab-prompt" class="tab-content">
+      
+      <!-- 🚀 자동 생성 섹션 -->
+      <div class="glass rounded-2xl p-6 mb-6 border-2 border-dashed border-[#D4AF37]/30">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-bold flex items-center gap-2">
+            <i class="fas fa-magic gold"></i>
+            AI 자동 생성
+            <span class="text-xs bg-[#D4AF37]/20 text-[#D4AF37] px-2 py-1 rounded-full">NEW</span>
+          </h2>
+        </div>
+        
+        <p class="text-sm text-white/60 mb-4">
+          URL, PDF, 이미지를 입력하면 AI가 매장 정보와 프롬프트를 자동으로 생성합니다.
+        </p>
+        
+        <!-- URL 입력 -->
+        <div class="mb-4">
+          <label class="block text-sm text-white/60 mb-2">
+            <i class="fas fa-link mr-1"></i>URL 입력 (플레이스/블로그/홈페이지/인스타)
+          </label>
+          <div class="flex gap-2">
+            <input type="text" id="auto-url" 
+              class="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white"
+              placeholder="https://naver.me/xxx 또는 https://blog.naver.com/xxx">
+            <button onclick="analyzeUrl()" class="px-6 py-3 btn-primary rounded-xl font-medium whitespace-nowrap">
+              <i class="fas fa-search mr-1"></i>분석
+            </button>
+          </div>
+        </div>
+        
+        <!-- 파일 업로드 -->
+        <div class="mb-4">
+          <label class="block text-sm text-white/60 mb-2">
+            <i class="fas fa-file-upload mr-1"></i>파일 업로드 (PDF, 이미지)
+          </label>
+          <div class="border-2 border-dashed border-white/20 rounded-xl p-6 text-center hover:border-[#D4AF37]/50 transition-all cursor-pointer" onclick="document.getElementById('file-upload').click()">
+            <input type="file" id="file-upload" class="hidden" multiple accept=".pdf,.png,.jpg,.jpeg,.webp" onchange="handleFileUpload(event)">
+            <div id="upload-preview" class="hidden"></div>
+            <div id="upload-placeholder">
+              <i class="fas fa-cloud-upload-alt text-4xl text-white/30 mb-3"></i>
+              <p class="text-white/60 mb-1">클릭하거나 파일을 드래그하세요</p>
+              <p class="text-xs text-white/40">PDF (최대 50MB), 이미지 (최대 20MB)</p>
+              <p class="text-xs text-white/40 mt-1">메뉴판, 가격표, 브로슈어, 심의규정 등</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 업로드된 파일 목록 -->
+        <div id="uploaded-files" class="hidden mb-4">
+          <label class="block text-sm text-white/60 mb-2">업로드된 파일</label>
+          <div id="file-list" class="space-y-2"></div>
+        </div>
+        
+        <!-- 분석 버튼 -->
+        <button onclick="generatePromptFromSources()" id="generate-btn" class="w-full py-4 gold-bg rounded-xl font-bold text-black flex items-center justify-center gap-2 disabled:opacity-50" disabled>
+          <i class="fas fa-wand-magic-sparkles"></i>
+          AI로 프롬프트 자동 생성
+        </button>
+        
+        <!-- 분석 진행 상태 -->
+        <div id="analysis-status" class="hidden mt-4 p-4 bg-white/5 rounded-xl">
+          <div class="flex items-center gap-3">
+            <div class="w-6 h-6 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin"></div>
+            <span id="analysis-text">분석 중...</span>
+          </div>
+          <div class="mt-2 h-2 bg-white/10 rounded-full overflow-hidden">
+            <div id="analysis-progress" class="h-full bg-[#D4AF37] transition-all duration-300" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+      
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         <!-- 프롬프트 편집 영역 -->
@@ -109,12 +182,12 @@ export function renderStoreSettings(storeId: number): string {
           <!-- 톤앤매너 -->
           <div class="mb-4">
             <label class="block text-sm text-white/60 mb-2">톤앤매너</label>
-            <select id="ai-tone" class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white">
-              <option value="friendly">친근하고 따뜻한</option>
-              <option value="professional">전문적이고 신뢰감 있는</option>
-              <option value="casual">캐주얼하고 편한</option>
-              <option value="formal">격식있고 정중한</option>
-              <option value="energetic">활기차고 긍정적인</option>
+            <select id="ai-tone" class="w-full px-4 py-3 bg-[#1a1a1a] border border-white/10 rounded-xl text-white cursor-pointer">
+              <option value="friendly" class="bg-[#1a1a1a] text-white py-2">친근하고 따뜻한</option>
+              <option value="professional" class="bg-[#1a1a1a] text-white py-2">전문적이고 신뢰감 있는</option>
+              <option value="casual" class="bg-[#1a1a1a] text-white py-2">캐주얼하고 편한</option>
+              <option value="formal" class="bg-[#1a1a1a] text-white py-2">격식있고 정중한</option>
+              <option value="energetic" class="bg-[#1a1a1a] text-white py-2">활기차고 긍정적인</option>
             </select>
           </div>
           
@@ -214,17 +287,17 @@ export function renderStoreSettings(storeId: number): string {
             
             <div>
               <label class="block text-sm text-white/60 mb-2">업종</label>
-              <select id="business-type" class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white">
-                <option value="BEAUTY_HAIR">미용실/헤어숍</option>
-                <option value="BEAUTY_SKIN">피부관리/에스테틱</option>
-                <option value="BEAUTY_NAIL">네일아트/속눈썹</option>
-                <option value="RESTAURANT">일반 식당/카페</option>
-                <option value="FITNESS">피트니스/요가/PT</option>
-                <option value="MEDICAL">병원/의원/치과</option>
-                <option value="PROFESSIONAL_LEGAL">법률/세무/보험</option>
-                <option value="EDUCATION">학원/교육/과외</option>
-                <option value="PET_SERVICE">애견/반려동물</option>
-                <option value="OTHER">기타</option>
+              <select id="business-type" class="w-full px-4 py-3 bg-[#1a1a1a] border border-white/10 rounded-xl text-white cursor-pointer">
+                <option value="BEAUTY_HAIR" class="bg-[#1a1a1a] text-white">미용실/헤어숍</option>
+                <option value="BEAUTY_SKIN" class="bg-[#1a1a1a] text-white">피부관리/에스테틱</option>
+                <option value="BEAUTY_NAIL" class="bg-[#1a1a1a] text-white">네일아트/속눈썹</option>
+                <option value="RESTAURANT" class="bg-[#1a1a1a] text-white">일반 식당/카페</option>
+                <option value="FITNESS" class="bg-[#1a1a1a] text-white">피트니스/요가/PT</option>
+                <option value="MEDICAL" class="bg-[#1a1a1a] text-white">병원/의원/치과</option>
+                <option value="PROFESSIONAL_LEGAL" class="bg-[#1a1a1a] text-white">법률/세무/보험</option>
+                <option value="EDUCATION" class="bg-[#1a1a1a] text-white">학원/교육/과외</option>
+                <option value="PET_SERVICE" class="bg-[#1a1a1a] text-white">애견/반려동물</option>
+                <option value="OTHER" class="bg-[#1a1a1a] text-white">기타</option>
               </select>
             </div>
             
@@ -817,6 +890,276 @@ export function renderStoreSettings(storeId: number): string {
       document.body.appendChild(toast);
       
       setTimeout(() => toast.remove(), 3000);
+    }
+    
+    // ============ 자동 생성 기능 ============
+    
+    let uploadedFiles = [];
+    let analyzedUrl = null;
+    
+    // URL 분석 (미리보기)
+    async function analyzeUrl() {
+      const url = document.getElementById('auto-url').value.trim();
+      const aiModel = document.querySelector('input[name="ai-model"]:checked')?.value || 'gemini';
+      
+      if (!url) {
+        showToast('URL을 입력해주세요', 'error');
+        return;
+      }
+      
+      showToast('URL 분석 중...', 'info');
+      
+      try {
+        const res = await fetch(\`/api/stores/\${STORE_ID}/analyze-url\`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, aiModel })
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+          analyzedUrl = data.data;
+          
+          // 미리보기 정보 표시
+          const info = data.data.extractedInfo;
+          let preview = '분석 결과:\\n';
+          if (info.storeName) preview += \`• 매장명: \${info.storeName}\\n\`;
+          if (info.businessType) preview += \`• 업종: \${info.businessType}\\n\`;
+          if (info.address) preview += \`• 주소: \${info.address}\\n\`;
+          if (info.phone) preview += \`• 전화: \${info.phone}\\n\`;
+          if (info.menuData?.length) preview += \`• 메뉴/서비스: \${info.menuData.length}개\\n\`;
+          
+          console.log(preview);
+          showToast('URL 분석 완료! 자동 생성 버튼을 클릭하면 폼에 적용됩니다', 'success');
+          updateGenerateButton();
+        } else {
+          showToast('URL 분석 실패: ' + (data.error || '알 수 없는 오류'), 'error');
+        }
+      } catch (err) {
+        showToast('URL 분석 중 오류 발생', 'error');
+      }
+    }
+    
+    // 파일 업로드 처리
+    function handleFileUpload(event) {
+      const files = Array.from(event.target.files);
+      const maxPdfSize = 50 * 1024 * 1024; // 50MB
+      const maxImageSize = 20 * 1024 * 1024; // 20MB
+      
+      for (const file of files) {
+        const isPdf = file.type === 'application/pdf';
+        const isImage = file.type.startsWith('image/');
+        const maxSize = isPdf ? maxPdfSize : maxImageSize;
+        
+        if (file.size > maxSize) {
+          showToast(\`\${file.name}: 파일 크기 초과 (최대 \${isPdf ? '50MB' : '20MB'})\`, 'error');
+          continue;
+        }
+        
+        if (!isPdf && !isImage) {
+          showToast(\`\${file.name}: 지원하지 않는 형식\`, 'error');
+          continue;
+        }
+        
+        uploadedFiles.push(file);
+      }
+      
+      updateFileList();
+      updateGenerateButton();
+    }
+    
+    // 파일 목록 업데이트
+    function updateFileList() {
+      const container = document.getElementById('uploaded-files');
+      const list = document.getElementById('file-list');
+      const placeholder = document.getElementById('upload-placeholder');
+      
+      if (uploadedFiles.length === 0) {
+        container.classList.add('hidden');
+        placeholder.classList.remove('hidden');
+        return;
+      }
+      
+      container.classList.remove('hidden');
+      placeholder.classList.add('hidden');
+      
+      list.innerHTML = uploadedFiles.map((file, index) => \`
+        <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+          <div class="flex items-center gap-3">
+            <i class="fas \${file.type === 'application/pdf' ? 'fa-file-pdf text-red-400' : 'fa-file-image text-blue-400'}"></i>
+            <div>
+              <p class="text-sm font-medium">\${file.name}</p>
+              <p class="text-xs text-white/40">\${formatFileSize(file.size)}</p>
+            </div>
+          </div>
+          <button onclick="removeFile(\${index})" class="text-white/40 hover:text-red-400">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      \`).join('');
+    }
+    
+    // 파일 삭제
+    function removeFile(index) {
+      uploadedFiles.splice(index, 1);
+      updateFileList();
+      updateGenerateButton();
+    }
+    
+    // 파일 크기 포맷
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+    
+    // 생성 버튼 상태 업데이트
+    function updateGenerateButton() {
+      const btn = document.getElementById('generate-btn');
+      const hasSource = uploadedFiles.length > 0 || analyzedUrl || document.getElementById('auto-url').value.trim();
+      btn.disabled = !hasSource;
+    }
+    
+    // URL 입력 감지
+    document.addEventListener('DOMContentLoaded', () => {
+      const urlInput = document.getElementById('auto-url');
+      if (urlInput) {
+        urlInput.addEventListener('input', updateGenerateButton);
+      }
+    });
+    
+    // AI 자동 생성
+    async function generatePromptFromSources() {
+      const url = document.getElementById('auto-url').value.trim();
+      const aiModel = document.querySelector('input[name="ai-model"]:checked')?.value || 'gemini';
+      
+      if (!url && uploadedFiles.length === 0) {
+        showToast('URL 또는 파일을 입력해주세요', 'error');
+        return;
+      }
+      
+      // 상태 표시
+      const statusDiv = document.getElementById('analysis-status');
+      const statusText = document.getElementById('analysis-text');
+      const progressBar = document.getElementById('analysis-progress');
+      statusDiv.classList.remove('hidden');
+      
+      try {
+        let uploadedFileKeys = [];
+        
+        // 1. 파일 업로드 (있는 경우)
+        if (uploadedFiles.length > 0) {
+          for (let i = 0; i < uploadedFiles.length; i++) {
+            const file = uploadedFiles[i];
+            statusText.textContent = \`파일 업로드 중... (\${i + 1}/\${uploadedFiles.length})\`;
+            progressBar.style.width = \`\${((i + 1) / uploadedFiles.length) * 30}%\`;
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('category', 'analysis');
+            
+            const uploadRes = await fetch(\`/api/stores/\${STORE_ID}/files/upload\`, {
+              method: 'POST',
+              body: formData
+            });
+            const uploadData = await uploadRes.json();
+            
+            if (uploadData.success) {
+              uploadedFileKeys.push(uploadData.data.key);
+              showToast(\`\${file.name} 업로드 완료\`, 'success');
+            } else {
+              showToast(\`\${file.name} 업로드 실패: \${uploadData.error}\`, 'error');
+            }
+          }
+        }
+        
+        // 2. 자동 프롬프트 생성 요청
+        statusText.textContent = 'AI가 분석하고 프롬프트를 생성 중...';
+        progressBar.style.width = '60%';
+        
+        const generateRes = await fetch(\`/api/stores/\${STORE_ID}/auto-generate-prompt\`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            url: url || undefined,
+            fileKey: uploadedFileKeys[0] || undefined, // 첫 번째 파일만 분석 (여러 파일은 추후 지원)
+            aiModel: aiModel
+          })
+        });
+        
+        const generateData = await generateRes.json();
+        progressBar.style.width = '100%';
+        
+        if (generateData.success) {
+          // 생성된 데이터 적용
+          const result = generateData.data.extractedInfo;
+          
+          if (result.storeName) document.getElementById('store-name-input').value = result.storeName;
+          if (result.address) document.getElementById('store-address')?.value = result.address || '';
+          if (result.phone) document.getElementById('store-phone')?.value = result.phone || '';
+          if (result.operatingHours) document.getElementById('operating-hours-text').value = result.operatingHours;
+          if (result.businessType) document.getElementById('business-type').value = result.businessType;
+          if (result.systemPrompt) document.getElementById('system-prompt').value = result.systemPrompt;
+          if (result.features && result.features.length > 0) {
+            document.getElementById('ai-persona').value = result.features.join(', ');
+          }
+          if (result.menuData && result.menuData.length > 0) {
+            const menuText = result.menuData.map(m => 
+              \`\${m.name} - \${m.price}\${m.description ? ' (' + m.description + ')' : ''}\`
+            ).join('\\n');
+            document.getElementById('menu-data-text').value = menuText;
+          }
+          
+          showToast('프롬프트가 자동 생성되었습니다! 확인 후 저장해주세요.', 'success');
+          
+          // 생성 결과 요약 표시
+          const summary = \`매장명: \${result.storeName || '(미확인)'}\n업종: \${result.businessType || '(미확인)'}\n메뉴: \${result.menuData?.length || 0}개\`;
+          console.log('AI 분석 결과:', result);
+        } else {
+          showToast('생성 실패: ' + (generateData.error || '알 수 없는 오류'), 'error');
+        }
+        
+      } catch (err) {
+        console.error('Generation error:', err);
+        showToast('생성 중 오류 발생: ' + err.message, 'error');
+      } finally {
+        setTimeout(() => {
+          statusDiv.classList.add('hidden');
+          progressBar.style.width = '0%';
+        }, 1000);
+      }
+    }
+    
+    // 드래그 앤 드롭
+    const dropZone = document.querySelector('.border-dashed');
+    if (dropZone) {
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+      });
+      
+      function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+          dropZone.classList.add('border-[#D4AF37]', 'bg-[#D4AF37]/5');
+        });
+      });
+      
+      ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+          dropZone.classList.remove('border-[#D4AF37]', 'bg-[#D4AF37]/5');
+        });
+      });
+      
+      dropZone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        document.getElementById('file-upload').files = files;
+        handleFileUpload({ target: { files } });
+      });
     }
   </script>
 
