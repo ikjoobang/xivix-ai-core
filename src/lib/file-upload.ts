@@ -163,29 +163,218 @@ export async function deleteFileFromR2(
   }
 }
 
+// 네이버 단축 URL 해결 (naver.me → 실제 URL)
+async function resolveNaverShortUrl(shortUrl: string): Promise<string> {
+  try {
+    const response = await fetch(shortUrl, {
+      method: 'HEAD',
+      redirect: 'manual',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+    
+    const location = response.headers.get('location');
+    if (location) {
+      // 2차 리다이렉트 확인
+      if (location.includes('naver.com') || location.includes('naver.me')) {
+        const response2 = await fetch(location, {
+          method: 'HEAD',
+          redirect: 'manual',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          }
+        });
+        const location2 = response2.headers.get('location');
+        return location2 || location;
+      }
+      return location;
+    }
+    return shortUrl;
+  } catch {
+    return shortUrl;
+  }
+}
+
+// 네이버 플레이스 ID 추출
+function extractNaverPlaceId(url: string): string | null {
+  // 다양한 네이버 플레이스 URL 패턴 처리
+  const patterns = [
+    /place\/(\d+)/,                    // /place/12345
+    /restaurant\/(\d+)/,               // /restaurant/12345
+    /hairshop\/(\d+)/,                 // /hairshop/12345
+    /beauty\/(\d+)/,                   // /beauty/12345
+    /hospital\/(\d+)/,                 // /hospital/12345
+    /cafe\/(\d+)/,                     // /cafe/12345
+    /m\.place\.naver\.com\/(\w+)\/(\d+)/, // 모바일 URL
+    /pcmap\.place\.naver\.com.*?\/(\d+)/, // PC 지도 URL
+  ];
+  
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) {
+      // 마지막 캡처 그룹이 플레이스 ID
+      return match[match.length - 1];
+    }
+  }
+  
+  return null;
+}
+
+// 네이버 플레이스 API로 매장 정보 가져오기
+async function fetchNaverPlaceInfo(placeId: string): Promise<{
+  success: boolean;
+  data?: any;
+  error?: string;
+}> {
+  try {
+    // 네이버 플레이스 API (비공식 - 웹에서 사용하는 API)
+    const apiUrl = `https://map.naver.com/p/api/search/allSearch?query=${placeId}&type=all&searchCoord=&boundary=`;
+    
+    // 먼저 상세 페이지 HTML에서 정보 추출 시도
+    const detailUrl = `https://m.place.naver.com/place/${placeId}/home`;
+    const response = await fetch(detailUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'ko-KR,ko;q=0.9'
+      }
+    });
+    
+    if (!response.ok) {
+      return { success: false, error: `네이버 플레이스 접근 실패: ${response.status}` };
+    }
+    
+    const html = await response.text();
+    
+    // JSON-LD 데이터 추출 시도
+    const jsonLdMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+    if (jsonLdMatch) {
+      try {
+        const jsonLd = JSON.parse(jsonLdMatch[1]);
+        return { success: true, data: { jsonLd, html } };
+      } catch {}
+    }
+    
+    // __NEXT_DATA__ 추출 시도
+    const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+    if (nextDataMatch) {
+      try {
+        const nextData = JSON.parse(nextDataMatch[1]);
+        return { success: true, data: { nextData, html } };
+      } catch {}
+    }
+    
+    // HTML 직접 반환
+    return { success: true, data: { html } };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : '네이버 플레이스 정보 가져오기 실패'
+    };
+  }
+}
+
 // URL 콘텐츠 추출
 export async function fetchUrlContent(url: string): Promise<{
   success: boolean;
   content?: string;
   title?: string;
+  placeId?: string;
   error?: string;
 }> {
   try {
     // URL 검증
+    let finalUrl = url;
     const parsedUrl = new URL(url);
     
-    // 지원하는 도메인 확인 (네이버, 인스타그램 등)
-    const supportedDomains = [
-      'naver.com', 'map.naver.com', 'place.naver.com', 
-      'blog.naver.com', 'instagram.com', 'kakao.com'
-    ];
+    // 1. naver.me 단축 URL 처리
+    if (parsedUrl.hostname === 'naver.me') {
+      console.log('[fetchUrlContent] 네이버 단축 URL 감지, 해결 중...');
+      finalUrl = await resolveNaverShortUrl(url);
+      console.log('[fetchUrlContent] 해결된 URL:', finalUrl);
+    }
     
-    const response = await fetch(url, {
+    // 2. 네이버 플레이스 URL인지 확인
+    const placeId = extractNaverPlaceId(finalUrl);
+    if (placeId) {
+      console.log('[fetchUrlContent] 네이버 플레이스 ID:', placeId);
+      const placeInfo = await fetchNaverPlaceInfo(placeId);
+      
+      if (placeInfo.success && placeInfo.data) {
+        let content = '';
+        let title = '';
+        
+        // JSON-LD에서 정보 추출
+        if (placeInfo.data.jsonLd) {
+          const ld = placeInfo.data.jsonLd;
+          title = ld.name || '';
+          content = `매장명: ${ld.name || ''}\n`;
+          content += `주소: ${ld.address?.streetAddress || ''}\n`;
+          content += `전화번호: ${ld.telephone || ''}\n`;
+          content += `업종: ${ld['@type'] || ''}\n`;
+          if (ld.openingHours) {
+            content += `영업시간: ${Array.isArray(ld.openingHours) ? ld.openingHours.join(', ') : ld.openingHours}\n`;
+          }
+          if (ld.description) {
+            content += `설명: ${ld.description}\n`;
+          }
+        }
+        
+        // __NEXT_DATA__에서 정보 추출
+        if (placeInfo.data.nextData?.props?.pageProps) {
+          const pageProps = placeInfo.data.nextData.props.pageProps;
+          if (pageProps.initialState?.place?.basicInfo) {
+            const basicInfo = pageProps.initialState.place.basicInfo;
+            title = title || basicInfo.name || '';
+            content += `\n[상세정보]\n`;
+            content += `매장명: ${basicInfo.name || ''}\n`;
+            content += `주소: ${basicInfo.address || ''}\n`;
+            content += `전화번호: ${basicInfo.phone || ''}\n`;
+            content += `카테고리: ${basicInfo.category || ''}\n`;
+            
+            // 메뉴 정보
+            if (pageProps.initialState?.place?.menuInfo?.menuList) {
+              content += `\n[메뉴]\n`;
+              for (const menu of pageProps.initialState.place.menuInfo.menuList) {
+                content += `- ${menu.name}: ${menu.price}원\n`;
+              }
+            }
+          }
+        }
+        
+        // HTML에서 텍스트 추출 (fallback)
+        if (!content && placeInfo.data.html) {
+          const html = placeInfo.data.html;
+          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+          title = titleMatch ? titleMatch[1].trim() : '';
+          
+          content = html
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 50000);
+        }
+        
+        return {
+          success: true,
+          content,
+          title,
+          placeId
+        };
+      }
+    }
+    
+    // 3. 일반 URL 처리
+    const response = await fetch(finalUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8'
-      }
+      },
+      redirect: 'follow'
     });
     
     if (!response.ok) {
@@ -213,6 +402,7 @@ export async function fetchUrlContent(url: string): Promise<{
       title
     };
   } catch (error) {
+    console.error('[fetchUrlContent] Error:', error);
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'URL 콘텐츠 추출 실패'
