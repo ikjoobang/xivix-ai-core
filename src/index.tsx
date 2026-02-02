@@ -195,24 +195,24 @@ app.get('/', (c) => {
       </h1>
       
       <p class="text-xl md:text-2xl text-white/50 font-light tracking-wide mb-2">
-        CORE V1.0
+        CORE V2.0
       </p>
       
       <p class="text-lg text-white/40 max-w-xl mx-auto mb-12 leading-relaxed">
-        Gemini 2.5 Flash 기반<br>
-        <span class="text-[#007AFF]">초고속 AI 상담 자동화 엔진</span>
+        GPT-4o + Gemini 2.5 Pro 검증 시스템<br>
+        <span class="text-[#007AFF]">전문 상담 AI 자동화 엔진</span>
       </p>
       
       <!-- Action Buttons -->
       <div class="flex flex-col sm:flex-row gap-4 justify-center">
-        <a href="/dashboard" class="group px-8 py-4 bg-[#007AFF] hover:bg-[#0066DD] rounded-xl font-semibold transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/25 flex items-center justify-center gap-3">
+        <a href="/master" class="group px-8 py-4 bg-[#007AFF] hover:bg-[#0066DD] rounded-xl font-semibold transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/25 flex items-center justify-center gap-3">
           <i class="fas fa-rocket"></i>
-          대시보드 접속
+          마스터 대시보드
           <i class="fas fa-arrow-right group-hover:translate-x-1 transition-transform"></i>
         </a>
-        <a href="/api/system/info" class="px-8 py-4 glass hover:bg-white/10 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-3">
-          <i class="fas fa-code"></i>
-          API 문서
+        <a href="/connect" class="px-8 py-4 glass hover:bg-white/10 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-3">
+          <i class="fas fa-plug"></i>
+          신규 연동 신청
         </a>
       </div>
     </div>
@@ -220,35 +220,35 @@ app.get('/', (c) => {
     <!-- Feature Cards -->
     <div class="relative z-10 mt-20 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl">
       <div class="glass rounded-2xl p-6 hover:bg-white/5 transition-all duration-300">
+        <div class="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center mb-4">
+          <i class="fas fa-robot text-green-400 text-xl"></i>
+        </div>
+        <h3 class="text-lg font-semibold mb-2">GPT-4o 전문 상담</h3>
+        <p class="text-white/50 text-sm leading-relaxed">
+          의료/법률/보험 정확도 최고<br>
+          전문가급 응답 품질
+        </p>
+      </div>
+      
+      <div class="glass rounded-2xl p-6 hover:bg-white/5 transition-all duration-300">
+        <div class="w-12 h-12 rounded-xl bg-indigo-500/10 flex items-center justify-center mb-4">
+          <i class="fas fa-shield-check text-indigo-400 text-xl"></i>
+        </div>
+        <h3 class="text-lg font-semibold mb-2">Gemini Pro 검증</h3>
+        <p class="text-white/50 text-sm leading-relaxed">
+          할루시네이션 자동 감지<br>
+          교차 검증으로 신뢰도 보장
+        </p>
+      </div>
+      
+      <div class="glass rounded-2xl p-6 hover:bg-white/5 transition-all duration-300">
         <div class="w-12 h-12 rounded-xl bg-[#007AFF]/10 flex items-center justify-center mb-4">
           <i class="fas fa-bolt text-[#007AFF] text-xl"></i>
         </div>
-        <h3 class="text-lg font-semibold mb-2">초고속 응답</h3>
+        <h3 class="text-lg font-semibold mb-2">Flash 빠른 응답</h3>
         <p class="text-white/50 text-sm leading-relaxed">
-          첫 토큰 생성 0.5초 이내<br>
-          SSE 스트리밍 실시간 전송
-        </p>
-      </div>
-      
-      <div class="glass rounded-2xl p-6 hover:bg-white/5 transition-all duration-300">
-        <div class="w-12 h-12 rounded-xl bg-cyan-500/10 flex items-center justify-center mb-4">
-          <i class="fas fa-image text-cyan-400 text-xl"></i>
-        </div>
-        <h3 class="text-lg font-semibold mb-2">멀티모달 분석</h3>
-        <p class="text-white/50 text-sm leading-relaxed">
-          이미지 + 텍스트 동시 처리<br>
-          맞춤형 서비스 추천
-        </p>
-      </div>
-      
-      <div class="glass rounded-2xl p-6 hover:bg-white/5 transition-all duration-300">
-        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center mb-4">
-          <i class="fas fa-calendar-check text-emerald-400 text-xl"></i>
-        </div>
-        <h3 class="text-lg font-semibold mb-2">예약 자동화</h3>
-        <p class="text-white/50 text-sm leading-relaxed">
-          네이버 예약 API 연동<br>
-          AI 자동 예약 확정
+          일반 문의 0.5초 응답<br>
+          SSE 스트리밍 지원
         </p>
       </div>
     </div>
