@@ -17,6 +17,19 @@ import {
   hashPassword
 } from '../lib/auth';
 import { notifyMasterOnboarding, notifyOwnerSetupComplete } from '../lib/notification';
+import { 
+  getOpenAIResponse, 
+  validateOpenAIKey, 
+  buildOpenAISystemPrompt, 
+  buildOpenAIMessages,
+  analyzeImageWithOpenAI 
+} from '../lib/openai';
+import { 
+  buildGeminiMessages, 
+  buildSystemInstruction, 
+  getGeminiResponse 
+} from '../lib/gemini';
+import { getConversationContext } from '../lib/kv-context';
 
 const api = new Hono<{ Bindings: Env }>();
 
@@ -5078,6 +5091,268 @@ api.post('/reports/generate-all', async (c) => {
         total_stores: stores.results?.length || 0,
         generated,
         failed
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// ============ 테스트 채팅 API ============
+
+// 프롬프트 테스트용 채팅
+api.post('/chat/test', async (c) => {
+  try {
+    const { store_id, message, prompt_config, ai_model } = await c.req.json() as {
+      store_id: number;
+      message: string;
+      prompt_config?: {
+        persona?: string;
+        tone?: string;
+        greeting?: string;
+        systemPrompt?: string;
+        forbidden?: string;
+      };
+      ai_model?: 'gemini' | 'openai' | 'claude';
+    };
+
+    if (!message) {
+      return c.json<ApiResponse>({ 
+        success: false, 
+        error: '메시지를 입력해주세요', 
+        timestamp: Date.now() 
+      }, 400);
+    }
+
+    // 매장 정보 조회
+    const store = await c.env.DB.prepare(
+      'SELECT * FROM xivix_stores WHERE id = ?'
+    ).bind(store_id).first<Store>();
+
+    let response = '';
+    const model = ai_model || store?.ai_model || 'gemini';
+
+    if (model === 'openai') {
+      // OpenAI 사용
+      const apiKey = c.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        return c.json<ApiResponse>({ 
+          success: false, 
+          error: 'OpenAI API 키가 설정되지 않았습니다', 
+          timestamp: Date.now() 
+        }, 400);
+      }
+
+      const systemPrompt = buildOpenAISystemPrompt({
+        persona: prompt_config?.persona || store?.ai_persona,
+        tone: prompt_config?.tone || store?.ai_tone || 'friendly',
+        storeName: store?.store_name,
+        menuData: store?.menu_data,
+        operatingHours: store?.operating_hours,
+        customPrompt: prompt_config?.systemPrompt || store?.system_prompt,
+        forbiddenKeywords: prompt_config?.forbidden
+      });
+
+      const messages = buildOpenAIMessages(systemPrompt, [], message);
+      response = await getOpenAIResponse(apiKey, messages, {
+        temperature: 0.7,
+        maxTokens: 1024
+      });
+    } else {
+      // Gemini 사용 (기본)
+      const systemInstruction = buildSystemInstruction({
+        store_name: store?.store_name,
+        menu_data: store?.menu_data,
+        operating_hours: store?.operating_hours,
+        ai_persona: prompt_config?.persona || store?.ai_persona,
+        ai_tone: prompt_config?.tone || store?.ai_tone
+      });
+
+      const messages = buildGeminiMessages(null, message);
+      response = await getGeminiResponse(c.env, messages, systemInstruction);
+    }
+
+    return c.json<ApiResponse>({
+      success: true,
+      response,
+      model,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    console.error('[Chat Test] Error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '응답 생성 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// API 키 테스트
+api.post('/test-api-key', async (c) => {
+  try {
+    const { model, api_key } = await c.req.json() as { model: string; api_key?: string };
+
+    if (model === 'openai') {
+      const key = api_key || c.env.OPENAI_API_KEY;
+      if (!key) {
+        return c.json<ApiResponse>({ 
+          success: false, 
+          error: 'API 키가 필요합니다', 
+          timestamp: Date.now() 
+        }, 400);
+      }
+
+      const result = await validateOpenAIKey(key);
+      return c.json<ApiResponse>({
+        success: result.valid,
+        error: result.error,
+        timestamp: Date.now()
+      });
+    } else if (model === 'gemini') {
+      // Gemini는 환경변수로만 사용
+      const hasKey = !!c.env.GEMINI_API_KEY;
+      return c.json<ApiResponse>({
+        success: hasKey,
+        error: hasKey ? undefined : 'Gemini API 키가 설정되지 않았습니다',
+        timestamp: Date.now()
+      });
+    }
+
+    return c.json<ApiResponse>({ 
+      success: false, 
+      error: '지원하지 않는 모델', 
+      timestamp: Date.now() 
+    }, 400);
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// ============ 매장 설정 API ============
+
+// 매장 설정 저장
+api.put('/stores/:id/settings', async (c) => {
+  try {
+    const id = parseInt(c.req.param('id'), 10);
+    const settings = await c.req.json() as {
+      store_name?: string;
+      business_type?: string;
+      ai_persona?: string;
+      ai_tone?: string;
+      greeting_message?: string;
+      system_prompt?: string;
+      operating_hours?: string;
+      menu_data?: string;
+      ai_model?: string;
+      naver_talktalk_id?: string;
+      naver_reservation_id?: string;
+      ocr_enabled?: boolean;
+      temperature?: number;
+      max_tokens?: number;
+    };
+
+    await c.env.DB.prepare(`
+      UPDATE xivix_stores SET
+        store_name = COALESCE(?, store_name),
+        business_type = COALESCE(?, business_type),
+        ai_persona = COALESCE(?, ai_persona),
+        ai_tone = COALESCE(?, ai_tone),
+        greeting_message = COALESCE(?, greeting_message),
+        system_prompt = COALESCE(?, system_prompt),
+        operating_hours = COALESCE(?, operating_hours),
+        menu_data = COALESCE(?, menu_data),
+        ai_model = COALESCE(?, ai_model),
+        naver_talktalk_id = COALESCE(?, naver_talktalk_id),
+        naver_reservation_id = COALESCE(?, naver_reservation_id),
+        updated_at = datetime('now')
+      WHERE id = ?
+    `).bind(
+      settings.store_name || null,
+      settings.business_type || null,
+      settings.ai_persona || null,
+      settings.ai_tone || null,
+      settings.greeting_message || null,
+      settings.system_prompt || null,
+      settings.operating_hours || null,
+      settings.menu_data || null,
+      settings.ai_model || null,
+      settings.naver_talktalk_id || null,
+      settings.naver_reservation_id || null,
+      id
+    ).run();
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: { message: '설정이 저장되었습니다' },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 이미지 OCR 분석
+api.post('/ocr/analyze', async (c) => {
+  try {
+    const { image_base64, mime_type, prompt, ai_model } = await c.req.json() as {
+      image_base64: string;
+      mime_type: string;
+      prompt?: string;
+      ai_model?: 'gemini' | 'openai';
+    };
+
+    if (!image_base64) {
+      return c.json<ApiResponse>({ 
+        success: false, 
+        error: '이미지가 필요합니다', 
+        timestamp: Date.now() 
+      }, 400);
+    }
+
+    const model = ai_model || 'openai'; // OCR은 OpenAI Vision이 더 정확함
+    let result = '';
+
+    if (model === 'openai') {
+      const apiKey = c.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        return c.json<ApiResponse>({ 
+          success: false, 
+          error: 'OpenAI API 키가 설정되지 않았습니다', 
+          timestamp: Date.now() 
+        }, 400);
+      }
+
+      result = await analyzeImageWithOpenAI(
+        apiKey,
+        image_base64,
+        mime_type,
+        prompt || '이 이미지에서 모든 텍스트를 추출하고, 내용을 분석해주세요.'
+      );
+    } else {
+      // Gemini Vision 사용
+      const messages = buildGeminiMessages(null, prompt || '이미지 분석', image_base64, mime_type);
+      result = await getGeminiResponse(c.env, messages, '이미지에서 텍스트를 추출하고 분석해주세요.');
+    }
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: { 
+        text: result,
+        model 
       },
       timestamp: Date.now()
     });

@@ -22,6 +22,9 @@ export interface Env {
   // Email (Resend)
   RESEND_API_KEY?: string;
   MASTER_EMAIL?: string;         // 마스터 이메일 (xivix.kr@gmail.com)
+  
+  // OpenAI API
+  OPENAI_API_KEY?: string;
 }
 
 // Database Models
@@ -48,6 +51,9 @@ export interface Store {
   menu_data: string; // JSON string
   ai_persona: string;
   ai_tone: string;
+  greeting_message?: string;
+  system_prompt?: string;
+  ai_model?: 'gemini' | 'openai' | 'claude';
   naver_talktalk_id?: string;
   naver_reservation_id?: string;
   is_active: boolean;

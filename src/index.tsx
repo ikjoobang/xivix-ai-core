@@ -14,6 +14,7 @@ import { renderLogin } from './views/login';
 import { renderAdminDashboard } from './views/admin-dashboard';
 import { renderClientOnboarding } from './views/client-onboarding';
 import { renderSuperMasterDashboard } from './views/super-master';
+import { renderStoreSettings } from './views/store-settings';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -117,6 +118,12 @@ app.get('/master', async (c) => {
 // 기존 admin을 master로 리다이렉트
 app.get('/admin', async (c) => {
   return c.redirect('/master');
+});
+
+// 매장 상세 설정 페이지
+app.get('/store/:storeId/settings', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  return c.html(renderStoreSettings(storeId));
 });
 
 // ============ Root & Landing ============
