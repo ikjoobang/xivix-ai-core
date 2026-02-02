@@ -117,13 +117,13 @@ export function buildSystemInstruction(store?: {
 // 모델명 매핑 (환경변수/선택값 → Gemini API 모델명)
 function getGeminiModelId(modelSetting: string): string {
   const modelMap: Record<string, string> = {
-    'gemini': 'gemini-2.5-flash-preview-05-20',      // 일반 상담 - 빠른 응답
-    'gemini-flash': 'gemini-2.5-flash-preview-05-20',
-    'gemini-2.5-flash': 'gemini-2.5-flash-preview-05-20',
-    'gemini-pro': 'gemini-2.5-pro-preview-05-06',    // 전문 상담 - 정확도 우선
-    'gemini-2.5-pro': 'gemini-2.5-pro-preview-05-06',
+    'gemini': 'gemini-2.0-flash',              // 일반 상담 - 빠른 응답 (안정 버전)
+    'gemini-flash': 'gemini-2.0-flash',
+    'gemini-2.5-flash': 'gemini-2.0-flash',
+    'gemini-pro': 'gemini-1.5-pro',            // 전문 상담 - 정확도 우선 (안정 버전)
+    'gemini-2.5-pro': 'gemini-1.5-pro',
   };
-  return modelMap[modelSetting] || 'gemini-2.5-flash-preview-05-20';
+  return modelMap[modelSetting] || 'gemini-2.0-flash';
 }
 
 // Streaming response generator for Gemini
