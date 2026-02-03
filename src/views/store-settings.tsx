@@ -309,10 +309,57 @@ export function renderStoreSettings(storeId: number): string {
             </div>
             
             <div>
-              <label class="block text-sm text-white/60 mb-2">전화번호</label>
+              <label class="block text-sm text-white/60 mb-2">매장 전화번호 (고객 안내용)</label>
               <input type="text" id="store-phone"
                 class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white"
                 placeholder="예: 02-1234-5678">
+            </div>
+          </div>
+        </div>
+        
+        <!-- SMS 알림 연락처 설정 -->
+        <div class="glass rounded-2xl p-6">
+          <h2 class="text-lg font-bold flex items-center gap-2 mb-4">
+            <i class="fas fa-bell gold"></i>
+            SMS 알림 연락처
+            <span class="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full ml-2">NEW</span>
+          </h2>
+          
+          <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 mb-4">
+            <p class="text-sm text-blue-400">
+              <i class="fas fa-info-circle mr-2"></i>
+              고객이 "전화해주세요", "연락 부탁" 등 요청 시 아래 번호로 SMS 알림이 전송됩니다.
+            </p>
+          </div>
+          
+          <div class="space-y-4">
+            <!-- 원장님 휴대폰 -->
+            <div>
+              <label class="block text-sm text-white/60 mb-2">
+                <i class="fas fa-user-tie mr-1"></i>원장님 휴대폰 (필수)
+              </label>
+              <input type="text" id="owner-phone"
+                class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white"
+                placeholder="예: 010-1234-5678">
+              <p class="text-xs text-white/40 mt-1">
+                고객 콜백 요청 시 이 번호로 SMS가 발송됩니다.
+              </p>
+            </div>
+            
+            <!-- 추가 관리자 -->
+            <div>
+              <label class="block text-sm text-white/60 mb-2">
+                <i class="fas fa-users mr-1"></i>추가 관리자 (선택)
+              </label>
+              <div id="additional-contacts-list" class="space-y-2 mb-3">
+                <!-- 동적으로 추가됨 -->
+              </div>
+              <button onclick="addAdditionalContact()" class="w-full py-3 btn-secondary rounded-xl text-sm">
+                <i class="fas fa-plus mr-2"></i>관리자 추가 (직원/디자이너)
+              </button>
+              <p class="text-xs text-white/40 mt-2">
+                원장님과 함께 SMS 알림을 받을 직원/디자이너를 추가하세요.
+              </p>
             </div>
           </div>
         </div>
@@ -734,22 +781,91 @@ export function renderStoreSettings(storeId: number): string {
     
     // 폼에 데이터 채우기
     function populateForm(store) {
+      console.log('[populateForm] 데이터 로드:', store);
+      
+      // 기본 정보
       document.getElementById('store-name').textContent = store.store_name || '매장 설정';
       document.getElementById('store-name-input').value = store.store_name || '';
+      document.getElementById('business-type').value = store.business_type || 'OTHER';
+      
+      // 매장 정보 (주소, 전화번호)
+      const addressEl = document.getElementById('store-address');
+      if (addressEl) addressEl.value = store.address || '';
+      
+      const phoneEl = document.getElementById('store-phone');
+      if (phoneEl) phoneEl.value = store.phone || '';
+      
+      // AI 설정
       document.getElementById('ai-persona').value = store.ai_persona || '';
       document.getElementById('ai-tone').value = store.ai_tone || 'friendly';
       document.getElementById('greeting-message').value = store.greeting_message || '';
       document.getElementById('system-prompt').value = store.system_prompt || '';
-      document.getElementById('business-type').value = store.business_type || 'OTHER';
+      
+      // 영업시간 및 메뉴
       document.getElementById('operating-hours-text').value = store.operating_hours || '';
       document.getElementById('menu-data-text').value = store.menu_data || '';
+      
+      // 네이버 연동
       document.getElementById('naver-talktalk-id').value = store.naver_talktalk_id || '';
       document.getElementById('naver-reservation-id').value = store.naver_reservation_id || '';
+      
+      // SMS 알림 연락처 - 원장님 휴대폰
+      const ownerPhoneEl = document.getElementById('owner-phone');
+      if (ownerPhoneEl) {
+        ownerPhoneEl.value = store.owner_phone || '';
+        console.log('[populateForm] owner_phone 설정:', store.owner_phone);
+      }
+      
+      // 추가 관리자 로드 - 기존 항목 먼저 제거
+      const contactsList = document.getElementById('additional-contacts-list');
+      if (contactsList) contactsList.innerHTML = '';
+      
+      if (store.additional_contacts) {
+        try {
+          const contacts = JSON.parse(store.additional_contacts);
+          console.log('[populateForm] additional_contacts 파싱:', contacts);
+          contacts.forEach(contact => addAdditionalContact(contact.name, contact.phone));
+        } catch (e) {
+          console.warn('Failed to parse additional_contacts:', e);
+        }
+      }
       
       // AI 모델 선택
       if (store.ai_model) {
         selectModel(store.ai_model);
       }
+    }
+    
+    // 추가 관리자 항목 추가
+    function addAdditionalContact(name = '', phone = '') {
+      const container = document.getElementById('additional-contacts-list');
+      const index = container.children.length;
+      
+      const itemDiv = document.createElement('div');
+      itemDiv.className = 'flex gap-2 items-center';
+      itemDiv.innerHTML = \`
+        <input type="text" placeholder="이름 (예: 디자이너A)" value="\${name}"
+          class="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm additional-contact-name">
+        <input type="text" placeholder="전화번호 (예: 010-1234-5678)" value="\${phone}"
+          class="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm additional-contact-phone">
+        <button onclick="this.parentElement.remove()" class="text-white/40 hover:text-red-400 px-2">
+          <i class="fas fa-times"></i>
+        </button>
+      \`;
+      container.appendChild(itemDiv);
+    }
+    
+    // 추가 관리자 데이터 수집
+    function getAdditionalContacts() {
+      const contacts = [];
+      document.querySelectorAll('#additional-contacts-list > div').forEach(item => {
+        const name = item.querySelector('.additional-contact-name').value.trim();
+        const phone = item.querySelector('.additional-contact-phone').value.trim();
+        if (name && phone) {
+          contacts.push({ name, phone });
+        }
+      });
+      return contacts;
     }
     
     // 탭 전환
@@ -970,16 +1086,30 @@ export function renderStoreSettings(storeId: number): string {
         menuData = menuData ? menuData + '\\n' + menuItemsText : menuItemsText;
       }
       
+      // 추가 관리자 데이터 수집
+      const additionalContacts = getAdditionalContacts();
+      
       const settings = {
+        // 기본 매장 정보
         store_name: document.getElementById('store-name-input').value,
         business_type: document.getElementById('business-type').value,
+        address: document.getElementById('store-address')?.value || '',
+        phone: document.getElementById('store-phone')?.value || '',
+        
+        // AI 설정
         ai_persona: document.getElementById('ai-persona').value,
         ai_tone: document.getElementById('ai-tone').value,
         greeting_message: document.getElementById('greeting-message').value,
         system_prompt: document.getElementById('system-prompt').value,
+        
+        // 영업 정보
         operating_hours: document.getElementById('operating-hours-text').value,
         menu_data: menuData,
+        
+        // AI 모델
         ai_model: document.querySelector('input[name="ai-model"]:checked')?.value || 'gemini',
+        
+        // 연동 설정
         naver_talktalk_id: document.getElementById('naver-talktalk-id').value,
         naver_reservation_id: document.getElementById('naver-reservation-id').value,
         ocr_enabled: document.getElementById('ocr-enabled').checked,
@@ -988,9 +1118,17 @@ export function renderStoreSettings(storeId: number): string {
         contact_phone: document.getElementById('contact-phone')?.value || '',
         kakao_id: document.getElementById('kakao-id')?.value || '',
         instagram_id: document.getElementById('instagram-id')?.value || '',
+        
+        // 모델 파라미터
         temperature: parseFloat(document.getElementById('temperature').value),
-        max_tokens: parseInt(document.getElementById('max-tokens').value)
+        max_tokens: parseInt(document.getElementById('max-tokens').value),
+        
+        // SMS 알림 연락처
+        owner_phone: document.getElementById('owner-phone')?.value || '',
+        additional_contacts: additionalContacts.length > 0 ? JSON.stringify(additionalContacts) : ''
       };
+      
+      console.log('[saveAllSettings] 저장 데이터:', settings);
       
       try {
         const res = await fetch('/api/stores/' + STORE_ID + '/settings', {
