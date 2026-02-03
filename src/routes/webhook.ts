@@ -108,8 +108,9 @@ webhook.get('/v1/naver/callback/:storeId', (c) => {
 });
 
 // Webhook message handler (POST) - storeId 포함 경로 (네이버 파트너센터 등록용)
+// 참고: storeId는 내부 DB ID 또는 네이버 플레이스 ID 모두 지원
 webhook.post('/v1/naver/callback/:storeId', async (c) => {
-  const urlStoreId = parseInt(c.req.param('storeId'), 10);
+  const urlStoreId = c.req.param('storeId');
   console.log(`[Webhook] POST with Store ID: ${urlStoreId}`);
   
   const startTime = Date.now();
@@ -129,17 +130,29 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     // ============ [XIVIX_WATCHDOG] 이벤트 로깅 ============
     console.log(`[Webhook] Event: ${eventType}, Store: ${urlStoreId}, Customer: ${customerId?.slice(0, 8)}...`);
     
-    // ============ URL에서 받은 storeId로 매장 조회 ============
-    const storeResult = await env.DB.prepare(
-      'SELECT * FROM xivix_stores WHERE id = ? AND is_active = 1'
+    // ============ 매장 조회 (내부 ID 또는 네이버 플레이스 ID로) ============
+    let storeResult: Store | null = null;
+    
+    // 1차: 네이버 톡톡 ID로 조회 (플레이스 ID)
+    storeResult = await env.DB.prepare(
+      'SELECT * FROM xivix_stores WHERE naver_talktalk_id = ? AND is_active = 1'
     ).bind(urlStoreId).first<Store>();
     
-    if (!storeResult) {
-      console.log(`[Webhook] Store not found for ID: ${urlStoreId}`);
-      // 매장이 없어도 기본 응답 처리
+    // 2차: 내부 DB ID로 조회 (숫자인 경우)
+    if (!storeResult && /^\d+$/.test(urlStoreId)) {
+      storeResult = await env.DB.prepare(
+        'SELECT * FROM xivix_stores WHERE id = ? AND is_active = 1'
+      ).bind(parseInt(urlStoreId, 10)).first<Store>();
     }
     
-    const storeId = storeResult?.id || urlStoreId;
+    if (!storeResult) {
+      console.log(`[Webhook] Store not found for ID: ${urlStoreId} (tried naver_talktalk_id and internal id)`);
+      // 매장이 없어도 기본 응답 처리
+    } else {
+      console.log(`[Webhook] Store found: ${storeResult.store_name} (ID: ${storeResult.id})`);
+    }
+    
+    const storeId = storeResult?.id || parseInt(urlStoreId, 10) || 0;
     
     // ============ [Phase 03-21] 이벤트 타입별 처리 ============
     
@@ -212,13 +225,19 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     // ============ [Phase 03-22] send 이벤트 처리 ============
     console.log(`[Webhook] SEND event - Processing message for Store ${storeId}`);
     
-    // Rate limiting
-    const rateLimit = await checkRateLimit(env.KV, customerId, 30, 60);
-    if (!rateLimit.allowed) {
-      await sendTextMessage(env, customerId, 
-        '잠시 후 다시 문의해주세요. (요청이 너무 많습니다)'
-      );
-      return c.json({ success: true, store_id: storeId });
+    // Rate limiting (KV가 있을 때만)
+    if (env.KV) {
+      try {
+        const rateLimit = await checkRateLimit(env.KV, customerId, 30, 60);
+        if (!rateLimit.allowed) {
+          await sendTextMessage(env, customerId, 
+            '잠시 후 다시 문의해주세요. (요청이 너무 많습니다)'
+          );
+          return c.json({ success: true, store_id: storeId });
+        }
+      } catch (rateLimitError) {
+        console.warn('[Webhook] Rate limit check error:', rateLimitError);
+      }
     }
     
     // 메시지 처리
@@ -251,6 +270,95 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     
     console.log(`[Webhook] Consultation type: ${consultationType}, Business: ${businessType}`);
     
+    // ============ [Phase 04] 네이버 예약 연동 처리 (AI 응답 전에 체크) ============
+    const bookingIntent = detectBookingIntent(userMessage);
+    let bookingState = { isBookingFlow: false, step: 'idle' as const, lastUpdated: Date.now() };
+    
+    // KV가 있을 때만 상태 조회
+    if (env.KV) {
+      try {
+        bookingState = await getBookingState(env.KV, storeId, customerId);
+      } catch (kvError) {
+        console.warn('[Webhook] KV getBookingState error:', kvError);
+      }
+    }
+    
+    // 예약 의도가 있거나 예약 흐름 중인 경우 - 예약 로직 처리 후 리턴
+    if (bookingIntent.hasBookingIntent || bookingState.isBookingFlow) {
+      console.log(`[Webhook] Booking intent detected: ${bookingIntent.intentType}, state: ${bookingState.step}`);
+      
+      const storeName = storeResult?.store_name || '매장';
+      const naverReservationId = storeResult?.naver_reservation_id;
+      
+      // 예약 문의 또는 가능 시간 조회 요청
+      if (bookingIntent.intentType === 'check_available' || bookingIntent.intentType === 'inquiry') {
+        try {
+          // 네이버 예약 ID가 있으면 바로 예약 버튼 제공
+          if (naverReservationId) {
+            const bookingUrl = getNaverBookingUrl(naverReservationId);
+            
+            // 예약 안내 메시지
+            await sendTextMessage(env, customerId, 
+              `📅 ${storeName} 예약 안내\n\n` +
+              `아래 버튼을 눌러 바로 예약하실 수 있어요!\n` +
+              `네이버 예약창에서 원하시는 날짜와 시술을 선택해주세요. 😊`
+            );
+            
+            // 예약 버튼 전송
+            await sendButtonMessage(env, customerId,
+              '🗓️ 네이버 예약창에서 빈 시간을 확인하고 바로 예약하세요!',
+              [
+                { type: 'LINK', title: '📱 네이버 예약하기', linkUrl: bookingUrl },
+                { type: 'TEXT', title: '💬 전화 문의', value: '전화번호알려주세요' }
+              ]
+            );
+          } else {
+            // 네이버 예약 ID가 없으면 안내 메시지
+            await sendTextMessage(env, customerId, 
+              `${storeName} 예약 문의 감사합니다! 😊\n\n` +
+              `예약은 전화 또는 방문으로 가능합니다.\n` +
+              `전화번호를 알려드릴까요?`
+            );
+          }
+        } catch (bookingError) {
+          console.error('[Webhook] Booking inquiry error:', bookingError);
+        }
+      }
+      // 일반 예약 문의 (네이버 예약 버튼 제공)
+      else if (naverReservationId) {
+        await sendButtonMessage(env, customerId, 
+          '바로 예약하시겠어요?',
+          [
+            { type: 'LINK', title: '지금 예약하기', linkUrl: getNaverBookingUrl(naverReservationId) },
+            { type: 'TEXT', title: '예약 가능 시간 확인', value: '예약가능시간' }
+          ]
+        );
+      }
+      
+      // 예약 처리 완료 - 로그 저장 후 리턴
+      const bookingResponseTime = Date.now() - startTime;
+      await env.DB.prepare(`
+        INSERT INTO xivix_conversation_logs 
+        (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
+        VALUES (?, ?, ?, ?, ?, ?, 1)
+      `).bind(
+        storeId,
+        customerId,
+        'text',
+        userMessage.slice(0, 500),
+        `[booking-flow] 예약 의도 감지: ${bookingIntent.intentType}`,
+        bookingResponseTime
+      ).run();
+      
+      return c.json({ 
+        success: true, 
+        store_id: storeId,
+        response_time_ms: bookingResponseTime,
+        booking_intent: bookingIntent.intentType
+      });
+    }
+    
+    // ============ 일반 AI 응답 처리 ============
     let aiResponse = '';
     let aiModel = '';
     let verified = false;
@@ -328,142 +436,14 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       }
     }
     
-    // ============ [Phase 04] 네이버 예약 연동 처리 ============
-    const bookingIntent = detectBookingIntent(userMessage);
-    const bookingState = await getBookingState(env.KV, storeId, customerId);
-    
-    // 예약 의도가 있거나 예약 흐름 중인 경우
-    if (bookingIntent.hasBookingIntent || bookingState.isBookingFlow) {
-      console.log(`[Webhook] Booking intent detected: ${bookingIntent.intentType}, state: ${bookingState.step}`);
-      
-      const storeName = storeResult?.store_name || '매장';
-      const naverReservationId = storeResult?.naver_reservation_id;
-      
-      // 예약 가능 시간 조회 요청
-      if (bookingIntent.intentType === 'check_available' || bookingIntent.intentType === 'inquiry') {
-        try {
-          const availableSlots = await getAvailableSlotsForDays(
-            env.DB,
-            storeId,
-            storeResult?.operating_hours || null,
-            7,
-            30
-          );
-          
-          const slotsMessage = generateAvailableSlotsMessage(
-            storeName,
-            availableSlots,
-            bookingIntent.extractedDate
-          );
-          
-          await sendTextMessage(env, customerId, slotsMessage);
-          
-          // 네이버 예약 ID가 있으면 버튼도 전송
-          if (naverReservationId) {
-            await sendButtonMessage(env, customerId,
-              '네이버에서 바로 예약하실 수도 있어요!',
-              [
-                { type: 'LINK', title: '네이버 예약하기', linkUrl: getNaverBookingUrl(naverReservationId) },
-                { type: 'TEXT', title: '여기서 예약할게요', value: '톡톡예약' }
-              ]
-            );
-          }
-          
-          // 예약 흐름 상태 저장
-          await setBookingState(env.KV, storeId, customerId, {
-            isBookingFlow: true,
-            step: 'checking_date',
-            targetDate: bookingIntent.extractedDate
-          });
-          
-        } catch (bookingError) {
-          console.error('[Webhook] Booking slots error:', bookingError);
-          await sendTextMessage(env, customerId, 
-            '예약 가능 시간을 조회하는 중 문제가 발생했어요. 잠시 후 다시 시도해주세요. 😅'
-          );
-        }
-      }
-      // 예약 생성 요청 (날짜/시간이 있는 경우)
-      else if (bookingIntent.intentType === 'make_booking' && bookingIntent.extractedDate && bookingIntent.extractedTime) {
-        // 예약 확인 메시지 전송
-        const confirmMsg = generateBookingConfirmMessage(
-          storeName,
-          bookingIntent.extractedDate,
-          bookingIntent.extractedTime,
-          bookingIntent.extractedService
-        );
-        
-        await sendTextMessage(env, customerId, confirmMsg);
-        await sendButtonMessage(env, customerId,
-          '예약을 확정할까요?',
-          [
-            { type: 'TEXT', title: '✅ 예약 확정', value: '예약확정' },
-            { type: 'TEXT', title: '❌ 취소', value: '예약취소' },
-            { type: 'TEXT', title: '🔄 시간 변경', value: '시간변경' }
-          ]
-        );
-        
-        // 예약 흐름 상태 저장
-        await setBookingState(env.KV, storeId, customerId, {
-          isBookingFlow: true,
-          step: 'confirming',
-          targetDate: bookingIntent.extractedDate,
-          targetTime: bookingIntent.extractedTime,
-          targetService: bookingIntent.extractedService
-        });
-      }
-      // 예약 확정 처리 (상태가 confirming인 경우)
-      else if (bookingState.step === 'confirming' && /예약확정|확정|네|예|좋아/.test(userMessage)) {
-        if (bookingState.targetDate && bookingState.targetTime) {
-          const result = await createBooking(env.DB, {
-            storeId,
-            naverReservationId: naverReservationId || '',
-            customerId,
-            date: bookingState.targetDate,
-            time: bookingState.targetTime,
-            serviceName: bookingState.targetService,
-            status: 'confirmed'
-          });
-          
-          if (result.success) {
-            const completeMsg = generateBookingCompleteMessage(
-              storeName,
-              bookingState.targetDate,
-              bookingState.targetTime,
-              result.bookingId,
-              bookingState.targetService
-            );
-            
-            await sendTextMessage(env, customerId, completeMsg);
-            
-            // 예약 흐름 종료
-            await clearBookingState(env.KV, storeId, customerId);
-          } else {
-            await sendTextMessage(env, customerId, 
-              `예약 처리 중 문제가 발생했어요. ${result.error || ''} 다시 시도해주세요. 😅`
-            );
-          }
-        }
-      }
-      // 예약 취소 처리
-      else if (/예약취소|취소/.test(userMessage) && bookingState.isBookingFlow) {
-        await sendTextMessage(env, customerId, '예약이 취소되었습니다. 다른 문의사항이 있으시면 말씀해주세요! 😊');
-        await clearBookingState(env.KV, storeId, customerId);
-      }
-      // 일반 예약 문의 (네이버 예약 버튼 제공)
-      else if (naverReservationId) {
-        await sendButtonMessage(env, customerId, 
-          '바로 예약하시겠어요?',
-          [
-            { type: 'LINK', title: '지금 예약하기', linkUrl: getNaverBookingUrl(naverReservationId) },
-            { type: 'TEXT', title: '예약 가능 시간 확인', value: '예약가능시간' }
-          ]
-        );
+    // 대화 컨텍스트 저장
+    if (env.KV) {
+      try {
+        await updateConversationContext(env.KV, storeId, customerId, userMessage, aiResponse);
+      } catch (kvError) {
+        console.warn('[Webhook] KV updateConversationContext error:', kvError);
       }
     }
-    
-    // 대화 컨텍스트 저장
-    await updateConversationContext(env.KV, storeId, customerId, userMessage, aiResponse);
     
     // 로그 저장 (AI 모델 정보 포함)
     const responseTime = Date.now() - startTime;
@@ -489,9 +469,17 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       verified
     });
     
-  } catch (error) {
-    console.error(`[Webhook] Error for Store ${urlStoreId}:`, error);
-    return c.json({ success: false, error: 'Internal server error', store_id: urlStoreId }, 500);
+  } catch (error: any) {
+    const errorMessage = error?.message || error?.toString() || 'Unknown error';
+    const errorStack = error?.stack || '';
+    console.error(`[Webhook] Error for Store ${urlStoreId}:`, errorMessage);
+    console.error(`[Webhook] Error stack:`, errorStack);
+    return c.json({ 
+      success: false, 
+      error: 'Internal server error', 
+      store_id: urlStoreId,
+      error_message: errorMessage.slice(0, 200)
+    }, 500);
   }
 });
 

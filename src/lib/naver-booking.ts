@@ -261,12 +261,27 @@ export interface BookingIntent {
 export function detectBookingIntent(message: string): BookingIntent {
   const lowerMsg = message.toLowerCase();
   
-  // 예약 관련 키워드
-  const bookingKeywords = ['예약', '예매', '부킹', '스케줄', '일정'];
+  // 예약 관련 키워드 (확장)
+  const bookingKeywords = ['예약', '예매', '부킹', '스케줄', '일정', '방문', '상담'];
   const timeKeywords = ['시간', '언제', '몇시', '오전', '오후', '저녁', '아침'];
   const availableKeywords = ['빈자리', '가능', '자리', '비어있', '남은'];
   const cancelKeywords = ['취소', '캔슬'];
   const changeKeywords = ['변경', '수정', '바꾸'];
+  // 예약 방법 문의 패턴
+  const howToBookPatterns = [
+    /예약.*어떻게/,
+    /어떻게.*예약/,
+    /예약.*하고.*싶/,
+    /예약.*할.*수/,
+    /예약.*하려/,
+    /예약.*방법/,
+    /예약.*해주/,
+    /예약하고/,
+    /예약할래/,
+    /예약해요/,
+    /예약좀/,
+    /예약\s*요/
+  ];
   
   // 날짜 추출 (오늘, 내일, 모레, 이번주, 다음주, 특정 날짜)
   let extractedDate: string | undefined;
@@ -331,6 +346,8 @@ export function detectBookingIntent(message: string): BookingIntent {
   const hasAvailableKeyword = availableKeywords.some(k => lowerMsg.includes(k));
   const hasCancelKeyword = cancelKeywords.some(k => lowerMsg.includes(k));
   const hasChangeKeyword = changeKeywords.some(k => lowerMsg.includes(k));
+  // 예약 방법 문의 패턴 체크
+  const hasHowToBookPattern = howToBookPatterns.some(pattern => pattern.test(message));
 
   if (hasCancelKeyword && hasBookingKeyword) {
     intentType = 'cancel';
@@ -344,9 +361,10 @@ export function detectBookingIntent(message: string): BookingIntent {
   } else if (hasAvailableKeyword || (hasTimeKeyword && hasBookingKeyword)) {
     intentType = 'check_available';
     confidence = 0.85;
-  } else if (hasBookingKeyword) {
+  } else if (hasHowToBookPattern || hasBookingKeyword) {
+    // "예약 어떻게 해요?" 같은 질문도 inquiry로 처리
     intentType = 'inquiry';
-    confidence = 0.7;
+    confidence = hasHowToBookPattern ? 0.95 : 0.7;
   }
 
   return {
