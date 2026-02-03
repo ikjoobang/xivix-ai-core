@@ -5294,6 +5294,16 @@ api.put('/stores/:id/settings', async (c) => {
       ocr_enabled?: boolean;
       temperature?: number;
       max_tokens?: number;
+      address?: string;
+      phone?: string;
+    };
+
+    // 빈 문자열을 null로 변환하는 헬퍼 함수 (COALESCE가 기존 값 유지하도록)
+    const nullIfEmpty = (value: string | undefined | null): string | null => {
+      if (value === undefined || value === null || value.trim() === '') {
+        return null;
+      }
+      return value;
     };
 
     await c.env.DB.prepare(`
@@ -5309,20 +5319,24 @@ api.put('/stores/:id/settings', async (c) => {
         ai_model = COALESCE(?, ai_model),
         naver_talktalk_id = COALESCE(?, naver_talktalk_id),
         naver_reservation_id = COALESCE(?, naver_reservation_id),
+        address = COALESCE(?, address),
+        phone = COALESCE(?, phone),
         updated_at = datetime('now')
       WHERE id = ?
     `).bind(
-      settings.store_name || null,
-      settings.business_type || null,
-      settings.ai_persona || null,
-      settings.ai_tone || null,
-      settings.greeting_message || null,
-      settings.system_prompt || null,
-      settings.operating_hours || null,
-      settings.menu_data || null,
-      settings.ai_model || null,
-      settings.naver_talktalk_id || null,
-      settings.naver_reservation_id || null,
+      nullIfEmpty(settings.store_name),
+      nullIfEmpty(settings.business_type),
+      nullIfEmpty(settings.ai_persona),
+      nullIfEmpty(settings.ai_tone),
+      nullIfEmpty(settings.greeting_message),
+      nullIfEmpty(settings.system_prompt),
+      nullIfEmpty(settings.operating_hours),
+      nullIfEmpty(settings.menu_data),
+      nullIfEmpty(settings.ai_model),
+      nullIfEmpty(settings.naver_talktalk_id),
+      nullIfEmpty(settings.naver_reservation_id),
+      nullIfEmpty(settings.address),
+      nullIfEmpty(settings.phone),
       id
     ).run();
 
