@@ -270,6 +270,31 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     
     console.log(`[Webhook] Consultation type: ${consultationType}, Business: ${businessType}`);
     
+    // ============ [전화 문의 처리] ============
+    const phoneInquiryPatterns = /전화.*문의|전화번호|연락처|전화.*알려|전화.*뭐예요|전화.*뭔가요/;
+    if (phoneInquiryPatterns.test(userMessage)) {
+      const storeName = storeResult?.store_name || '매장';
+      const storePhone = storeResult?.phone || '031-235-5726';
+      const storeAddress = storeResult?.address || '';
+      
+      await sendTextMessage(env, customerId, 
+        `📞 ${storeName} 연락처 안내\n\n` +
+        `☎️ 전화: ${storePhone}\n` +
+        (storeAddress ? `📍 주소: ${storeAddress}\n\n` : '\n') +
+        `전화가 어려우시면 네이버 톡톡으로 문의해주세요! 😊`
+      );
+      
+      // 로그 저장 후 리턴
+      const phoneResponseTime = Date.now() - startTime;
+      await env.DB.prepare(`
+        INSERT INTO xivix_conversation_logs 
+        (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
+        VALUES (?, ?, ?, ?, ?, ?, 0)
+      `).bind(storeId, customerId, 'text', userMessage.slice(0, 500), `[phone-inquiry] 전화번호 안내: ${storePhone}`, phoneResponseTime).run();
+      
+      return c.json({ success: true, store_id: storeId, response_time_ms: phoneResponseTime, intent: 'phone_inquiry' });
+    }
+    
     // ============ [Phase 04] 네이버 예약 연동 처리 (AI 응답 전에 체크) ============
     const bookingIntent = detectBookingIntent(userMessage);
     let bookingState = { isBookingFlow: false, step: 'idle' as const, lastUpdated: Date.now() };
