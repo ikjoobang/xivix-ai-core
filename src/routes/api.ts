@@ -5292,12 +5292,16 @@ api.put('/stores/:id/settings', async (c) => {
       naver_talktalk_id?: string;
       naver_reservation_id?: string;
       ocr_enabled?: boolean;
+      ocr_instruction?: string;          // OCR 처리 후 AI 지침
       temperature?: number;
       max_tokens?: number;
       address?: string;
       phone?: string;
       owner_phone?: string;              // 원장님 휴대폰 (SMS 알림 발송용)
       additional_contacts?: string;      // 추가 관리자 JSON 배열
+      auto_greeting?: boolean;           // 자동 환영 메시지
+      auto_reservation?: boolean;        // 예약 유도 메시지
+      auto_followup?: boolean;           // 재방문 메시지
     };
 
     // 빈 문자열을 null로 변환하는 헬퍼 함수 (COALESCE가 기존 값 유지하도록)
@@ -5325,6 +5329,11 @@ api.put('/stores/:id/settings', async (c) => {
         phone = COALESCE(?, phone),
         owner_phone = COALESCE(?, owner_phone),
         additional_contacts = COALESCE(?, additional_contacts),
+        ocr_enabled = COALESCE(?, ocr_enabled),
+        ocr_instruction = COALESCE(?, ocr_instruction),
+        auto_greeting = COALESCE(?, auto_greeting),
+        auto_reservation = COALESCE(?, auto_reservation),
+        auto_followup = COALESCE(?, auto_followup),
         updated_at = datetime('now')
       WHERE id = ?
     `).bind(
@@ -5343,6 +5352,11 @@ api.put('/stores/:id/settings', async (c) => {
       nullIfEmpty(settings.phone),
       nullIfEmpty(settings.owner_phone),
       nullIfEmpty(settings.additional_contacts),
+      settings.ocr_enabled !== undefined ? (settings.ocr_enabled ? 1 : 0) : null,
+      nullIfEmpty(settings.ocr_instruction),
+      settings.auto_greeting !== undefined ? (settings.auto_greeting ? 1 : 0) : null,
+      settings.auto_reservation !== undefined ? (settings.auto_reservation ? 1 : 0) : null,
+      settings.auto_followup !== undefined ? (settings.auto_followup ? 1 : 0) : null,
       id
     ).run();
 

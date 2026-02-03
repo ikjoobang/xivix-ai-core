@@ -834,6 +834,55 @@ export function renderStoreSettings(storeId: number): string {
       if (store.ai_model) {
         selectModel(store.ai_model);
       }
+      
+      // 고급 설정 - OCR
+      const ocrEnabledEl = document.getElementById('ocr-enabled');
+      if (ocrEnabledEl) ocrEnabledEl.checked = store.ocr_enabled !== false;
+      
+      const ocrInstructionEl = document.getElementById('ocr-instruction');
+      if (ocrInstructionEl) ocrInstructionEl.value = store.ocr_instruction || '';
+      
+      // OCR 프리셋 - 저장된 instruction 값으로 프리셋 자동 선택
+      const ocrPresetEl = document.getElementById('ocr-preset');
+      if (ocrPresetEl && store.ocr_instruction) {
+        // 프리셋 매칭 시도 (정확히 일치하는 프리셋이 있으면 선택)
+        const presetOptions = ocrPresetEl.options;
+        let matched = false;
+        for (let i = 0; i < presetOptions.length; i++) {
+          if (presetOptions[i].value !== 'default') {
+            // 프리셋 적용 후 비교를 위해 임시로 선택
+            ocrPresetEl.value = presetOptions[i].value;
+            applyOcrPreset();
+            if (ocrInstructionEl.value === store.ocr_instruction) {
+              matched = true;
+              break;
+            }
+          }
+        }
+        if (!matched) {
+          ocrPresetEl.value = 'default';
+          ocrInstructionEl.value = store.ocr_instruction;
+        }
+      }
+      
+      // 고급 설정 - 자동화
+      const autoGreetingEl = document.getElementById('auto-greeting');
+      if (autoGreetingEl) autoGreetingEl.checked = store.auto_greeting !== false;
+      
+      const autoReservationEl = document.getElementById('auto-reservation');
+      if (autoReservationEl) autoReservationEl.checked = store.auto_reservation !== false;
+      
+      const autoFollowupEl = document.getElementById('auto-followup');
+      if (autoFollowupEl) autoFollowupEl.checked = store.auto_followup === true;
+      
+      // 모델 파라미터
+      const temperatureEl = document.getElementById('temperature');
+      if (temperatureEl && store.ai_temperature) {
+        temperatureEl.value = store.ai_temperature;
+        document.getElementById('temp-value').textContent = store.ai_temperature;
+      }
+      
+      console.log('[populateForm] 고급 설정 로드 완료');
     }
     
     // 추가 관리자 항목 추가
@@ -1122,6 +1171,11 @@ export function renderStoreSettings(storeId: number): string {
         // 모델 파라미터
         temperature: parseFloat(document.getElementById('temperature').value),
         max_tokens: parseInt(document.getElementById('max-tokens').value),
+        
+        // 자동화 설정
+        auto_greeting: document.getElementById('auto-greeting')?.checked ?? true,
+        auto_reservation: document.getElementById('auto-reservation')?.checked ?? true,
+        auto_followup: document.getElementById('auto-followup')?.checked ?? false,
         
         // SMS 알림 연락처
         owner_phone: document.getElementById('owner-phone')?.value || '',
