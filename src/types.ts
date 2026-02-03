@@ -46,7 +46,9 @@ export interface Store {
   store_name: string;
   business_type: string;
   address?: string;
-  phone?: string;
+  phone?: string;                    // 매장 전화번호 (고객 안내용)
+  owner_phone?: string;              // 원장님 휴대폰 (SMS 알림 발송용)
+  additional_contacts?: string;      // 추가 관리자 JSON: [{"name":"디자이너A","phone":"010-1234-5678"}]
   operating_hours: string;
   menu_data: string; // JSON string
   ai_persona: string;

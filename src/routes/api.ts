@@ -5296,6 +5296,8 @@ api.put('/stores/:id/settings', async (c) => {
       max_tokens?: number;
       address?: string;
       phone?: string;
+      owner_phone?: string;              // 원장님 휴대폰 (SMS 알림 발송용)
+      additional_contacts?: string;      // 추가 관리자 JSON 배열
     };
 
     // 빈 문자열을 null로 변환하는 헬퍼 함수 (COALESCE가 기존 값 유지하도록)
@@ -5321,6 +5323,8 @@ api.put('/stores/:id/settings', async (c) => {
         naver_reservation_id = COALESCE(?, naver_reservation_id),
         address = COALESCE(?, address),
         phone = COALESCE(?, phone),
+        owner_phone = COALESCE(?, owner_phone),
+        additional_contacts = COALESCE(?, additional_contacts),
         updated_at = datetime('now')
       WHERE id = ?
     `).bind(
@@ -5337,6 +5341,8 @@ api.put('/stores/:id/settings', async (c) => {
       nullIfEmpty(settings.naver_reservation_id),
       nullIfEmpty(settings.address),
       nullIfEmpty(settings.phone),
+      nullIfEmpty(settings.owner_phone),
+      nullIfEmpty(settings.additional_contacts),
       id
     ).run();
 

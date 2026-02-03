@@ -295,32 +295,58 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     }
     
     // ============ [콜백 요청 처리 - SMS 알림] ============
-    // 고객이 "전화해주세요", "연락 부탁", "메모 남겨주세요" 등 요청 시 원장님께 SMS 알림
+    // 고객이 "전화해주세요", "연락 부탁", "메모 남겨주세요" 등 요청 시 원장님 + 추가 관리자에게 SMS 알림
     const callbackRequestPatterns = /전화.*해.*주|연락.*해.*주|연락.*부탁|메모.*남|원장님.*전달|콜백|다시.*전화|전화.*바|연락.*드|통화.*원|상담.*원|원장님.*상담|사장님.*전달/;
     const phoneNumberPattern = /(?:010|011|016|017|018|019)[-\s]?\d{3,4}[-\s]?\d{4}/;
     
     // 원본 메시지로 패턴 매칭 (마스킹 전 전화번호 추출 필요)
     if (callbackRequestPatterns.test(originalMessage)) {
       const storeName = storeResult?.store_name || '매장';
-      const ownerPhone = storeResult?.phone || '031-235-5726';
+      const storePhone = storeResult?.phone || '031-235-5726'; // 매장 전화번호 (고객 안내용)
+      const ownerPhone = storeResult?.owner_phone || storePhone; // 원장님 휴대폰 (SMS 발송용)
+      
+      // 추가 관리자 연락처 파싱 (JSON 배열 형식: [{"name":"디자이너A","phone":"010-1234-5678"},...]
+      let additionalContacts: Array<{name: string; phone: string}> = [];
+      if (storeResult?.additional_contacts) {
+        try {
+          additionalContacts = JSON.parse(storeResult.additional_contacts);
+        } catch (e) {
+          console.warn('[Webhook] Failed to parse additional_contacts:', e);
+        }
+      }
       
       // 원본 메시지에서 고객 전화번호 추출 시도
       const customerPhoneMatch = originalMessage.match(phoneNumberPattern);
       
       if (customerPhoneMatch) {
-        // 고객이 전화번호를 같이 입력한 경우 - 즉시 원장님께 SMS 전송
+        // 고객이 전화번호를 같이 입력한 경우 - 즉시 원장님 + 추가 관리자에게 SMS 전송
         const customerPhone = customerPhoneMatch[0].replace(/[-\s]/g, '-');
         
-        // 원장님께 SMS 알림 전송
-        const smsText = `[${storeName}] 고객 콜백 요청\n\n📞 고객 연락처: ${customerPhone}\n💬 고객 메시지: ${userMessage.slice(0, 50)}${userMessage.length > 50 ? '...' : ''}\n\n⏰ ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`;
+        // SMS 내용 구성
+        const smsText = `[${storeName}] 고객 콜백 요청\n\n📞 고객 연락처: ${customerPhone}\n💬 메시지: ${originalMessage.slice(0, 40)}${originalMessage.length > 40 ? '...' : ''}\n\n⏰ ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`;
         
         try {
-          const smsResult = await sendSMS(env, ownerPhone, smsText);
-          console.log(`[Webhook] SMS to owner result:`, smsResult);
+          // 1. 원장님께 SMS 전송
+          const ownerSmsResult = await sendSMS(env, ownerPhone, smsText);
+          console.log(`[Webhook] SMS to owner (${ownerPhone}) result:`, ownerSmsResult);
           
-          if (smsResult.success) {
+          // 2. 추가 관리자들에게 SMS 전송
+          const additionalResults: Array<{name: string; success: boolean}> = [];
+          for (const contact of additionalContacts) {
+            if (contact.phone) {
+              const result = await sendSMS(env, contact.phone, smsText);
+              additionalResults.push({ name: contact.name, success: result.success });
+              console.log(`[Webhook] SMS to ${contact.name} (${contact.phone}) result:`, result);
+            }
+          }
+          
+          // 발송 결과 집계
+          const totalSent = 1 + additionalContacts.length;
+          const successCount = (ownerSmsResult.success ? 1 : 0) + additionalResults.filter(r => r.success).length;
+          
+          if (successCount > 0) {
             await sendTextMessage(env, customerId,
-              `📱 원장님께 연락 요청을 전달해드렸어요!\n\n` +
+              `📱 담당자에게 연락 요청을 전달해드렸어요!\n\n` +
               `입력해주신 번호: ${customerPhone}\n\n` +
               `시술 중이시더라도 확인 후 연락드릴게요.\n` +
               `조금만 기다려주세요! 😊`
@@ -330,31 +356,41 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
             await sendTextMessage(env, customerId,
               `알림 전송에 문제가 있었어요. 😥\n\n` +
               `직접 전화해주시면 더 빠르게 상담받으실 수 있어요.\n` +
-              `📞 ${ownerPhone}`
+              `📞 ${storePhone}`
             );
           }
+          
+          // 로그 저장
+          const callbackResponseTime = Date.now() - startTime;
+          await env.DB.prepare(`
+            INSERT INTO xivix_conversation_logs 
+            (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
+            VALUES (?, ?, ?, ?, ?, ?, 0)
+          `).bind(storeId, customerId, 'text', userMessage.slice(0, 500), `[callback-request] SMS 발송 ${successCount}/${totalSent}명: ${customerPhone}`, callbackResponseTime).run();
+          
+          return c.json({ 
+            success: true, 
+            store_id: storeId, 
+            response_time_ms: callbackResponseTime, 
+            intent: 'callback_request', 
+            sms_sent: true,
+            sms_recipients: totalSent,
+            sms_success: successCount
+          });
         } catch (smsError) {
           console.error('[Webhook] SMS send error:', smsError);
           await sendTextMessage(env, customerId,
             `죄송합니다, 일시적인 오류가 발생했어요.\n\n` +
             `직접 전화주시면 바로 상담해드릴게요!\n` +
-            `📞 ${ownerPhone}`
+            `📞 ${storePhone}`
           );
+          
+          return c.json({ success: false, store_id: storeId, error: 'SMS send failed' }, 500);
         }
-        
-        // 로그 저장
-        const callbackResponseTime = Date.now() - startTime;
-        await env.DB.prepare(`
-          INSERT INTO xivix_conversation_logs 
-          (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
-          VALUES (?, ?, ?, ?, ?, ?, 0)
-        `).bind(storeId, customerId, 'text', userMessage.slice(0, 500), `[callback-request] SMS 알림 전송: ${customerPhone}`, callbackResponseTime).run();
-        
-        return c.json({ success: true, store_id: storeId, response_time_ms: callbackResponseTime, intent: 'callback_request', sms_sent: true });
       } else {
         // 전화번호 없이 콜백 요청만 한 경우 - 전화번호 요청
         await sendButtonMessage(env, customerId,
-          `📱 원장님께 연락 전달해드릴게요!\n\n` +
+          `📱 담당자에게 연락 전달해드릴게요!\n\n` +
           `연락받으실 전화번호를 입력해주세요.\n` +
           `예) 010-1234-5678`,
           [
@@ -380,8 +416,19 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     const phoneOnlyPattern = /^(?:010|011|016|017|018|019)[-\s]?\d{3,4}[-\s]?\d{4}$/;
     if (phoneOnlyPattern.test(originalMessage.trim())) {
       const storeName = storeResult?.store_name || '매장';
-      const ownerPhone = storeResult?.phone || '031-235-5726';
+      const storePhone = storeResult?.phone || '031-235-5726'; // 매장 전화번호 (고객 안내용)
+      const ownerPhone = storeResult?.owner_phone || storePhone; // 원장님 휴대폰 (SMS 발송용)
       const customerPhone = originalMessage.trim().replace(/[-\s]/g, '-');
+      
+      // 추가 관리자 연락처 파싱
+      let additionalContacts: Array<{name: string; phone: string}> = [];
+      if (storeResult?.additional_contacts) {
+        try {
+          additionalContacts = JSON.parse(storeResult.additional_contacts);
+        } catch (e) {
+          console.warn('[Webhook] Failed to parse additional_contacts:', e);
+        }
+      }
       
       // 대화 맥락 확인 (이전에 콜백 요청이 있었는지)
       const recentContext = context.slice(-3).map(c => c.role === 'user' ? c.content : '').join(' ');
@@ -390,16 +437,27 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
                                  recentContext.includes('연락');
       
       if (hadCallbackRequest) {
-        // 원장님께 SMS 알림 전송
+        // SMS 내용 구성
         const smsText = `[${storeName}] 고객 콜백 요청\n\n📞 고객 연락처: ${customerPhone}\n\n⏰ ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`;
         
         try {
-          const smsResult = await sendSMS(env, ownerPhone, smsText);
-          console.log(`[Webhook] SMS to owner (phone only) result:`, smsResult);
+          // 1. 원장님께 SMS 전송
+          const ownerSmsResult = await sendSMS(env, ownerPhone, smsText);
+          console.log(`[Webhook] SMS to owner (${ownerPhone}) phone-only result:`, ownerSmsResult);
           
-          if (smsResult.success) {
+          // 2. 추가 관리자들에게 SMS 전송
+          for (const contact of additionalContacts) {
+            if (contact.phone) {
+              const result = await sendSMS(env, contact.phone, smsText);
+              console.log(`[Webhook] SMS to ${contact.name} (${contact.phone}) phone-only result:`, result);
+            }
+          }
+          
+          const totalSent = 1 + additionalContacts.length;
+          
+          if (ownerSmsResult.success) {
             await sendTextMessage(env, customerId,
-              `✅ 원장님께 전달 완료!\n\n` +
+              `✅ 담당자에게 전달 완료!\n\n` +
               `입력해주신 번호: ${customerPhone}\n\n` +
               `시술 중이시더라도 확인 후 연락드릴게요.\n` +
               `감사합니다! 😊`
@@ -408,27 +466,28 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
             await sendTextMessage(env, customerId,
               `알림 전송에 문제가 있었어요.\n` +
               `직접 전화해주시면 더 빠르게 상담받으실 수 있어요.\n` +
-              `📞 ${ownerPhone}`
+              `📞 ${storePhone}`
             );
           }
+          
+          // 로그 저장
+          const callbackResponseTime = Date.now() - startTime;
+          await env.DB.prepare(`
+            INSERT INTO xivix_conversation_logs 
+            (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
+            VALUES (?, ?, ?, ?, ?, ?, 0)
+          `).bind(storeId, customerId, 'text', userMessage.slice(0, 500), `[callback-complete] SMS 발송 ${totalSent}명: ${customerPhone}`, callbackResponseTime).run();
+          
+          return c.json({ success: true, store_id: storeId, response_time_ms: callbackResponseTime, intent: 'callback_complete', sms_sent: true, sms_recipients: totalSent });
         } catch (smsError) {
           console.error('[Webhook] SMS send error:', smsError);
           await sendTextMessage(env, customerId,
             `죄송합니다, 일시적인 오류가 발생했어요.\n` +
             `직접 전화주시면 바로 상담해드릴게요!\n` +
-            `📞 ${ownerPhone}`
+            `📞 ${storePhone}`
           );
+          return c.json({ success: false, store_id: storeId, error: 'SMS send failed' }, 500);
         }
-        
-        // 로그 저장
-        const callbackResponseTime = Date.now() - startTime;
-        await env.DB.prepare(`
-          INSERT INTO xivix_conversation_logs 
-          (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
-          VALUES (?, ?, ?, ?, ?, ?, 0)
-        `).bind(storeId, customerId, 'text', userMessage.slice(0, 500), `[callback-complete] SMS 알림 전송: ${customerPhone}`, callbackResponseTime).run();
-        
-        return c.json({ success: true, store_id: storeId, response_time_ms: callbackResponseTime, intent: 'callback_complete', sms_sent: true });
       }
     }
     
