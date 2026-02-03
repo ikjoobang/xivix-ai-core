@@ -877,7 +877,7 @@ export function renderStoreSettings(storeId: number): string {
       if (autoReservationEl) autoReservationEl.checked = store.auto_reservation !== false;
       
       const autoFollowupEl = document.getElementById('auto-followup');
-      if (autoFollowupEl) autoFollowupEl.checked = store.auto_followup === true;
+      if (autoFollowupEl) autoFollowupEl.checked = store.auto_followup == 1 || store.auto_followup === true;
       
       // 모델 파라미터
       const temperatureEl = document.getElementById('temperature');
