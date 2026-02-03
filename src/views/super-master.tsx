@@ -104,6 +104,15 @@ export function renderSuperMasterDashboard(): string {
         요청 목록
         <span class="bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full text-xs" id="requests-badge">0</span>
       </button>
+      <button onclick="showTab('customers')" class="tab-btn px-6 py-3 rounded-xl border border-white/10 text-sm font-medium flex items-center gap-2">
+        <i class="fas fa-users"></i>
+        고객 관리
+        <span class="bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full text-xs" id="customers-badge">0</span>
+      </button>
+      <button onclick="showTab('ai-helper')" class="tab-btn px-6 py-3 rounded-xl border border-white/10 text-sm font-medium flex items-center gap-2">
+        <i class="fas fa-magic"></i>
+        AI 템플릿 상담
+      </button>
     </div>
   </div>
 
@@ -169,6 +178,183 @@ export function renderSuperMasterDashboard(): string {
         <div class="glass rounded-2xl p-8 text-center">
           <i class="fas fa-spinner fa-spin text-3xl text-white/30 mb-4"></i>
           <p class="text-white/50">로딩 중...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: 고객 관리 -->
+    <div id="tab-customers" class="tab-content hidden">
+      <div class="mb-6 flex items-center justify-between">
+        <div>
+          <h2 class="text-2xl font-bold mb-2">👥 전체 고객 관리</h2>
+          <p class="text-white/50">모든 매장의 고객을 통합 관리하세요</p>
+        </div>
+        <select id="customer-store-select" onchange="loadCustomersByStore(this.value)" class="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white min-w-[200px]">
+          <option value="all">전체 매장</option>
+        </select>
+      </div>
+      
+      <div class="glass rounded-2xl p-6 mb-6">
+        <div class="flex items-center gap-4 mb-4">
+          <input type="text" id="customer-search" placeholder="고객명, 전화번호 검색..." 
+            class="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white"
+            onkeyup="filterCustomers()">
+          <button onclick="loadAllCustomers()" class="px-4 py-3 glass rounded-xl hover:bg-white/10 flex items-center gap-2">
+            <i class="fas fa-sync-alt"></i>
+          </button>
+        </div>
+        
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-white/50 border-b border-white/10">
+                <th class="pb-3">고객명</th>
+                <th class="pb-3">연락처</th>
+                <th class="pb-3">매장</th>
+                <th class="pb-3">최근 시술</th>
+                <th class="pb-3">마지막 방문</th>
+                <th class="pb-3">다음 알림</th>
+                <th class="pb-3 text-center">액션</th>
+              </tr>
+            </thead>
+            <tbody id="customers-table-body">
+              <tr>
+                <td colspan="7" class="py-8 text-center text-white/40">
+                  <i class="fas fa-spinner fa-spin mr-2"></i> 로딩 중...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div class="glass rounded-2xl p-6">
+        <h3 class="font-semibold mb-4 flex items-center gap-2">
+          <i class="fas fa-chart-pie text-blue-400"></i>
+          고객 통계
+        </h3>
+        <div class="grid grid-cols-4 gap-4">
+          <div class="bg-white/5 rounded-xl p-4 text-center">
+            <p class="text-3xl font-bold gold" id="stat-total-customers">0</p>
+            <p class="text-sm text-white/50 mt-1">전체 고객</p>
+          </div>
+          <div class="bg-white/5 rounded-xl p-4 text-center">
+            <p class="text-3xl font-bold text-green-400" id="stat-today-followups">0</p>
+            <p class="text-sm text-white/50 mt-1">오늘 발송 대상</p>
+          </div>
+          <div class="bg-white/5 rounded-xl p-4 text-center">
+            <p class="text-3xl font-bold text-blue-400" id="stat-sent-messages">0</p>
+            <p class="text-sm text-white/50 mt-1">발송 완료</p>
+          </div>
+          <div class="bg-white/5 rounded-xl p-4 text-center">
+            <p class="text-3xl font-bold text-red-400" id="stat-overdue">0</p>
+            <p class="text-sm text-white/50 mt-1">기한 초과</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: AI 템플릿 상담 -->
+    <div id="tab-ai-helper" class="tab-content hidden">
+      <div class="mb-6">
+        <h2 class="text-2xl font-bold mb-2">🤖 AI 템플릿 상담</h2>
+        <p class="text-white/50">Gemini 2.5 Pro가 업종별 맞춤 메시지를 추천해드립니다</p>
+      </div>
+      
+      <div class="grid grid-cols-2 gap-6">
+        <!-- 입력 영역 -->
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-semibold mb-4 flex items-center gap-2">
+            <i class="fas fa-question-circle text-purple-400"></i>
+            상담 요청
+          </h3>
+          
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm text-white/60 mb-2">업종 선택</label>
+              <select id="ai-industry-select" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white">
+                <option value="">업종을 선택하세요...</option>
+                <option value="BEAUTY_SKIN">피부관리/에스테틱</option>
+                <option value="BEAUTY_HAIR">미용실/헤어숍</option>
+                <option value="BEAUTY_NAIL">네일아트/속눈썹</option>
+                <option value="MEDICAL">병원/의원/치과</option>
+                <option value="FITNESS">피트니스/요가/PT</option>
+                <option value="PET_SERVICE">애견/반려동물</option>
+                <option value="RESTAURANT">일반 식당/카페</option>
+                <option value="EDUCATION">학원/교육/과외</option>
+                <option value="OTHER">기타</option>
+              </select>
+            </div>
+            
+            <div>
+              <label class="block text-sm text-white/60 mb-2">메시지 유형</label>
+              <select id="ai-message-type" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white">
+                <option value="after_visit">재방문 안내 (시술 후 팔로업)</option>
+                <option value="new_customer">신규 고객 환영</option>
+                <option value="event">이벤트/프로모션 안내</option>
+                <option value="birthday">생일 축하</option>
+                <option value="dormant">휴면 고객 재유입</option>
+              </select>
+            </div>
+            
+            <div>
+              <label class="block text-sm text-white/60 mb-2">추가 요청사항 (선택)</label>
+              <textarea id="ai-request-detail" rows="4" 
+                class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white resize-none"
+                placeholder="예: 친근한 말투로 해주세요, 이모지 많이 써주세요, 가격 할인 정보 포함해주세요..."></textarea>
+            </div>
+            
+            <button onclick="generateAITemplate()" class="w-full py-4 gold-bg text-black rounded-xl font-bold text-lg flex items-center justify-center gap-2 btn-action">
+              <i class="fas fa-magic"></i>
+              AI 메시지 생성
+            </button>
+          </div>
+        </div>
+        
+        <!-- 결과 영역 -->
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-semibold mb-4 flex items-center gap-2">
+            <i class="fas fa-lightbulb text-yellow-400"></i>
+            AI 추천 결과
+          </h3>
+          
+          <div id="ai-result-container" class="space-y-4">
+            <div class="bg-white/5 rounded-xl p-8 text-center">
+              <i class="fas fa-robot text-5xl text-white/20 mb-4"></i>
+              <p class="text-white/50">왼쪽에서 옵션을 선택하고<br>"AI 메시지 생성" 버튼을 클릭하세요</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 업종별 추천 템플릿 -->
+      <div class="glass rounded-2xl p-6 mt-6">
+        <h3 class="font-semibold mb-4 flex items-center gap-2">
+          <i class="fas fa-star text-yellow-400"></i>
+          업종별 추천 템플릿
+        </h3>
+        <div class="grid grid-cols-3 gap-4" id="recommended-templates">
+          <div onclick="loadRecommendedTemplate('BEAUTY_SKIN')" class="bg-white/5 hover:bg-white/10 rounded-xl p-4 cursor-pointer transition-all">
+            <div class="flex items-center gap-3 mb-2">
+              <i class="fas fa-spa text-pink-400"></i>
+              <span class="font-medium">피부관리</span>
+            </div>
+            <p class="text-xs text-white/50">7~14일 후 재방문 안내, 홈케어 팁</p>
+          </div>
+          <div onclick="loadRecommendedTemplate('BEAUTY_HAIR')" class="bg-white/5 hover:bg-white/10 rounded-xl p-4 cursor-pointer transition-all">
+            <div class="flex items-center gap-3 mb-2">
+              <i class="fas fa-cut text-purple-400"></i>
+              <span class="font-medium">헤어샵</span>
+            </div>
+            <p class="text-xs text-white/50">30일 후 컷/펌 리터치 안내</p>
+          </div>
+          <div onclick="loadRecommendedTemplate('MEDICAL')" class="bg-white/5 hover:bg-white/10 rounded-xl p-4 cursor-pointer transition-all">
+            <div class="flex items-center gap-3 mb-2">
+              <i class="fas fa-hospital text-blue-400"></i>
+              <span class="font-medium">병원/치과</span>
+            </div>
+            <p class="text-xs text-white/50">6개월 정기검진 안내</p>
+          </div>
         </div>
       </div>
     </div>
@@ -800,6 +986,272 @@ export function renderSuperMasterDashboard(): string {
       }
     }
     
+    // ========== [V2.0] 고객 관리 기능 ==========
+    let allCustomers = [];
+    
+    async function loadAllCustomers() {
+      try {
+        // 먼저 매장 목록 로드
+        if (stores.length === 0) {
+          const storesRes = await fetch('/api/master/stores');
+          const storesData = await storesRes.json();
+          if (storesData.success) {
+            stores = storesData.data;
+            populateStoreSelect();
+          }
+        }
+        
+        // 전체 고객 통계 로드
+        let totalCustomers = 0;
+        let todayFollowups = 0;
+        let sentMessages = 0;
+        let overdue = 0;
+        const today = new Date().toISOString().split('T')[0];
+        
+        allCustomers = [];
+        
+        for (const store of stores.filter(s => s.is_active === 1)) {
+          try {
+            const res = await fetch('/api/stores/' + store.id + '/customers');
+            const data = await res.json();
+            if (data.success && data.data) {
+              data.data.forEach(c => {
+                c.store_name = store.store_name;
+                c.store_id = store.id;
+                allCustomers.push(c);
+                
+                if (c.next_followup_date) {
+                  if (c.next_followup_date === today) todayFollowups++;
+                  if (c.next_followup_date < today) overdue++;
+                }
+              });
+              totalCustomers += data.data.length;
+            }
+          } catch (e) {
+            console.error('Failed to load customers for store', store.id, e);
+          }
+        }
+        
+        // 발송 로그 카운트
+        try {
+          const logsRes = await fetch('/api/followup/stats');
+          const logsData = await logsRes.json();
+          if (logsData.success) {
+            sentMessages = logsData.data?.sent_count || 0;
+          }
+        } catch (e) {}
+        
+        // 통계 업데이트
+        document.getElementById('stat-total-customers').textContent = totalCustomers;
+        document.getElementById('stat-today-followups').textContent = todayFollowups;
+        document.getElementById('stat-sent-messages').textContent = sentMessages;
+        document.getElementById('stat-overdue').textContent = overdue;
+        document.getElementById('customers-badge').textContent = totalCustomers;
+        
+        renderCustomersTable(allCustomers);
+      } catch (e) {
+        console.error('Failed to load all customers:', e);
+      }
+    }
+    
+    function populateStoreSelect() {
+      const select = document.getElementById('customer-store-select');
+      if (!select) return;
+      
+      select.innerHTML = '<option value="all">전체 매장</option>' + 
+        stores.filter(s => s.is_active === 1).map(s => 
+          '<option value="' + s.id + '">' + s.store_name + '</option>'
+        ).join('');
+    }
+    
+    async function loadCustomersByStore(storeId) {
+      if (storeId === 'all') {
+        renderCustomersTable(allCustomers);
+      } else {
+        renderCustomersTable(allCustomers.filter(c => c.store_id == storeId));
+      }
+    }
+    
+    function filterCustomers() {
+      const search = document.getElementById('customer-search').value.toLowerCase();
+      const storeId = document.getElementById('customer-store-select').value;
+      
+      let filtered = storeId === 'all' ? allCustomers : allCustomers.filter(c => c.store_id == storeId);
+      
+      if (search) {
+        filtered = filtered.filter(c => 
+          (c.customer_name || '').toLowerCase().includes(search) ||
+          (c.phone || '').includes(search)
+        );
+      }
+      
+      renderCustomersTable(filtered);
+    }
+    
+    function renderCustomersTable(customers) {
+      const tbody = document.getElementById('customers-table-body');
+      if (!tbody) return;
+      
+      if (customers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-white/40">등록된 고객이 없습니다</td></tr>';
+        return;
+      }
+      
+      const today = new Date().toISOString().split('T')[0];
+      
+      tbody.innerHTML = customers.map(c => {
+        const isOverdue = c.next_followup_date && c.next_followup_date < today;
+        const isToday = c.next_followup_date === today;
+        
+        return \`
+          <tr class="border-b border-white/5 hover:bg-white/5">
+            <td class="py-3 font-medium">\${c.customer_name || '-'}</td>
+            <td class="py-3 text-white/70">\${c.phone || '-'}</td>
+            <td class="py-3 text-white/70">\${c.store_name || '-'}</td>
+            <td class="py-3 text-white/70">\${c.last_service || '-'}</td>
+            <td class="py-3 text-white/70">\${c.last_visit_date || '-'}</td>
+            <td class="py-3">
+              <span class="\${isOverdue ? 'text-red-400' : isToday ? 'text-green-400' : 'text-white/70'}">
+                \${c.next_followup_date || '-'}
+                \${isOverdue ? ' <i class="fas fa-exclamation-circle"></i>' : ''}
+                \${isToday ? ' <i class="fas fa-bell"></i>' : ''}
+              </span>
+            </td>
+            <td class="py-3 text-center">
+              <button onclick="sendCustomerMessage(\${c.id}, '\${c.customer_name}')" 
+                class="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-lg text-xs hover:bg-blue-500/30">
+                <i class="fas fa-paper-plane mr-1"></i>발송
+              </button>
+            </td>
+          </tr>
+        \`;
+      }).join('');
+    }
+    
+    async function sendCustomerMessage(customerId, customerName) {
+      if (!confirm(customerName + '님에게 메시지를 발송하시겠습니까?')) return;
+      
+      try {
+        const res = await fetch('/api/customers/' + customerId + '/send-message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          alert('메시지가 발송되었습니다!');
+          loadAllCustomers();
+        } else {
+          alert('발송 실패: ' + (data.error || '알 수 없는 오류'));
+        }
+      } catch (e) {
+        alert('네트워크 오류');
+      }
+    }
+    
+    // ========== [V2.0] AI 템플릿 상담 기능 ==========
+    async function generateAITemplate() {
+      const industry = document.getElementById('ai-industry-select').value;
+      const messageType = document.getElementById('ai-message-type').value;
+      const detail = document.getElementById('ai-request-detail').value;
+      
+      if (!industry) {
+        alert('업종을 선택해주세요.');
+        return;
+      }
+      
+      const container = document.getElementById('ai-result-container');
+      container.innerHTML = \`
+        <div class="bg-white/5 rounded-xl p-8 text-center">
+          <i class="fas fa-spinner fa-spin text-5xl text-purple-400 mb-4"></i>
+          <p class="text-white/70">Gemini 2.5 Pro가 메시지를 생성 중입니다...</p>
+        </div>
+      \`;
+      
+      try {
+        const res = await fetch('/api/ai/generate-template', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            industry,
+            message_type: messageType,
+            detail
+          })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success && data.data) {
+          const result = data.data;
+          container.innerHTML = \`
+            <div class="space-y-4">
+              <div class="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
+                <p class="text-sm text-green-400 flex items-center gap-2">
+                  <i class="fas fa-check-circle"></i>
+                  AI가 \${result.variations?.length || 3}개의 메시지를 생성했습니다!
+                </p>
+              </div>
+              
+              \${(result.variations || [result.message]).map((msg, i) => \`
+                <div class="bg-white/5 rounded-xl p-4">
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm text-white/50">버전 \${i + 1}</span>
+                    <button onclick="copyTemplate('\${i}')" class="text-xs text-blue-400 hover:text-blue-300">
+                      <i class="fas fa-copy mr-1"></i>복사
+                    </button>
+                  </div>
+                  <p class="text-white whitespace-pre-wrap" id="template-\${i}">\${msg}</p>
+                </div>
+              \`).join('')}
+              
+              <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
+                <p class="text-sm text-yellow-400 flex items-center gap-2">
+                  <i class="fas fa-lightbulb"></i>
+                  팁: 복사 후 고객 관리 페이지에서 메시지 템플릿으로 저장하세요
+                </p>
+              </div>
+              
+              \${result.recommended_days ? \`
+                <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+                  <p class="text-sm text-blue-400">
+                    <i class="fas fa-calendar-alt mr-2"></i>
+                    추천 발송 주기: <strong>\${result.recommended_days}일</strong> 후
+                  </p>
+                </div>
+              \` : ''}
+            </div>
+          \`;
+        } else {
+          throw new Error(data.error || '알 수 없는 오류');
+        }
+      } catch (e) {
+        container.innerHTML = \`
+          <div class="bg-red-500/10 border border-red-500/30 rounded-xl p-8 text-center">
+            <i class="fas fa-exclamation-triangle text-3xl text-red-400 mb-4"></i>
+            <p class="text-red-400">메시지 생성 실패: \${e.message}</p>
+            <button onclick="generateAITemplate()" class="mt-4 px-4 py-2 bg-red-500/20 rounded-lg text-sm">
+              다시 시도
+            </button>
+          </div>
+        \`;
+      }
+    }
+    
+    function copyTemplate(index) {
+      const el = document.getElementById('template-' + index);
+      if (el) {
+        navigator.clipboard.writeText(el.textContent);
+        alert('클립보드에 복사되었습니다!');
+      }
+    }
+    
+    function loadRecommendedTemplate(industry) {
+      document.getElementById('ai-industry-select').value = industry;
+      document.getElementById('ai-message-type').value = 'after_visit';
+      generateAITemplate();
+    }
+    
     // 초기 로드
     document.addEventListener('DOMContentLoaded', async () => {
       const isAuthed = await checkAuth();
@@ -809,6 +1261,7 @@ export function renderSuperMasterDashboard(): string {
       loadBotStores();
       loadStats();
       loadRequests();
+      loadAllCustomers();
     });
   </script>
   

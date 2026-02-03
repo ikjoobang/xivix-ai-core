@@ -8163,6 +8163,156 @@ api.get('/health', async (c) => {
   }
 });
 
+// 발송 통계 API
+api.get('/followup/stats', async (c) => {
+  try {
+    // 전체 발송 완료 수
+    const sentResult = await c.env.DB.prepare(`
+      SELECT COUNT(*) as count FROM xivix_followup_logs WHERE status = 'sent'
+    `).first<{ count: number }>();
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        sent_count: sentResult?.count || 0
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// ========== [V2.0] AI 템플릿 생성 API (Gemini 2.5 Pro) ==========
+api.post('/ai/generate-template', async (c) => {
+  try {
+    const { industry, message_type, detail } = await c.req.json();
+    
+    if (!industry) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '업종을 선택해주세요.',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // 업종별 정보
+    const industryInfo: Record<string, { name: string; specialty: string; days: number }> = {
+      'BEAUTY_SKIN': { name: '피부관리/에스테틱', specialty: '피부 타입 분석, 홈케어 가이드, 코스별 효능', days: 14 },
+      'BEAUTY_HAIR': { name: '미용실/헤어숍', specialty: '스타일 추천, 시술 소요시간, 디자이너 매칭', days: 30 },
+      'BEAUTY_NAIL': { name: '네일아트/속눈썹', specialty: '디자인 추천, 관리 팁, 예약 안내', days: 21 },
+      'MEDICAL': { name: '병원/의원/치과', specialty: '진료 안내, 정기검진 리마인드, 건강 관리', days: 180 },
+      'FITNESS': { name: '피트니스/요가/PT', specialty: '프로그램 안내, 트레이너 매칭, 회원권 상담', days: 7 },
+      'PET_SERVICE': { name: '애견/반려동물', specialty: '미용 예약, 건강 상담, 호텔 예약', days: 30 },
+      'RESTAURANT': { name: '일반 식당/카페', specialty: '메뉴 추천, 예약 안내, 단체 예약', days: 30 },
+      'EDUCATION': { name: '학원/교육/과외', specialty: '수강료 안내, 커리큘럼 상담, 레벨 테스트', days: 30 },
+      'OTHER': { name: '기타', specialty: '맞춤 비즈니스 로직', days: 14 }
+    };
+    
+    const info = industryInfo[industry] || industryInfo['OTHER'];
+    
+    // 메시지 유형별 지침
+    const messageTypes: Record<string, string> = {
+      'after_visit': '시술/서비스 후 재방문 유도 메시지. 고객의 만족도를 묻고, 다음 방문을 안내합니다.',
+      'new_customer': '신규 고객 환영 메시지. 매장을 선택해주셔서 감사하다는 내용과 함께 추가 혜택을 안내합니다.',
+      'event': '이벤트/프로모션 안내 메시지. 특별 할인이나 시즌 이벤트를 안내합니다.',
+      'birthday': '생일 축하 메시지. 진심 어린 축하와 함께 특별 혜택을 안내합니다.',
+      'dormant': '휴면 고객 재유입 메시지. 오랜만에 연락드린다며 특별 혜택으로 재방문을 유도합니다.'
+    };
+    
+    const typeGuide = messageTypes[message_type] || messageTypes['after_visit'];
+    
+    // Gemini API 호출
+    const prompt = `당신은 ${info.name} 업종의 마케팅 전문가입니다.
+
+업종: ${info.name}
+특징: ${info.specialty}
+메시지 유형: ${message_type} - ${typeGuide}
+${detail ? '추가 요청사항: ' + detail : ''}
+
+위 정보를 바탕으로 네이버 톡톡으로 발송할 고객 관리 메시지를 3가지 버전으로 작성해주세요.
+
+규칙:
+1. 각 메시지는 100-150자 이내
+2. 변수 사용: {고객명}, {매장명}, {시술명}, {경과일}
+3. 친근하고 자연스러운 말투 (존댓말)
+4. 이모지 적절히 사용
+5. 마지막에 행동 유도 문구 포함
+
+JSON 형식으로 응답:
+{
+  "variations": [
+    "메시지 버전 1",
+    "메시지 버전 2", 
+    "메시지 버전 3"
+  ],
+  "recommended_days": ${info.days}
+}`;
+
+    const geminiApiKey = c.env.GEMINI_API_KEY;
+    
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.8,
+            maxOutputTokens: 1024
+          }
+        })
+      }
+    );
+    
+    if (!geminiRes.ok) {
+      throw new Error('Gemini API 호출 실패: ' + geminiRes.status);
+    }
+    
+    const geminiData = await geminiRes.json() as any;
+    const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    
+    // JSON 파싱 시도
+    let result;
+    try {
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        result = JSON.parse(jsonMatch[0]);
+      } else {
+        // JSON 파싱 실패 시 텍스트를 직접 사용
+        result = {
+          variations: [rawText.split('\n').filter((l: string) => l.trim()).slice(0, 3).join('\n')],
+          recommended_days: info.days
+        };
+      }
+    } catch (e) {
+      result = {
+        variations: [rawText],
+        recommended_days: info.days
+      };
+    }
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: result,
+      timestamp: Date.now()
+    });
+    
+  } catch (error: any) {
+    console.error('AI Template Generation Error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
 // API 문서 (간단 버전)
 api.get('/docs', async (c) => {
   const docs = {
