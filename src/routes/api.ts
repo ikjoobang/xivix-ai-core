@@ -7515,4 +7515,364 @@ api.post('/stores/:storeId/booking/:bookingId/setup-reminders', async (c) => {
   }
 });
 
+// ============ 고객 관리 API ============
+
+// AI로 고객 데이터 파싱
+api.post('/customers/parse', async (c) => {
+  try {
+    const { raw_data, store_id } = await c.req.json() as { raw_data: string; store_id: number };
+    
+    if (!raw_data || raw_data.trim().length === 0) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '파싱할 데이터가 없습니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // Gemini API로 데이터 파싱
+    const parsePrompt = `
+다음 텍스트에서 고객 정보를 추출해서 JSON 배열로 반환해주세요.
+
+입력 데이터:
+${raw_data}
+
+반환 형식 (JSON 배열만 반환, 다른 설명 없이):
+[
+  {
+    "customer_name": "고객 이름",
+    "phone": "010-0000-0000 형식으로 정리",
+    "last_service": "시술/서비스명",
+    "last_visit_date": "YYYY-MM-DD 형식"
+  }
+]
+
+규칙:
+1. 전화번호는 010-0000-0000 형식으로 통일 (하이픈 추가)
+2. 날짜는 YYYY-MM-DD 형식으로 통일
+3. 날짜가 24.1.28 같은 형식이면 2024-01-28로 변환
+4. 정보가 없으면 null로 처리
+5. 이름만 있어도 추출
+6. JSON 배열만 반환하고 다른 텍스트는 포함하지 마세요
+`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${c.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: parsePrompt }] }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 4096
+          }
+        })
+      }
+    );
+
+    const result = await response.json() as any;
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+    
+    // JSON 추출 (코드블록 제거)
+    let jsonStr = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    
+    let customers = [];
+    try {
+      customers = JSON.parse(jsonStr);
+    } catch (e) {
+      // JSON 파싱 실패 시 수동 파싱 시도
+      const lines = raw_data.split('\n').filter(l => l.trim());
+      customers = lines.map(line => {
+        const phoneMatch = line.match(/01[0-9][-\s]?\d{3,4}[-\s]?\d{4}/);
+        const dateMatch = line.match(/\d{2,4}[-./]\d{1,2}[-./]\d{1,2}/);
+        const parts = line.split(/[\t,\s]+/).filter(p => p.trim());
+        
+        return {
+          customer_name: parts[0] || null,
+          phone: phoneMatch ? phoneMatch[0].replace(/[\s]/g, '-').replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3') : null,
+          last_service: null,
+          last_visit_date: dateMatch ? dateMatch[0].replace(/[./]/g, '-') : null
+        };
+      }).filter(c => c.customer_name);
+    }
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: { customers, count: customers.length },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    console.error('[customers/parse] Error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '파싱 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 고객 일괄 등록
+api.post('/customers/bulk', async (c) => {
+  try {
+    const { store_id, customers, followup_cycle_days = 14 } = await c.req.json() as {
+      store_id: number;
+      customers: Array<{
+        customer_name: string;
+        phone?: string;
+        last_service?: string;
+        last_visit_date?: string;
+        naver_user_id?: string;
+      }>;
+      followup_cycle_days: number;
+    };
+
+    if (!customers || customers.length === 0) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '저장할 고객이 없습니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+
+    let inserted = 0;
+    let skipped = 0;
+
+    for (const customer of customers) {
+      if (!customer.customer_name) {
+        skipped++;
+        continue;
+      }
+
+      // 다음 팔로업 날짜 계산
+      let nextFollowupDate = null;
+      if (customer.last_visit_date) {
+        const visitDate = new Date(customer.last_visit_date);
+        visitDate.setDate(visitDate.getDate() + followup_cycle_days);
+        nextFollowupDate = visitDate.toISOString().split('T')[0];
+      }
+
+      try {
+        await c.env.DB.prepare(`
+          INSERT INTO xivix_customers (
+            store_id, customer_name, phone, last_service, 
+            last_visit_date, next_followup_date, followup_cycle_days,
+            naver_user_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          store_id,
+          customer.customer_name,
+          customer.phone || null,
+          customer.last_service || null,
+          customer.last_visit_date || null,
+          nextFollowupDate,
+          followup_cycle_days,
+          customer.naver_user_id || null
+        ).run();
+        inserted++;
+      } catch (e) {
+        console.error('[customers/bulk] Insert error:', e);
+        skipped++;
+      }
+    }
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: { inserted, skipped, total: customers.length },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    console.error('[customers/bulk] Error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '저장 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 매장별 고객 목록 조회
+api.get('/stores/:storeId/customers', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  
+  try {
+    const customers = await c.env.DB.prepare(`
+      SELECT * FROM xivix_customers 
+      WHERE store_id = ? AND is_active = 1
+      ORDER BY next_followup_date ASC, last_visit_date DESC
+    `).bind(storeId).all();
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: customers.results || [],
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 고객 삭제
+api.delete('/customers/:id', async (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  
+  try {
+    await c.env.DB.prepare(`
+      UPDATE xivix_customers SET is_active = 0 WHERE id = ?
+    `).bind(id).run();
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: { deleted: id },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 메시지 템플릿 목록 조회
+api.get('/stores/:storeId/templates', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  
+  try {
+    // 매장별 템플릿 + 기본 템플릿
+    const templates = await c.env.DB.prepare(`
+      SELECT * FROM xivix_message_templates 
+      WHERE (store_id = ? OR is_default = 1) AND is_active = 1
+      ORDER BY is_default DESC, trigger_days ASC
+    `).bind(storeId).all();
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: templates.results || [],
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 메시지 템플릿 생성
+api.post('/templates', async (c) => {
+  try {
+    const data = await c.req.json() as {
+      store_id: number;
+      template_name: string;
+      trigger_type: string;
+      trigger_days: number;
+      message_content: string;
+      business_type?: string;
+    };
+
+    const result = await c.env.DB.prepare(`
+      INSERT INTO xivix_message_templates (
+        store_id, business_type, template_name, trigger_type, 
+        trigger_days, message_content
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(
+      data.store_id,
+      data.business_type || 'GENERAL',
+      data.template_name,
+      data.trigger_type,
+      data.trigger_days,
+      data.message_content
+    ).run();
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: { id: result.meta.last_row_id },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 메시지 템플릿 수정
+api.put('/templates/:id', async (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const data = await c.req.json() as {
+      template_name?: string;
+      trigger_type?: string;
+      trigger_days?: number;
+      message_content?: string;
+    };
+
+    await c.env.DB.prepare(`
+      UPDATE xivix_message_templates SET
+        template_name = COALESCE(?, template_name),
+        trigger_type = COALESCE(?, trigger_type),
+        trigger_days = COALESCE(?, trigger_days),
+        message_content = COALESCE(?, message_content),
+        updated_at = datetime('now')
+      WHERE id = ?
+    `).bind(
+      data.template_name || null,
+      data.trigger_type || null,
+      data.trigger_days || null,
+      data.message_content || null,
+      id
+    ).run();
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: { updated: id },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 팔로업 로그 조회
+api.get('/stores/:storeId/followup-logs', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  
+  try {
+    const logs = await c.env.DB.prepare(`
+      SELECT l.*, c.customer_name
+      FROM xivix_followup_logs l
+      LEFT JOIN xivix_customers c ON l.customer_id = c.id
+      WHERE l.store_id = ?
+      ORDER BY l.sent_at DESC
+      LIMIT 100
+    `).bind(storeId).all();
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: logs.results || [],
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
 export default api;

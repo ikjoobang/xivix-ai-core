@@ -14,6 +14,7 @@ import { renderClientOnboarding } from './views/client-onboarding';
 import { renderSuperMasterDashboard } from './views/super-master';
 import { renderStoreSettings } from './views/store-settings';
 import { renderRequestPage } from './views/request';
+import { renderCustomerManagement } from './views/customer-management';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -112,6 +113,12 @@ app.get('/admin', async (c) => {
 app.get('/store/:storeId/settings', async (c) => {
   const storeId = parseInt(c.req.param('storeId'), 10);
   return c.html(renderStoreSettings(storeId));
+});
+
+// 고객 관리 페이지
+app.get('/store/:storeId/customers', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  return c.html(renderCustomerManagement(storeId));
 });
 
 // 설정 변경 요청 페이지 (사장님용)
