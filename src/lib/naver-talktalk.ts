@@ -57,8 +57,8 @@ export interface CompositeItem {
     data: {
       title: string;
       code?: string;
-      linkPc?: string;
-      linkMobile?: string;
+      url?: string;        // LINK 버튼용 PC URL
+      mobileUrl?: string;  // LINK 버튼용 모바일 URL
       payInfo?: Record<string, unknown>;
     };
   }[];
@@ -131,7 +131,7 @@ export class NaverTalkTalkClient {
       type: btn.link ? 'LINK' as const : 'TEXT' as const,
       data: {
         title: btn.title,
-        ...(btn.link ? { linkPc: btn.link, linkMobile: btn.link } : { code: btn.code || btn.title })
+        ...(btn.link ? { url: btn.link, mobileUrl: btn.link } : { code: btn.code || btn.title })
       }
     }));
 
@@ -480,7 +480,7 @@ export async function sendButtonMessage(
   const buttonList = buttons.map(btn => ({
     type: btn.type,
     data: btn.type === 'LINK' 
-      ? { title: btn.title, linkPc: btn.linkUrl, linkMobile: btn.linkUrl }
+      ? { title: btn.title, url: btn.linkUrl, mobileUrl: btn.linkUrl }
       : { title: btn.title, code: btn.value || btn.title }
   }));
 
