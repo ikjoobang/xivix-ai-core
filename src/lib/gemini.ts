@@ -86,28 +86,59 @@ export function buildSystemInstruction(store?: {
   store_name: string;
   menu_data: string;
   operating_hours: string;
+  address?: string;
+  phone?: string;
   ai_persona?: string;
   ai_tone?: string;
+  system_prompt?: string;
+  greeting_message?: string;
 }): string {
-  let instruction = XIVIX_SYSTEM_PROMPT;
+  // 매장의 커스텀 시스템 프롬프트가 있으면 우선 사용
+  let instruction = '';
+  
+  // 기본 XIVIX 시스템 프롬프트
+  instruction = XIVIX_SYSTEM_PROMPT;
   
   if (store) {
+    // 매장 기본 정보
     instruction += `\n\n## 매장 정보
 - 매장명: ${store.store_name}
-- 영업시간: ${store.operating_hours}`;
+- 영업시간: ${store.operating_hours || '정보 없음'}
+- 주소: ${store.address || '정보 없음'}
+- 전화번호: ${store.phone || '정보 없음'}`;
     
+    // 메뉴/서비스 정보
     try {
       const menu = JSON.parse(store.menu_data);
       instruction += `\n- 메뉴/서비스:\n${JSON.stringify(menu, null, 2)}`;
     } catch {
-      instruction += `\n- 메뉴/서비스: ${store.menu_data}`;
+      instruction += `\n- 메뉴/서비스: ${store.menu_data || '정보 없음'}`;
     }
     
+    // AI 페르소나
     if (store.ai_persona) {
       instruction += `\n\n## AI 페르소나\n${store.ai_persona}`;
     }
+    
+    // 말투 스타일
     if (store.ai_tone) {
-      instruction += `\n\n## 말투 스타일\n${store.ai_tone}`;
+      const toneDescriptions: Record<string, string> = {
+        'professional': '전문적이고 신뢰감 있는 말투를 사용합니다',
+        'friendly': '친근하고 따뜻한 말투를 사용합니다',
+        'casual': '편안하고 가벼운 말투를 사용합니다',
+        'formal': '격식있고 정중한 말투를 사용합니다'
+      };
+      instruction += `\n\n## 말투 스타일\n${toneDescriptions[store.ai_tone] || store.ai_tone}`;
+    }
+    
+    // 환영 인사말 (첫 대화 시 사용 가이드)
+    if (store.greeting_message) {
+      instruction += `\n\n## 환영 인사말 (첫 대화 시 참고)\n${store.greeting_message}`;
+    }
+    
+    // ⭐ 커스텀 시스템 프롬프트 (매장별 상세 지침) - 가장 중요!
+    if (store.system_prompt) {
+      instruction += `\n\n## 매장 상세 운영 지침 (반드시 따를 것)\n${store.system_prompt}`;
     }
   }
   

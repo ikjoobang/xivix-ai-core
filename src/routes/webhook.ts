@@ -435,8 +435,12 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         store_name: storeResult.store_name,
         menu_data: storeResult.menu_data,
         operating_hours: storeResult.operating_hours,
+        address: storeResult.address,
+        phone: storeResult.phone,
         ai_persona: storeResult.ai_persona,
-        ai_tone: storeResult.ai_tone
+        ai_tone: storeResult.ai_tone,
+        system_prompt: storeResult.system_prompt,
+        greeting_message: storeResult.greeting_message
       } : undefined);
       
       // 짧은 메시지는 일반 응답, 긴 메시지는 스트리밍
@@ -663,8 +667,12 @@ webhook.post('/v1/naver/callback', async (c) => {
       store_name: storeResult.store_name,
       menu_data: storeResult.menu_data,
       operating_hours: storeResult.operating_hours,
+      address: storeResult.address,
+      phone: storeResult.phone,
       ai_persona: storeResult.ai_persona,
-      ai_tone: storeResult.ai_tone
+      ai_tone: storeResult.ai_tone,
+      system_prompt: storeResult.system_prompt,
+      greeting_message: storeResult.greeting_message
     } : undefined);
     
     // AI 응답 생성 (스트리밍 또는 일반)
@@ -788,8 +796,12 @@ webhook.post('/v1/test/chat', async (c) => {
       store_name: storeResult.store_name,
       menu_data: storeResult.menu_data,
       operating_hours: storeResult.operating_hours,
+      address: storeResult.address,
+      phone: storeResult.phone,
       ai_persona: storeResult.ai_persona,
-      ai_tone: storeResult.ai_tone
+      ai_tone: storeResult.ai_tone,
+      system_prompt: storeResult.system_prompt,
+      greeting_message: storeResult.greeting_message
     } : undefined);
     
     const aiResponse = await getGeminiResponse(env, messages, systemInstruction);

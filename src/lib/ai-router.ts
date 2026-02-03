@@ -147,8 +147,12 @@ export async function handleExpertConsultation(
       store_name: store.store_name,
       menu_data: store.menu_data,
       operating_hours: store.operating_hours,
+      address: store.address,
+      phone: store.phone,
       ai_persona: store.ai_persona,
-      ai_tone: store.ai_tone
+      ai_tone: store.ai_tone,
+      system_prompt: store.system_prompt,
+      greeting_message: store.greeting_message
     } : undefined);
     
     const response = await getGeminiResponse(env, messages, systemInstruction, 'gemini-pro');
@@ -244,8 +248,12 @@ export async function handleSimpleConsultation(
     store_name: store.store_name,
     menu_data: store.menu_data,
     operating_hours: store.operating_hours,
+    address: store.address,
+    phone: store.phone,
     ai_persona: store.ai_persona,
-    ai_tone: store.ai_tone
+    ai_tone: store.ai_tone,
+    system_prompt: store.system_prompt,
+    greeting_message: store.greeting_message
   } : undefined);
   
   const response = await getGeminiResponse(env, messages, systemInstruction, 'gemini');
@@ -268,8 +276,12 @@ export async function* streamSimpleConsultation(
     store_name: store.store_name,
     menu_data: store.menu_data,
     operating_hours: store.operating_hours,
+    address: store.address,
+    phone: store.phone,
     ai_persona: store.ai_persona,
-    ai_tone: store.ai_tone
+    ai_tone: store.ai_tone,
+    system_prompt: store.system_prompt,
+    greeting_message: store.greeting_message
   } : undefined);
   
   for await (const chunk of streamGeminiResponse(env, messages, systemInstruction, 'gemini')) {
