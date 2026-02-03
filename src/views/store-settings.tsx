@@ -55,6 +55,10 @@ export function renderStoreSettings(storeId: number): string {
         </div>
       </div>
       <div class="flex items-center gap-3">
+        <a href="/store/${storeId}/customers" class="px-4 py-2 btn-secondary rounded-xl font-medium flex items-center gap-2">
+          <i class="fas fa-users"></i>
+          고객 관리
+        </a>
         <button onclick="saveAllSettings()" class="px-6 py-2 btn-primary rounded-xl font-medium flex items-center gap-2">
           <i class="fas fa-save"></i>
           전체 저장

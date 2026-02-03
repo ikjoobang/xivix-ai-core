@@ -7875,4 +7875,334 @@ api.get('/stores/:storeId/followup-logs', async (c) => {
   }
 });
 
+// ============ 자동 발송 (Cron Trigger 대체 API) ============
+
+// 재방문 알림 대상 조회 및 발송
+api.post('/followup/process', async (c) => {
+  const authHeader = c.req.header('Authorization');
+  const cronSecret = c.env.CRON_SECRET || 'xivix-cron-2024';
+  
+  // 간단한 인증 (외부에서 무단 호출 방지)
+  if (authHeader !== `Bearer ${cronSecret}`) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: 'Unauthorized',
+      timestamp: Date.now()
+    }, 401);
+  }
+
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    console.log(`[Followup] Processing for date: ${today}`);
+
+    // 오늘 발송 대상 고객 조회
+    const targets = await c.env.DB.prepare(`
+      SELECT 
+        c.id as customer_id,
+        c.store_id,
+        c.customer_name,
+        c.phone,
+        c.last_service,
+        c.last_visit_date,
+        c.naver_user_id,
+        c.followup_cycle_days,
+        s.store_name,
+        s.naver_talktalk_id,
+        s.business_type,
+        s.auto_followup
+      FROM xivix_customers c
+      JOIN xivix_stores s ON c.store_id = s.id
+      WHERE c.next_followup_date <= ?
+        AND c.is_active = 1
+        AND s.is_active = 1
+        AND s.auto_followup = 1
+        AND c.naver_user_id IS NOT NULL
+      ORDER BY c.next_followup_date ASC
+      LIMIT 50
+    `).bind(today).all();
+
+    const results = {
+      total: targets.results?.length || 0,
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+      details: [] as any[]
+    };
+
+    if (!targets.results || targets.results.length === 0) {
+      return c.json<ApiResponse>({
+        success: true,
+        data: { message: '오늘 발송 대상이 없습니다', ...results },
+        timestamp: Date.now()
+      });
+    }
+
+    // 각 대상에게 메시지 발송
+    for (const target of targets.results as any[]) {
+      try {
+        // 해당 업종의 템플릿 조회
+        const template = await c.env.DB.prepare(`
+          SELECT * FROM xivix_message_templates
+          WHERE (store_id = ? OR (store_id IS NULL AND is_default = 1))
+            AND business_type = ?
+            AND is_active = 1
+          ORDER BY store_id DESC NULLS LAST
+          LIMIT 1
+        `).bind(target.store_id, target.business_type).first<any>();
+
+        if (!template) {
+          results.skipped++;
+          results.details.push({
+            customer_id: target.customer_id,
+            status: 'skipped',
+            reason: 'No template found'
+          });
+          continue;
+        }
+
+        // 메시지 변수 치환
+        const daysSinceVisit = target.last_visit_date 
+          ? Math.floor((Date.now() - new Date(target.last_visit_date).getTime()) / (1000 * 60 * 60 * 24))
+          : 0;
+
+        let messageContent = template.message_content
+          .replace(/\{고객명\}/g, target.customer_name || '고객')
+          .replace(/\{매장명\}/g, target.store_name || '매장')
+          .replace(/\{시술명\}/g, target.last_service || '시술')
+          .replace(/\{경과일\}/g, String(daysSinceVisit))
+          .replace(/\{방문일\}/g, target.last_visit_date || '');
+
+        // 네이버 톡톡으로 메시지 발송
+        let sendResult = { success: false, resultCode: 'NO_TOKEN' };
+        
+        if (target.naver_user_id && c.env.NAVER_ACCESS_TOKEN) {
+          const response = await fetch('https://gw.talk.naver.com/chatbot/v1/event', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json;charset=UTF-8',
+              'Authorization': c.env.NAVER_ACCESS_TOKEN
+            },
+            body: JSON.stringify({
+              event: 'send',
+              user: target.naver_user_id,
+              textContent: { text: messageContent }
+            })
+          });
+          
+          sendResult = {
+            success: response.ok,
+            resultCode: response.ok ? 'OK' : `HTTP_${response.status}`
+          };
+        }
+
+        // 발송 로그 저장
+        await c.env.DB.prepare(`
+          INSERT INTO xivix_followup_logs (
+            customer_id, store_id, template_id, message_content, status, naver_result_code
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `).bind(
+          target.customer_id,
+          target.store_id,
+          template.id,
+          messageContent,
+          sendResult.success ? 'sent' : 'failed',
+          sendResult.resultCode
+        ).run();
+
+        // 다음 팔로업 날짜 업데이트
+        if (sendResult.success) {
+          const nextDate = new Date();
+          nextDate.setDate(nextDate.getDate() + target.followup_cycle_days);
+          
+          await c.env.DB.prepare(`
+            UPDATE xivix_customers 
+            SET next_followup_date = ?, total_visits = total_visits + 1, updated_at = datetime('now')
+            WHERE id = ?
+          `).bind(nextDate.toISOString().split('T')[0], target.customer_id).run();
+
+          results.sent++;
+        } else {
+          results.failed++;
+        }
+
+        results.details.push({
+          customer_id: target.customer_id,
+          customer_name: target.customer_name,
+          status: sendResult.success ? 'sent' : 'failed',
+          result_code: sendResult.resultCode
+        });
+
+      } catch (err: any) {
+        results.failed++;
+        results.details.push({
+          customer_id: target.customer_id,
+          status: 'error',
+          error: err.message
+        });
+      }
+    }
+
+    console.log(`[Followup] Completed: sent=${results.sent}, failed=${results.failed}, skipped=${results.skipped}`);
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: results,
+      timestamp: Date.now()
+    });
+
+  } catch (error: any) {
+    console.error('[Followup] Process error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 수동 메시지 발송
+api.post('/customers/:id/send-message', async (c) => {
+  const customerId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const { message } = await c.req.json() as { message?: string };
+    
+    // 고객 정보 조회
+    const customer = await c.env.DB.prepare(`
+      SELECT c.*, s.store_name, s.naver_talktalk_id
+      FROM xivix_customers c
+      JOIN xivix_stores s ON c.store_id = s.id
+      WHERE c.id = ?
+    `).bind(customerId).first<any>();
+
+    if (!customer) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '고객을 찾을 수 없습니다',
+        timestamp: Date.now()
+      }, 404);
+    }
+
+    if (!customer.naver_user_id) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '네이버 톡톡 ID가 없어 메시지를 보낼 수 없습니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+
+    // 메시지 발송
+    const messageContent = message || `안녕하세요 ${customer.customer_name}님! ${customer.store_name}입니다. 😊`;
+    
+    const response = await fetch('https://gw.talk.naver.com/chatbot/v1/event', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json;charset=UTF-8',
+        'Authorization': c.env.NAVER_ACCESS_TOKEN || ''
+      },
+      body: JSON.stringify({
+        event: 'send',
+        user: customer.naver_user_id,
+        textContent: { text: messageContent }
+      })
+    });
+
+    // 로그 저장
+    await c.env.DB.prepare(`
+      INSERT INTO xivix_followup_logs (
+        customer_id, store_id, message_content, status, naver_result_code
+      ) VALUES (?, ?, ?, ?, ?)
+    `).bind(
+      customerId,
+      customer.store_id,
+      messageContent,
+      response.ok ? 'sent' : 'failed',
+      response.ok ? 'OK' : `HTTP_${response.status}`
+    ).run();
+
+    return c.json<ApiResponse>({
+      success: response.ok,
+      data: { 
+        message: response.ok ? '메시지 발송 완료' : '발송 실패',
+        customer_name: customer.customer_name
+      },
+      timestamp: Date.now()
+    });
+
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// Health Check API
+api.get('/health', async (c) => {
+  try {
+    // DB 연결 체크
+    const dbCheck = await c.env.DB.prepare('SELECT 1 as ok').first();
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        status: 'healthy',
+        version: c.env.XIVIX_VERSION || '2.0.0',
+        database: dbCheck ? 'connected' : 'disconnected',
+        timestamp: new Date().toISOString()
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: 'Health check failed: ' + error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// API 문서 (간단 버전)
+api.get('/docs', async (c) => {
+  const docs = {
+    name: 'XIVIX AI Core API',
+    version: '2.0.0',
+    description: '네이버 톡톡 AI 상담 및 고객 관리 시스템',
+    baseUrl: 'https://xivix-ai-core.pages.dev/api',
+    endpoints: {
+      health: {
+        method: 'GET',
+        path: '/health',
+        description: '서버 상태 확인'
+      },
+      stores: {
+        list: { method: 'GET', path: '/stores', description: '매장 목록 조회' },
+        get: { method: 'GET', path: '/stores/:id', description: '매장 상세 조회' },
+        settings: { method: 'PUT', path: '/stores/:id/settings', description: '매장 설정 저장' },
+        customers: { method: 'GET', path: '/stores/:id/customers', description: '매장 고객 목록' },
+        templates: { method: 'GET', path: '/stores/:id/templates', description: '메시지 템플릿 목록' }
+      },
+      customers: {
+        parse: { method: 'POST', path: '/customers/parse', description: 'AI로 고객 데이터 파싱' },
+        bulk: { method: 'POST', path: '/customers/bulk', description: '고객 일괄 등록' },
+        delete: { method: 'DELETE', path: '/customers/:id', description: '고객 삭제' },
+        sendMessage: { method: 'POST', path: '/customers/:id/send-message', description: '수동 메시지 발송' }
+      },
+      templates: {
+        create: { method: 'POST', path: '/templates', description: '템플릿 생성' },
+        update: { method: 'PUT', path: '/templates/:id', description: '템플릿 수정' }
+      },
+      followup: {
+        process: { method: 'POST', path: '/followup/process', description: '재방문 알림 일괄 처리 (Cron용)' }
+      },
+      webhook: {
+        naver: { method: 'POST', path: '/v1/naver/callback/:storeId', description: '네이버 톡톡 웹훅' }
+      }
+    }
+  };
+
+  return c.json(docs);
+});
+
 export default api;
