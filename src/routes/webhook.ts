@@ -593,8 +593,14 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     // 🇰🇷 한국어(ko) | 🇺🇸 영어(en) | 🇯🇵 일본어(ja) | 🇨🇳 중국어 간체(zh)
     // 🇹🇼 중국어 번체(tw) | 🇹🇭 태국어(th) | 🇻🇳 베트남어(vi) | 🇲🇳 몽골어(mn)
     
-    // 8개국어 메뉴 메시지 템플릿
+    // 8개국어 메뉴 메시지 템플릿 (한국어 포함)
     const langMenus: Record<string, { flag: string; welcome: string; menu: string; logName: string }> = {
+      ko: {
+        flag: '🇰🇷',
+        welcome: `🇰🇷 ${storeName}에 오신 것을 환영합니다!\n\n✨ 오픈 기념 50% 할인!\n\n원하시는 서비스를 선택해 주세요:\n\n`,
+        menu: `1. 🎁 오픈 50% 이벤트 메뉴/가격\n2. 💡 내 피부 상태 체크\n3. 💬 원장님께 상담 메시지 남기기\n4. 📅 오늘 예약 가능한 시간 확인\n5. 📍 매장 위치 및 전화 연결\n\n번호를 입력해주세요!`,
+        logName: '[lang] Korean'
+      },
       en: {
         flag: '🇺🇸',
         welcome: `🇺🇸 Welcome to ${storeName}!\n\n✨ 50% OFF Grand Opening!\n\nPlease select:\n\n`,
@@ -639,8 +645,9 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       }
     };
     
-    // 언어 감지 패턴 (8개국어)
+    // 언어 감지 패턴 (8개국어 + 한국어)
     const langPatterns: Record<string, RegExp> = {
+      ko: /^(ko|kr|korean|한국어|한글)$/i,
       en: /^(en|eng|english|hi|hello|yes|thanks?|ok(ay)?|please|help|price|menu|book|i want|i need|can i|how much)/i,
       ja: /^(jp|japanese|日本語|こんにちは|はい|お願い|ありがとう|すみません|予約|いくら)|[\u3040-\u309F\u30A0-\u30FF]/,
       zh: /^(cn|chinese|中文|简体|你好|是的?|好的?|谢谢|请问|多少钱|价格|预约)/,
