@@ -874,43 +874,61 @@ export function renderSuperMasterDashboard(): string {
         return;
       }
       
-      const storeNames = storeIds.map(s => s.name).join(', ');
-      const confirmed = confirm(\`\${storeIds.length}개 매장을 삭제하시겠습니까?\\n\\n삭제 대상:\\n\${storeNames}\\n\\n⚠️ 주의: 삭제 시 해당 매장의 모든 데이터가 함께 삭제됩니다.\\n이 작업은 되돌릴 수 없습니다.\`);
+      const storeNames = storeIds.map(s => s.name).join('\\n- ');
+      const confirmed = confirm(\`⚠️ \${storeIds.length}개 매장을 삭제하시겠습니까?\\n\\n삭제 대상:\\n- \${storeNames}\\n\\n이 작업은 되돌릴 수 없습니다.\`);
       
       if (!confirmed) return;
       
-      const doubleConfirm = confirm(\`마지막 확인: 정말 \${storeIds.length}개 매장을 삭제합니까?\`);
-      if (!doubleConfirm) return;
+      // 버튼 비활성화 및 로딩 표시
+      const deleteBtn = document.getElementById('bulk-delete-' + listType);
+      const originalText = deleteBtn.innerHTML;
+      deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 삭제 중...';
+      deleteBtn.disabled = true;
       
       // 삭제 진행
       let successCount = 0;
       let failCount = 0;
+      const errors = [];
       
       for (const store of storeIds) {
         try {
+          console.log('Deleting store:', store.id, store.name);
           const res = await fetch('/api/master/store/' + store.id, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' }
           });
           
           const data = await res.json();
+          console.log('Delete result:', data);
           
           if (data.success) {
             successCount++;
           } else {
             failCount++;
+            errors.push(store.name + ': ' + (data.error || '알 수 없는 오류'));
             console.error('Failed to delete store', store.id, data.error);
           }
         } catch (e) {
           failCount++;
+          errors.push(store.name + ': 네트워크 오류');
           console.error('Delete error for store', store.id, e);
         }
       }
       
-      alert(\`삭제 완료!\\n- 성공: \${successCount}개\\n- 실패: \${failCount}개\`);
+      // 버튼 복원
+      deleteBtn.innerHTML = originalText;
+      deleteBtn.disabled = false;
+      
+      // 결과 표시
+      let resultMsg = \`삭제 완료!\\n\\n✅ 성공: \${successCount}개\\n❌ 실패: \${failCount}개\`;
+      if (errors.length > 0) {
+        resultMsg += \`\\n\\n실패 목록:\\n\${errors.join('\\n')}\`;
+      }
+      alert(resultMsg);
       
       // 체크박스 초기화
-      document.getElementById('select-all-' + listType).checked = false;
+      const selectAllEl = document.getElementById('select-all-' + listType);
+      if (selectAllEl) selectAllEl.checked = false;
       
       // 목록 새로고침
       loadPendingStores();
