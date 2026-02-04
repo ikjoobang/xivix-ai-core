@@ -5244,13 +5244,21 @@ api.post('/chat/test', async (c) => {
       });
     } else {
       // Gemini 사용 (기본)
-      const systemInstruction = buildSystemInstruction({
-        store_name: store?.store_name,
-        menu_data: store?.menu_data,
-        operating_hours: store?.operating_hours,
-        ai_persona: prompt_config?.persona || store?.ai_persona,
-        ai_tone: prompt_config?.tone || store?.ai_tone
-      });
+      // ⭐ 커스텀 system_prompt가 있으면 그것을 최우선 사용
+      const customSystemPrompt = prompt_config?.systemPrompt || store?.system_prompt;
+      
+      const systemInstruction = customSystemPrompt 
+        ? customSystemPrompt  // 매장의 커스텀 프롬프트 직접 사용
+        : buildSystemInstruction({
+            store_name: store?.store_name,
+            menu_data: store?.menu_data,
+            operating_hours: store?.operating_hours,
+            address: store?.address,
+            phone: store?.phone,
+            ai_persona: prompt_config?.persona || store?.ai_persona,
+            ai_tone: prompt_config?.tone || store?.ai_tone,
+            greeting_message: prompt_config?.greeting || store?.greeting_message
+          });
 
       const messages = buildGeminiMessages(null, message);
       response = await getGeminiResponse(c.env, messages, systemInstruction);
