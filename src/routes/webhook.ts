@@ -411,8 +411,77 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       }
     }
     
-    // ============ [전화번호만 입력한 경우 - 콜백 요청 완료] ============
-    // 이전에 콜백 요청을 했고, 지금 전화번호만 입력한 경우
+    // ============ [전화번호 포함 메시지 - 원장님께 SMS 전송] ============
+    // 메시지에 전화번호가 포함되어 있으면 원장님께 SMS 전송 (3번 메뉴 응답 후)
+    // 패턴: 공백/하이픈 유연하게 처리 (010 4845 3065, 010-4845-3065, 01048453065 모두 인식)
+    const flexiblePhonePattern = /(?:010|011|016|017|018|019)[\s\-]?\d{3,4}[\s\-]?\d{4}/;
+    const phoneMatch = originalMessage.match(flexiblePhonePattern);
+    
+    if (phoneMatch) {
+      const storeName2 = storeResult?.store_name || '매장';
+      const storePhone2 = storeResult?.phone || '031-235-5726';
+      const ownerPhone = storeResult?.owner_phone || storePhone2;
+      const customerPhone = phoneMatch[0].replace(/[\s\-]/g, '').replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
+      
+      // 전화번호를 제외한 메시지 내용 추출
+      const messageContent = originalMessage.replace(flexiblePhonePattern, '').trim();
+      
+      // SMS 내용 구성
+      const smsText = `[${storeName2}] 고객 상담 요청\n\n` +
+        `📞 연락처: ${customerPhone}\n` +
+        `💬 내용: ${messageContent || '상담 요청'}\n\n` +
+        `⏰ ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`;
+      
+      try {
+        // 원장님께 SMS 전송
+        const smsResult = await sendSMS(env, ownerPhone, smsText);
+        console.log(`[Webhook] SMS to owner (${ownerPhone}) result:`, smsResult);
+        
+        // 추가 관리자에게도 전송
+        let additionalContacts2: Array<{name: string; phone: string}> = [];
+        if (storeResult?.additional_contacts) {
+          try {
+            additionalContacts2 = JSON.parse(storeResult.additional_contacts);
+            for (const contact of additionalContacts2) {
+              if (contact.phone) {
+                await sendSMS(env, contact.phone, smsText);
+              }
+            }
+          } catch (e) {
+            console.warn('[Webhook] Failed to parse additional_contacts:', e);
+          }
+        }
+        
+        if (smsResult.success) {
+          await sendTextMessage(env, customerId,
+            `✅ 원장님께 전달 완료!\n\n` +
+            `📞 ${customerPhone}\n` +
+            `💬 ${messageContent || '상담 요청'}\n\n` +
+            `━━━━━━━━━━\n` +
+            `확인 후 빠르게 연락드릴게요! 😊`
+          );
+        } else {
+          await sendTextMessage(env, customerId,
+            `전송에 문제가 있었어요 😥\n\n` +
+            `직접 전화주시면 바로 상담해드릴게요!\n` +
+            `📞 ${storePhone2}`
+          );
+        }
+        
+        const responseTime = Date.now() - startTime;
+        await env.DB.prepare(`
+          INSERT INTO xivix_conversation_logs 
+          (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
+          VALUES (?, ?, 'text', ?, ?, ?, 0)
+        `).bind(storeId, customerId, originalMessage.slice(0, 100), `[sms-sent] ${customerPhone}: ${messageContent?.slice(0, 50) || '상담요청'}`, responseTime).run();
+        
+        return c.json({ success: true, store_id: storeId, intent: 'sms_callback', sms_sent: smsResult.success });
+      } catch (smsError) {
+        console.error('[Webhook] SMS send error:', smsError);
+      }
+    }
+
+    // ============ [전화번호만 입력한 경우 - 레거시 지원] ============
     const phoneOnlyPattern = /^(?:010|011|016|017|018|019)[-\s]?\d{3,4}[-\s]?\d{4}$/;
     if (phoneOnlyPattern.test(originalMessage.trim())) {
       const storeName = storeResult?.store_name || '매장';
