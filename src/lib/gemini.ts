@@ -93,11 +93,14 @@ export function buildSystemInstruction(store?: {
   system_prompt?: string;
   greeting_message?: string;
 }): string {
-  // 매장의 커스텀 시스템 프롬프트가 있으면 우선 사용
-  let instruction = '';
+  // ⭐ 매장에 커스텀 system_prompt가 있으면 그것을 최우선 사용!
+  // 기본 XIVIX 프롬프트는 사용하지 않음
+  if (store?.system_prompt) {
+    return store.system_prompt;
+  }
   
-  // 기본 XIVIX 시스템 프롬프트
-  instruction = XIVIX_SYSTEM_PROMPT;
+  // system_prompt가 없는 경우에만 기본 프롬프트 사용
+  let instruction = XIVIX_SYSTEM_PROMPT;
   
   if (store) {
     // 매장 기본 정보
@@ -134,11 +137,6 @@ export function buildSystemInstruction(store?: {
     // 환영 인사말 (첫 대화 시 사용 가이드)
     if (store.greeting_message) {
       instruction += `\n\n## 환영 인사말 (첫 대화 시 참고)\n${store.greeting_message}`;
-    }
-    
-    // ⭐ 커스텀 시스템 프롬프트 (매장별 상세 지침) - 가장 중요!
-    if (store.system_prompt) {
-      instruction += `\n\n## 매장 상세 운영 지침 (반드시 따를 것)\n${store.system_prompt}`;
     }
   }
   
