@@ -6285,6 +6285,212 @@ ${ocrResult}
   }
 });
 
+// ⭐ 다중 URL 분석 → AI가 카테고리별 자동 정리
+api.post('/stores/:id/analyze-multiple-urls', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const { urls } = await c.req.json() as { urls: string[] };
+    
+    if (!urls || urls.length === 0) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'URL이 필요합니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // 각 URL에서 콘텐츠 수집
+    const allContents: string[] = [];
+    let analyzedCount = 0;
+    
+    for (const url of urls.slice(0, 10)) { // 최대 10개
+      try {
+        // URL 타입 감지
+        let content = '';
+        
+        // 네이버 단축 URL 리다이렉트 처리
+        let finalUrl = url;
+        if (url.includes('naver.me/')) {
+          try {
+            const redirectRes = await fetch(url, { redirect: 'manual' });
+            const location = redirectRes.headers.get('Location');
+            if (location) finalUrl = location;
+          } catch (e) {
+            // 리다이렉트 실패 시 원본 URL 사용
+          }
+        }
+        
+        // 네이버 플레이스
+        const placeIdMatch = finalUrl.match(/place\/(\d+)/);
+        if (placeIdMatch) {
+          const placeId = placeIdMatch[1];
+          const pages = ['home', 'menu/list', 'ticket', 'review'];
+          
+          for (const page of pages) {
+            try {
+              const pageRes = await fetch(`https://m.place.naver.com/place/${placeId}/${page}`, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)' }
+              });
+              const html = await pageRes.text();
+              
+              // 주요 텍스트 추출
+              const textMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+              if (textMatch) {
+                content += `\n[네이버플레이스-${page}]\n` + textMatch[1].substring(0, 20000);
+              }
+            } catch (e) {
+              // 페이지 로드 실패 무시
+            }
+          }
+        }
+        // 네이버 블로그
+        else if (finalUrl.includes('blog.naver.com')) {
+          try {
+            const blogRes = await fetch(finalUrl.replace('blog.naver.com', 'm.blog.naver.com'), {
+              headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)' }
+            });
+            const html = await blogRes.text();
+            content += '\n[네이버블로그]\n';
+            
+            // 본문 텍스트 추출
+            const mainMatch = html.match(/se-main-container[^>]*>([\s\S]*?)<\/div>/);
+            if (mainMatch) {
+              content += mainMatch[1].replace(/<[^>]+>/g, ' ').substring(0, 10000);
+            }
+          } catch (e) {
+            // 블로그 로드 실패 무시
+          }
+        }
+        // 일반 URL
+        else {
+          try {
+            const pageRes = await fetch(finalUrl, {
+              headers: { 'User-Agent': 'Mozilla/5.0' }
+            });
+            const html = await pageRes.text();
+            content += '\n[웹페이지]\n';
+            
+            // 메타 정보 추출
+            const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+            if (titleMatch) content += 'Title: ' + titleMatch[1] + '\n';
+            
+            // 본문 텍스트
+            const bodyText = html.replace(/<script[\s\S]*?<\/script>/gi, '')
+              .replace(/<style[\s\S]*?<\/style>/gi, '')
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/\s+/g, ' ')
+              .substring(0, 10000);
+            content += bodyText;
+          } catch (e) {
+            // 페이지 로드 실패 무시
+          }
+        }
+        
+        if (content.length > 100) {
+          allContents.push(content);
+          analyzedCount++;
+        }
+      } catch (e) {
+        console.error(`URL 분석 실패: ${url}`, e);
+      }
+    }
+    
+    if (allContents.length === 0) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'URL에서 정보를 추출할 수 없습니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // Gemini로 종합 분석
+    const combinedContent = allContents.join('\n\n---\n\n').substring(0, 100000);
+    
+    const analyzePrompt = `여러 URL에서 수집한 매장 정보입니다. 이 정보를 종합 분석해서 AI 상담원 설정에 필요한 데이터를 추출해주세요.
+
+## 수집된 콘텐츠
+${combinedContent}
+
+## 반드시 다음 JSON 형식으로만 출력하세요:
+{
+  "storeName": "매장명",
+  "businessType": "BEAUTY_SKIN|BEAUTY_HAIR|BEAUTY_NAIL|RESTAURANT|FITNESS|MEDICAL|OTHER 중 하나",
+  "address": "매장 주소",
+  "phone": "전화번호",
+  "operatingHours": "영업시간 (줄바꿈으로 구분)",
+  "aiPersona": "AI의 역할/페르소나 (예: 친절한 피부관리 전문 상담사)",
+  "aiTone": "friendly|professional|casual|formal|energetic 중 하나",
+  "greetingMessage": "환영 인사말 (예: 안녕하세요! 라온뷰티입니다. 무엇을 도와드릴까요?)",
+  "systemPrompt": "당신은 [매장명]의 AI 상담원입니다.\\n\\n## 매장 소개\\n[매장 특징]\\n\\n## 서비스 가격표\\n[모든 서비스와 가격]\\n\\n## 현재 이벤트/프로모션\\n[할인 정보]\\n\\n## 영업시간\\n[영업시간]\\n\\n## 응대 지침\\n- 친절하고 전문적으로 응대\\n- 가격 문의 시 정확한 정보 제공\\n- 예약으로 마무리",
+  "menuText": "서비스명 - 가격\\n서비스명 - 정가 → 할인가 (할인율)\\n...",
+  "forbiddenKeywords": "100%, 보장, 확실히",
+  "menuCount": 10,
+  "eventCount": 5
+}
+
+규칙:
+1. 모든 서비스/메뉴와 가격을 빠짐없이 추출
+2. 이벤트/할인 정보는 "정가 → 할인가 (할인율)" 형식
+3. systemPrompt는 실제 상담에 바로 사용 가능하도록 상세하게
+4. 없는 정보는 null로 설정
+5. JSON만 출력, 다른 텍스트 없음`;
+
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${c.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: analyzePrompt }] }],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 8192
+          }
+        })
+      }
+    );
+
+    if (!geminiRes.ok) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'AI 분석 실패',
+        timestamp: Date.now()
+      }, 500);
+    }
+
+    const geminiData = await geminiRes.json() as any;
+    const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    
+    // JSON 추출
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'AI 응답 파싱 실패',
+        timestamp: Date.now()
+      }, 500);
+    }
+
+    const result = JSON.parse(jsonMatch[0]);
+    result.analyzedCount = analyzedCount;
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: result,
+      timestamp: Date.now()
+    });
+
+  } catch (error: any) {
+    console.error('[analyze-multiple-urls] Error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '다중 URL 분석 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
 // 지원 파일 타입 조회
 api.get('/files/supported-types', (c) => {
   return c.json<ApiResponse>({
@@ -7917,7 +8123,14 @@ api.post('/customers/parse-pdf', async (c) => {
     
     // PDF를 텍스트로 변환 (Gemini Vision API 사용)
     const arrayBuffer = await file.arrayBuffer();
-    const base64Data = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    // 대용량 파일도 처리 가능하도록 청크 단위로 base64 변환
+    const uint8Array = new Uint8Array(arrayBuffer);
+    let base64Data = '';
+    const chunkSize = 32768; // 32KB 청크
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.subarray(i, i + chunkSize);
+      base64Data += btoa(String.fromCharCode.apply(null, Array.from(chunk)));
+    }
     
     // Gemini로 PDF 내용 추출 및 파싱
     const parsePrompt = `

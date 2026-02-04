@@ -102,28 +102,37 @@ export function renderStoreSettings(storeId: number): string {
         </div>
         
         <p class="text-sm text-white/60 mb-4">
-          URL, PDF, 이미지를 입력하면 AI가 매장 정보와 프롬프트를 자동으로 생성합니다.
+          여러 URL을 입력하면 AI가 모든 정보를 종합해 카테고리별로 자동 정리합니다.
         </p>
         
-        <!-- URL 입력 -->
+        <!-- 다중 URL 입력 (NEW!) -->
         <div class="mb-4">
           <label class="block text-sm text-white/60 mb-2">
-            <i class="fas fa-link mr-1"></i>URL 입력 (플레이스/블로그/홈페이지) - Enter 또는 버튼 클릭 시 자동 적용
+            <i class="fas fa-link mr-1"></i>URL 입력 <span class="text-[#D4AF37]">(여러 개 가능 - 줄바꿈으로 구분)</span>
           </label>
-          <div class="flex gap-2">
-            <input type="text" id="auto-url" 
-              class="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white"
-              placeholder="https://naver.me/xxx 또는 https://m.place.naver.com/place/xxx"
-              onkeypress="if(event.key==='Enter') analyzeUrl()">
-            <button onclick="analyzeUrl()" class="px-6 py-3 btn-primary rounded-xl font-medium whitespace-nowrap">
-              <i class="fas fa-magic mr-1"></i>분석 + 자동적용
+          <textarea id="multi-url-input" rows="5"
+            class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm resize-none"
+            placeholder="여러 URL을 줄바꿈으로 구분해서 입력하세요:
+
+https://naver.me/GM3bCTzA (플레이스)
+https://naver.me/Fwj3TxKy (예약)
+https://naver.me/FHOTgAOp (이벤트)
+https://blog.naver.com/ra_on_beauty (블로그)"></textarea>
+          <div class="flex gap-2 mt-2">
+            <button onclick="analyzeMultipleUrls()" class="flex-1 py-3 btn-primary rounded-xl font-medium">
+              <i class="fas fa-magic mr-1"></i>전체 분석 + 자동적용
+            </button>
+            <button onclick="document.getElementById('multi-url-input').value=''" class="px-4 py-3 btn-secondary rounded-xl">
+              <i class="fas fa-trash"></i>
             </button>
           </div>
           <p class="text-xs text-white/40 mt-2">
-            <i class="fas fa-info-circle mr-1"></i>
-            URL을 입력하면 AI가 매장 정보, 메뉴, 이벤트/할인 정보를 자동으로 추출하고 프롬프트에 반영합니다.
+            <i class="fas fa-lightbulb mr-1 text-yellow-400"></i>
+            <strong>팁:</strong> 네이버 플레이스, 예약, 이벤트, 블로그 링크를 모두 넣으면 AI가 종합 분석해 프롬프트를 생성합니다.
           </p>
         </div>
+        
+        <div class="text-center text-white/30 text-sm my-4">─── 또는 ───</div>
         
         <!-- ⭐ 텍스트 붙여넣기 (가장 권장) -->
         <div class="mb-4">
@@ -1608,6 +1617,115 @@ VAT 별도, 시술시간 약 1시간"></textarea>
       } catch (err) {
         console.error('Analysis error:', err);
         showToast('분석 중 오류 발생: ' + err.message, 'error');
+      } finally {
+        setTimeout(() => {
+          statusDiv.classList.add('hidden');
+          progressBar.style.width = '0%';
+        }, 1000);
+      }
+    }
+    
+    // ⭐ 다중 URL 분석 → AI가 카테고리별 자동 정리
+    async function analyzeMultipleUrls() {
+      const urlText = document.getElementById('multi-url-input').value.trim();
+      
+      if (!urlText) {
+        showToast('URL을 입력해주세요', 'error');
+        return;
+      }
+      
+      // URL 추출 (줄바꿈, 쉼표, 공백으로 구분)
+      const urls = urlText.split(/[\\n,\\s]+/)
+        .map(u => u.trim())
+        .filter(u => u.startsWith('http'));
+      
+      if (urls.length === 0) {
+        showToast('유효한 URL이 없습니다', 'error');
+        return;
+      }
+      
+      // 상태 표시
+      const statusDiv = document.getElementById('analysis-status');
+      const statusText = document.getElementById('analysis-text');
+      const progressBar = document.getElementById('analysis-progress');
+      statusDiv.classList.remove('hidden');
+      statusText.textContent = \`\${urls.length}개 URL 분석 준비 중...\`;
+      progressBar.style.width = '10%';
+      
+      try {
+        const res = await fetch(\`/api/stores/\${STORE_ID}/analyze-multiple-urls\`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls })
+        });
+        
+        statusText.textContent = 'AI가 모든 정보를 종합 분석 중...';
+        progressBar.style.width = '60%';
+        
+        const data = await res.json();
+        progressBar.style.width = '100%';
+        
+        if (data.success) {
+          const result = data.data;
+          
+          // 매장 정보 적용
+          if (result.storeName) {
+            document.getElementById('store-name-input').value = result.storeName;
+            document.getElementById('store-name').textContent = result.storeName;
+          }
+          if (result.address) {
+            const addrEl = document.getElementById('store-address');
+            if (addrEl) addrEl.value = result.address;
+          }
+          if (result.phone) {
+            const phoneEl = document.getElementById('store-phone');
+            if (phoneEl) phoneEl.value = result.phone;
+          }
+          if (result.operatingHours) {
+            document.getElementById('operating-hours-text').value = result.operatingHours;
+          }
+          if (result.businessType) {
+            document.getElementById('business-type').value = result.businessType;
+          }
+          
+          // AI 프롬프트 적용
+          if (result.aiPersona) {
+            document.getElementById('ai-persona').value = result.aiPersona;
+          }
+          if (result.aiTone) {
+            document.getElementById('ai-tone').value = result.aiTone;
+          }
+          if (result.greetingMessage) {
+            document.getElementById('greeting-message').value = result.greetingMessage;
+          }
+          if (result.systemPrompt) {
+            document.getElementById('system-prompt').value = result.systemPrompt;
+          }
+          if (result.forbiddenKeywords) {
+            document.getElementById('forbidden-keywords').value = result.forbiddenKeywords;
+          }
+          
+          // 메뉴/이벤트 데이터
+          if (result.menuText) {
+            document.getElementById('menu-data-text').value = result.menuText;
+          }
+          
+          // 결과 요약
+          let summary = '✅ 다중 URL 분석 완료!\\n\\n';
+          summary += '📊 분석된 URL: ' + data.data.analyzedCount + '/' + urls.length + '개\\n';
+          if (result.storeName) summary += '🏪 매장명: ' + result.storeName + '\\n';
+          if (result.businessType) summary += '📌 업종: ' + result.businessType + '\\n';
+          if (result.menuCount) summary += '📋 메뉴/서비스: ' + result.menuCount + '개\\n';
+          if (result.eventCount) summary += '🎉 이벤트: ' + result.eventCount + '개\\n';
+          
+          console.log('[다중 URL 분석 결과]', result);
+          showToast('✅ ' + data.data.analyzedCount + '개 URL 분석 완료! [전체 저장]을 눌러 저장하세요.', 'success');
+        } else {
+          showToast('분석 실패: ' + (data.error || '알 수 없는 오류'), 'error');
+        }
+      } catch (err) {
+        console.error('Multiple URL Analysis Error:', err);
+        showToast('분석 중 오류 발생', 'error');
       } finally {
         setTimeout(() => {
           statusDiv.classList.add('hidden');
