@@ -125,19 +125,46 @@ export function renderStoreSettings(storeId: number): string {
           </p>
         </div>
         
+        <!-- ⭐ 텍스트 붙여넣기 (가장 권장) -->
+        <div class="mb-4">
+          <label class="block text-sm text-white/60 mb-2">
+            <i class="fas fa-paste mr-1"></i>텍스트 붙여넣기 <span class="text-[#D4AF37]">(권장 - 가격/이벤트 직접 입력)</span>
+          </label>
+          <textarea id="paste-text" rows="6"
+            class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white resize-none text-sm"
+            placeholder="메뉴/가격/이벤트 정보를 자유롭게 붙여넣으세요. AI가 정리합니다.
+
+예시:
+오픈 50% 할인 이벤트
+미라클 필링 120,000원 → 60,000원
+매직팟 고주파 80,000원 → 40,000원
+토닝 케어 70,000원 → 35,000원
+
+영업시간: 10:00-19:00 (일요일 휴무)
+VAT 별도, 시술시간 약 1시간"></textarea>
+          <div class="flex gap-2 mt-2">
+            <button onclick="analyzeTextInput()" class="flex-1 py-3 btn-primary rounded-xl font-medium">
+              <i class="fas fa-magic mr-1"></i>AI로 프롬프트 생성
+            </button>
+            <button onclick="document.getElementById('paste-text').value=''" class="px-4 py-3 btn-secondary rounded-xl">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="text-center text-white/30 text-sm my-4">─── 또는 ───</div>
+        
         <!-- 파일 업로드 -->
         <div class="mb-4">
           <label class="block text-sm text-white/60 mb-2">
             <i class="fas fa-file-upload mr-1"></i>파일 업로드 (PDF, 이미지)
           </label>
-          <div class="border-2 border-dashed border-white/20 rounded-xl p-6 text-center hover:border-[#D4AF37]/50 transition-all cursor-pointer" onclick="document.getElementById('file-upload').click()">
+          <div class="border-2 border-dashed border-white/20 rounded-xl p-4 text-center hover:border-[#D4AF37]/50 transition-all cursor-pointer" onclick="document.getElementById('file-upload').click()">
             <input type="file" id="file-upload" class="hidden" multiple accept=".pdf,.png,.jpg,.jpeg,.webp" onchange="handleFileUpload(event)">
             <div id="upload-preview" class="hidden"></div>
             <div id="upload-placeholder">
-              <i class="fas fa-cloud-upload-alt text-4xl text-white/30 mb-3"></i>
-              <p class="text-white/60 mb-1">클릭하거나 파일을 드래그하세요</p>
-              <p class="text-xs text-white/40">PDF (최대 50MB), 이미지 (최대 20MB)</p>
-              <p class="text-xs text-white/40 mt-1">메뉴판, 가격표, 브로슈어, 심의규정 등</p>
+              <i class="fas fa-cloud-upload-alt text-2xl text-white/30 mb-2"></i>
+              <p class="text-white/60 text-sm">메뉴판, 가격표 이미지/PDF 업로드</p>
             </div>
           </div>
         </div>
@@ -146,13 +173,10 @@ export function renderStoreSettings(storeId: number): string {
         <div id="uploaded-files" class="hidden mb-4">
           <label class="block text-sm text-white/60 mb-2">업로드된 파일</label>
           <div id="file-list" class="space-y-2"></div>
+          <button onclick="generatePromptFromSources()" class="w-full mt-2 py-3 btn-secondary rounded-xl font-medium">
+            <i class="fas fa-wand-magic-sparkles mr-1"></i>파일 분석하기
+          </button>
         </div>
-        
-        <!-- 분석 버튼 -->
-        <button onclick="generatePromptFromSources()" id="generate-btn" class="w-full py-4 gold-bg rounded-xl font-bold text-black flex items-center justify-center gap-2 disabled:opacity-50" disabled>
-          <i class="fas fa-wand-magic-sparkles"></i>
-          AI로 프롬프트 자동 생성
-        </button>
         
         <!-- 분석 진행 상태 -->
         <div id="analysis-status" class="hidden mt-4 p-4 bg-white/5 rounded-xl">
@@ -1282,6 +1306,72 @@ export function renderStoreSettings(storeId: number): string {
     }
     
     // ============ 자동 생성 기능 ============
+    
+    // 텍스트 입력으로 프롬프트 생성 (권장 방식)
+    async function analyzeTextInput() {
+      const text = document.getElementById('paste-text').value.trim();
+      const storeName = document.getElementById('store-name-input').value.trim();
+      
+      if (!text) {
+        showToast('메뉴/가격/이벤트 정보를 입력해주세요', 'error');
+        return;
+      }
+      
+      // 상태 표시
+      const statusDiv = document.getElementById('analysis-status');
+      const statusText = document.getElementById('analysis-text');
+      const progressBar = document.getElementById('analysis-progress');
+      statusDiv.classList.remove('hidden');
+      statusText.textContent = 'AI가 정보를 정리하고 프롬프트를 생성 중...';
+      progressBar.style.width = '50%';
+      
+      try {
+        const res = await fetch(\`/api/stores/\${STORE_ID}/generate-prompt-from-text\`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            text,
+            storeName: storeName || '매장',
+            businessType: document.getElementById('business-type').value
+          })
+        });
+        
+        const data = await res.json();
+        progressBar.style.width = '100%';
+        
+        if (data.success) {
+          const result = data.data;
+          
+          // 시스템 프롬프트 적용
+          if (result.systemPrompt) {
+            document.getElementById('system-prompt').value = result.systemPrompt;
+          }
+          
+          // 메뉴 데이터 적용
+          if (result.menuText) {
+            document.getElementById('menu-data-text').value = result.menuText;
+          }
+          
+          // 영업시간 적용
+          if (result.operatingHours) {
+            document.getElementById('operating-hours-text').value = result.operatingHours;
+          }
+          
+          showToast('✅ 프롬프트가 생성되었습니다! [전체 저장]을 눌러 저장하세요.', 'success');
+          console.log('생성된 프롬프트:', result);
+        } else {
+          showToast('생성 실패: ' + (data.error || '알 수 없는 오류'), 'error');
+        }
+      } catch (err) {
+        console.error('Error:', err);
+        showToast('생성 중 오류 발생', 'error');
+      } finally {
+        setTimeout(() => {
+          statusDiv.classList.add('hidden');
+          progressBar.style.width = '0%';
+        }, 1000);
+      }
+    }
     
     let uploadedFiles = [];
     let analyzedUrl = null;

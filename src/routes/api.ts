@@ -5958,6 +5958,115 @@ api.post('/stores/:id/auto-generate-prompt', async (c) => {
   }
 });
 
+// 텍스트 입력으로 프롬프트 생성 (권장 방식)
+api.post('/stores/:id/generate-prompt-from-text', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const { text, storeName, businessType } = await c.req.json() as {
+      text: string;
+      storeName?: string;
+      businessType?: string;
+    };
+    
+    if (!text || text.trim().length < 10) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '메뉴/가격/이벤트 정보를 더 입력해주세요 (최소 10자)',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    const geminiApiKey = c.env.GEMINI_API_KEY;
+    if (!geminiApiKey) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'Gemini API 키가 설정되지 않았습니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // AI로 정보 정리 및 프롬프트 생성
+    const prompt = `당신은 매장 AI 상담원 프롬프트 전문가입니다.
+
+아래 텍스트에서 정보를 추출하고, AI 상담원용 시스템 프롬프트를 생성하세요.
+
+## 매장 정보
+- 매장명: ${storeName || '(입력 필요)'}
+- 업종: ${businessType || 'BEAUTY_SKIN'}
+
+## 입력된 텍스트
+${text}
+
+## 출력 형식 (JSON만 출력)
+{
+  "menuText": "정리된 메뉴/서비스 목록 (줄바꿈으로 구분)\\n예: 서비스명 - 가격\\n서비스명 - 정가 → 할인가 (할인율)",
+  "operatingHours": "영업시간 (없으면 null)",
+  "systemPrompt": "아래 형식으로 작성:\\n\\n당신은 ${storeName || '[매장명]'}의 전문 AI 상담원입니다.\\n\\n## 서비스 가격표\\n- 서비스1: 00,000원\\n- 서비스2: 정가 → 할인가 (할인율)\\n...\\n\\n## 현재 이벤트/프로모션\\n(이벤트 내용 상세히)\\n\\n## 기타 안내\\n- VAT 별도 여부\\n- 시술 소요시간\\n- 예약 안내\\n\\n## 응대 지침\\n- 고객 문의에 친절하고 전문적으로 응대합니다\\n- 가격 문의 시 정확한 가격과 현재 이벤트를 함께 안내합니다\\n- 대화 마무리 시 예약을 유도합니다"
+}
+
+중요: 
+1. 가격 정보가 있으면 반드시 포함
+2. 할인/이벤트 정보는 눈에 띄게 강조
+3. 인사말은 포함하지 않음 (시스템 프롬프트는 AI 지침용)
+4. JSON만 출력, 다른 텍스트 금지`;
+    
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 4096
+          }
+        })
+      }
+    );
+    
+    if (!geminiRes.ok) {
+      const errorText = await geminiRes.text();
+      console.error('Gemini API Error:', errorText);
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'AI 분석 실패: ' + geminiRes.status,
+        timestamp: Date.now()
+      }, 500);
+    }
+    
+    const geminiData = await geminiRes.json() as any;
+    const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    
+    // JSON 파싱
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'AI 응답 파싱 실패',
+        timestamp: Date.now()
+      }, 500);
+    }
+    
+    const result = JSON.parse(jsonMatch[0]);
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: result,
+      timestamp: Date.now()
+    });
+    
+  } catch (error: any) {
+    console.error('Generate prompt from text error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '프롬프트 생성 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
 // 지원 파일 타입 조회
 api.get('/files/supported-types', (c) => {
   return c.json<ApiResponse>({
