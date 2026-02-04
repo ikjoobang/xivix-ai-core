@@ -375,9 +375,12 @@ export function parseWebhookMessage(body: any): ParsedWebhookMessage | null {
     return null;
   }
 
+  // user가 객체인 경우 id를 추출, 문자열인 경우 그대로 사용
+  const userId = typeof body.user === 'object' ? body.user.id : body.user;
+  
   return {
     event: body.event,
-    user: body.user,
+    user: userId,
     textContent: body.textContent,
     imageContent: body.imageContent,
     options: body.options

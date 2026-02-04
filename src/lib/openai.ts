@@ -202,12 +202,15 @@ export function buildOpenAIMessages(
     { role: 'system', content: systemPrompt }
   ];
 
-  // 대화 히스토리 추가
-  for (const msg of conversationHistory.slice(-10)) {
-    messages.push({
-      role: msg.role as 'user' | 'assistant',
-      content: msg.content
-    });
+  // 대화 히스토리 추가 (안전하게 처리)
+  const history = Array.isArray(conversationHistory) ? conversationHistory : [];
+  for (const msg of history.slice(-10)) {
+    if (msg && msg.role && msg.content) {
+      messages.push({
+        role: msg.role as 'user' | 'assistant',
+        content: String(msg.content)
+      });
+    }
   }
 
   // 현재 사용자 메시지 추가

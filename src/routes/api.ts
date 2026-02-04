@@ -5356,6 +5356,7 @@ api.put('/stores/:id/settings', async (c) => {
       system_prompt?: string;
       operating_hours?: string;
       menu_data?: string;
+      events_data?: string;              // 🎁 이벤트/할인 정보
       ai_model?: string;
       naver_talktalk_id?: string;
       naver_reservation_id?: string;
@@ -5390,6 +5391,7 @@ api.put('/stores/:id/settings', async (c) => {
         system_prompt = COALESCE(?, system_prompt),
         operating_hours = COALESCE(?, operating_hours),
         menu_data = COALESCE(?, menu_data),
+        events_data = COALESCE(?, events_data),
         ai_model = COALESCE(?, ai_model),
         naver_talktalk_id = COALESCE(?, naver_talktalk_id),
         naver_reservation_id = COALESCE(?, naver_reservation_id),
@@ -5413,6 +5415,7 @@ api.put('/stores/:id/settings', async (c) => {
       nullIfEmpty(settings.system_prompt),
       nullIfEmpty(settings.operating_hours),
       nullIfEmpty(settings.menu_data),
+      nullIfEmpty(settings.events_data),
       nullIfEmpty(settings.ai_model),
       nullIfEmpty(settings.naver_talktalk_id),
       nullIfEmpty(settings.naver_reservation_id),
@@ -6472,7 +6475,8 @@ api.put('/stores/:id/prompt-sections', async (c) => {
     
     if (body.events_data !== undefined) {
       updates.push('events_data = ?');
-      values.push(JSON.stringify(body.events_data));
+      // 문자열이면 그대로, 객체면 JSON 변환
+      values.push(typeof body.events_data === 'string' ? body.events_data : JSON.stringify(body.events_data));
     }
     
     if (body.services_data !== undefined) {
@@ -10406,11 +10410,57 @@ api.get('/docs', async (c) => {
       },
       webhook: {
         naver: { method: 'POST', path: '/v1/naver/callback/:storeId', description: '네이버 톡톡 웹훅' }
+      },
+      industry: {
+        list: { method: 'GET', path: '/templates/industry', description: '업종 템플릿 목록' },
+        detail: { method: 'GET', path: '/templates/industry/:id', description: '업종 템플릿 상세' }
       }
     }
   };
 
   return c.json(docs);
+});
+
+// ============ 업종 템플릿 API ============
+
+// 업종 템플릿 목록
+api.get('/templates/industry', async (c) => {
+  const industryList = getIndustryList();
+  return c.json({
+    success: true,
+    data: industryList,
+    timestamp: Date.now()
+  });
+});
+
+// 업종 템플릿 상세
+api.get('/templates/industry/:id', async (c) => {
+  const id = c.req.param('id');
+  const template = getIndustryTemplate(id);
+  
+  if (!template) {
+    return c.json({
+      success: false,
+      error: '템플릿을 찾을 수 없습니다.',
+      timestamp: Date.now()
+    }, 404);
+  }
+  
+  return c.json({
+    success: true,
+    data: {
+      id: template.id,
+      name: template.name,
+      icon: template.icon,
+      category: template.category,
+      system_prompt: template.systemPrompt,
+      persona: template.persona,
+      sample_menu: template.sampleMenu,
+      faq: template.faq,
+      prohibited_keywords: template.prohibitedKeywords
+    },
+    timestamp: Date.now()
+  });
 });
 
 export default api;

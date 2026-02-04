@@ -435,6 +435,41 @@ export function renderStoreSettings(storeId: number): string {
 염색 - 60,000원~ (1시간 30분)"></textarea>
           </div>
         </div>
+        
+        <!-- 🎁 이벤트/할인 정보 -->
+        <div class="glass rounded-2xl p-6 lg:col-span-2">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-bold flex items-center gap-2">
+              <i class="fas fa-gift gold"></i>
+              이벤트/할인 정보
+              <span class="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full">키워드 응답용</span>
+            </h2>
+          </div>
+          
+          <div class="bg-green-500/10 border border-green-500/30 rounded-xl p-4 mb-4">
+            <p class="text-sm text-green-400">
+              <i class="fas fa-info-circle mr-2"></i>
+              고객이 "이벤트", "할인", "30%", "50%" 등을 입력하면 이 내용이 표시됩니다.
+            </p>
+          </div>
+          
+          <div>
+            <label class="block text-sm text-white/60 mb-2">이벤트 정보 (자유 형식)</label>
+            <textarea id="events-data-text" rows="10"
+              class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white resize-none text-sm"
+              placeholder="예시:
+🎁 첫 방문 30% 할인 이벤트
+
+[하린원장님 이벤트]
+- 뿌리컬러 + 수분결: 80,000원 → 60,000원
+- 실크 매직 + 클리닉: 170,000원 → 150,000원
+
+[유나원장님 이벤트]
+- 레이어드펌 + 클리닉: 220,000원 → 190,000원
+
+📅 이벤트 기간: 2026.02.01 ~ 02.28"></textarea>
+          </div>
+        </div>
       </div>
     </div>
     
@@ -840,6 +875,27 @@ export function renderStoreSettings(storeId: number): string {
       document.getElementById('operating-hours-text').value = store.operating_hours || '';
       document.getElementById('menu-data-text').value = store.menu_data || '';
       
+      // 이벤트/할인 정보
+      const eventsDataEl = document.getElementById('events-data-text');
+      if (eventsDataEl) {
+        // events_data가 JSON 배열이면 텍스트로 변환
+        let eventsText = '';
+        if (store.events_data) {
+          try {
+            const events = JSON.parse(store.events_data);
+            if (Array.isArray(events) && events.length > 0) {
+              eventsText = events.map(e => \`\${e.title || e.name}: \${e.discount_rate || e.price || ''}\`).join('\\n');
+            } else if (typeof events === 'string') {
+              eventsText = events;
+            }
+          } catch {
+            // JSON이 아니면 그대로 사용
+            eventsText = store.events_data;
+          }
+        }
+        eventsDataEl.value = eventsText || '';
+      }
+      
       // 네이버 연동
       document.getElementById('naver-talktalk-id').value = store.naver_talktalk_id || '';
       document.getElementById('naver-reservation-id').value = store.naver_reservation_id || '';
@@ -1192,6 +1248,7 @@ export function renderStoreSettings(storeId: number): string {
         // 영업 정보
         operating_hours: document.getElementById('operating-hours-text').value,
         menu_data: menuData,
+        events_data: document.getElementById('events-data-text')?.value || '',
         
         // AI 모델
         ai_model: document.querySelector('input[name="ai-model"]:checked')?.value || 'gemini',
@@ -1403,7 +1460,29 @@ export function renderStoreSettings(storeId: number): string {
         stageText.textContent = '2단계: 구매 욕구 자극 문구로 변환 + 할루시네이션 검수';
         progressBar.style.width = '70%';
         
-        const data = await res.json();
+        // 응답 텍스트 한 번만 읽기
+        const responseText = await res.text();
+        
+        // HTTP 에러 체크
+        if (!res.ok) {
+          console.error('HTTP Error:', res.status, responseText);
+          throw new Error(\`서버 오류 (HTTP \${res.status}): \${responseText || '알 수 없는 오류'}\`);
+        }
+        
+        // 빈 응답 체크
+        if (!responseText || responseText.trim() === '') {
+          throw new Error('서버에서 빈 응답이 반환되었습니다. 잠시 후 다시 시도해주세요.');
+        }
+        
+        // JSON 파싱
+        let data;
+        try {
+          data = JSON.parse(responseText);
+        } catch (parseErr) {
+          console.error('JSON Parse Error:', responseText.substring(0, 200));
+          throw new Error('응답 파싱 오류: ' + responseText.substring(0, 100));
+        }
+        
         progressBar.style.width = '100%';
         
         if (data.success) {
@@ -1442,7 +1521,7 @@ export function renderStoreSettings(storeId: number): string {
         }
       } catch (err) {
         console.error('Pipeline Error:', err);
-        showToast('프롬프트 생성 중 오류 발생', 'error');
+        showToast('생성 실패: ' + (err.message || '프롬프트 생성 중 오류 발생'), 'error');
       } finally {
         setTimeout(() => {
           statusDiv.classList.add('hidden');

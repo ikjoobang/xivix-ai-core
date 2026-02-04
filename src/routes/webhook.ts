@@ -524,7 +524,8 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       }
       
       // 대화 맥락 확인 (이전에 콜백 요청이 있었는지)
-      const recentContext = context.slice(-3).map(c => c.role === 'user' ? c.content : '').join(' ');
+      const contextMessages = Array.isArray(context?.messages) ? context.messages : [];
+      const recentContext = contextMessages.slice(-3).map((c: {role: string; content: string}) => c.role === 'user' ? c.content : '').join(' ');
       const hadCallbackRequest = callbackRequestPatterns.test(recentContext) || 
                                  recentContext.includes('전화번호입력') ||
                                  recentContext.includes('연락');
@@ -946,28 +947,52 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       return c.json({ success: true, store_id: storeId, intent: 'location' });
     }
     
-    // 가격/메뉴/이벤트 관련 키워드 - DB에서 매장별 데이터 사용
-    if (/가격|얼마|메뉴|이벤트|할인|50%|오십|50프로|30%|삼십/.test(lowerMessage)) {
-      const menuData = storeResult?.menu_data || '';
+    // 🎁 이벤트/할인 관련 키워드 (이벤트 먼저 체크)
+    if (/이벤트|할인|50%|오십|50프로|30%|삼십|프로모션|특가|혜택/.test(lowerMessage)) {
       const eventsData = storeResult?.events_data || '';
+      const menuData = storeResult?.menu_data || '';
       
-      // 이벤트 정보 파싱
-      let eventText = '';
-      if (eventsData) {
+      let eventResponse = '';
+      
+      // events_data가 있으면 이벤트 정보 표시
+      if (eventsData && eventsData.trim()) {
+        // 텍스트 형태 or JSON 형태 모두 처리
+        let eventsText = eventsData;
         try {
-          const events = JSON.parse(eventsData);
-          if (Array.isArray(events) && events.length > 0) {
-            eventText = events[0].discount_rate ? `${events[0].discount_rate} 할인` : '이벤트 진행 중';
+          const parsed = JSON.parse(eventsData);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            eventsText = parsed.map((e: any) => `${e.title || e.name}: ${e.discount_rate || e.price || ''}`).join('\n');
           }
         } catch {
-          // 이벤트 파싱 실패 시 무시
+          // JSON이 아니면 텍스트 그대로 사용
         }
+        eventResponse = `🎁 ${storeName} 이벤트\n\n${eventsText.trim()}\n\n━━━━━━━━━━\n관심 있는 이벤트가 있으시면 말씀해주세요!`;
+      } else if (menuData && menuData.trim()) {
+        // 이벤트 데이터가 없으면 메뉴 데이터 표시
+        eventResponse = `📋 ${storeName} 메뉴\n\n${menuData.trim()}\n\n━━━━━━━━━━\n현재 진행 중인 이벤트 정보는 매장에 문의해주세요!`;
+      } else {
+        eventResponse = `🎁 ${storeName} 이벤트 안내\n\n현재 진행 중인 이벤트 정보는 매장에 직접 문의해주세요.\n\n📞 ${storePhone}\n\n━━━━━━━━━━\n예약 도와드릴까요?`;
       }
+      
+      await sendTextMessage(env, customerId, eventResponse, storeId);
+      
+      const responseTime = Date.now() - startTime;
+      await env.DB.prepare(`
+        INSERT INTO xivix_conversation_logs 
+        (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
+        VALUES (?, ?, 'text', ?, ?, ?, 0)
+      `).bind(storeId, customerId, userMessage.slice(0, 100), '[keyword] 이벤트 안내', responseTime).run();
+      
+      return c.json({ success: true, store_id: storeId, intent: 'event' });
+    }
+    
+    // 💰 가격/메뉴 관련 키워드
+    if (/가격|얼마|메뉴|요금|비용|프라이스/.test(lowerMessage)) {
+      const menuData = storeResult?.menu_data || '';
       
       let priceResponse = '';
       if (menuData && menuData.trim()) {
-        const eventHeader = eventText ? `🎁 ${eventText} 메뉴\n\n` : `📋 ${storeName} 메뉴\n\n`;
-        priceResponse = eventHeader + menuData.trim() + `\n\n━━━━━━━━━━\n예약 도와드릴까요?`;
+        priceResponse = `📋 ${storeName} 메뉴\n\n${menuData.trim()}\n\n━━━━━━━━━━\n예약 도와드릴까요?`;
       } else {
         priceResponse = `📋 ${storeName} 메뉴/가격\n\n정확한 메뉴와 가격은 상담 후 안내드립니다.\n\n예약하시면 자세한 상담 받으실 수 있어요!\n\n━━━━━━━━━━\n예약 도와드릴까요?`;
       }
@@ -1114,12 +1139,14 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       // 응답 전송
       await sendTextMessage(env, customerId, aiResponse, storeId);
       
-      console.log(`[Webhook] AI Response (${aiModel}, verified: ${verified}): ${aiResponse.slice(0, 50)}...`);
+      console.log(`[Webhook] AI Response (${aiModel}, verified: ${verified}): ${String(aiResponse || '').slice(0, 50)}...`);
     } 
-    // 일반 문의: Gemini Flash (짧은 메시지는 일반, 긴 메시지는 스트리밍)
+    // 일반 문의: 관리자 설정 모델 사용 (기본값: gemini-flash)
     else {
-      console.log('[Webhook] Using Gemini Flash for simple consultation');
-      aiModel = 'gemini-flash';
+      // 매장에서 설정한 AI 모델 사용 (gpt-4o, gemini-pro, gemini)
+      const selectedModel = storeResult?.ai_model || 'gemini';
+      console.log(`[Webhook] Using ${selectedModel} for simple consultation (store setting)`);
+      aiModel = selectedModel;
       
       // Gemini 메시지 구성
       const messages = buildGeminiMessages(context, userMessage, imageBase64, imageMimeType);
@@ -1135,8 +1162,40 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         greeting_message: storeResult.greeting_message
       } : undefined);
       
-      // ⭐ 항상 전체 응답을 한 번에 전송 (스트리밍 제거 - 메시지 잘림 방지)
-      aiResponse = await getGeminiResponse(env, messages, systemInstruction, 'gemini');
+      // ⭐ 매장 설정 모델로 응답 생성 (GPT-4o, Gemini Pro, Gemini Flash)
+      if (selectedModel === 'gpt-4o') {
+        // GPT-4o 사용
+        const { getOpenAIResponse, buildOpenAISystemPrompt, buildOpenAIMessages } = await import('../lib/openai');
+        const openAIApiKey = env.OPENAI_API_KEY;
+        if (!openAIApiKey) {
+          console.warn('[Webhook] OpenAI API key not set, falling back to Gemini');
+          aiResponse = await getGeminiResponse(env, messages, systemInstruction, 'gemini');
+        } else {
+          // storeResult 필드를 buildOpenAISystemPrompt 인터페이스에 맞게 매핑
+          const openAISystemPrompt = buildOpenAISystemPrompt({
+            persona: storeResult?.ai_persona || '전문 상담 AI',
+            tone: storeResult?.ai_tone || 'friendly',
+            storeName: storeResult?.store_name || '매장',
+            menuData: storeResult?.menu_data || '',
+            operatingHours: storeResult?.operating_hours || '',
+            customPrompt: storeResult?.system_prompt || '',
+            forbiddenKeywords: storeResult?.forbidden_keywords || ''
+          });
+          // context가 ConversationContext 타입일 경우 messages 배열 추출 (안전하게)
+          const conversationHistory = Array.isArray(context?.messages) ? context.messages : [];
+          const openAIMessages = buildOpenAIMessages(openAISystemPrompt, conversationHistory, userMessage);
+          try {
+            aiResponse = await getOpenAIResponse(openAIApiKey, openAIMessages) || '응답을 생성할 수 없습니다.';
+          } catch (gptError: any) {
+            console.error('[Webhook] GPT-4o error, falling back to Gemini:', gptError.message);
+            aiResponse = await getGeminiResponse(env, messages, systemInstruction, 'gemini');
+            aiModel = 'gemini-flash (fallback)';
+          }
+        }
+      } else {
+        // Gemini 모델 사용 (gemini-pro 또는 gemini/gemini-flash)
+        aiResponse = await getGeminiResponse(env, messages, systemInstruction, selectedModel);
+      }
       await sendTextMessage(env, customerId, aiResponse, storeId);
     }
     
@@ -1160,7 +1219,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       customerId,
       imageBase64 ? 'mixed' : 'text',
       userMessage.slice(0, 500),
-      `[${aiModel}${verified ? ',verified' : ''}] ${aiResponse}`.slice(0, 1000),
+      `[${aiModel}${verified ? ',verified' : ''}] ${String(aiResponse || '')}`.slice(0, 1000),
       responseTime
     ).run();
     
@@ -1182,7 +1241,8 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       success: false, 
       error: 'Internal server error', 
       store_id: urlStoreId,
-      error_message: errorMessage.slice(0, 200)
+      error_message: String(errorMessage || '').slice(0, 200),
+      error_stack: String(errorStack || '').slice(0, 500)
     }, 500);
   }
 });
@@ -1401,8 +1461,8 @@ webhook.post('/v1/naver/callback', async (c) => {
       storeId,
       customerId,
       imageBase64 ? 'mixed' : 'text',
-      userMessage.slice(0, 500),
-      aiResponse.slice(0, 1000),
+      String(userMessage || '').slice(0, 500),
+      String(aiResponse || '').slice(0, 1000),
       responseTime
     ).run();
     

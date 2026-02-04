@@ -15,6 +15,7 @@ import { renderSuperMasterDashboard } from './views/super-master';
 import { renderStoreSettings } from './views/store-settings';
 import { renderRequestPage } from './views/request';
 import { renderCustomerManagement } from './views/customer-management';
+import { renderUnifiedAdmin } from './views/admin-unified';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -124,6 +125,12 @@ app.get('/store/:storeId/customers', async (c) => {
 // 설정 변경 요청 페이지 (사장님용)
 app.get('/request', async (c) => {
   return c.html(renderRequestPage());
+});
+
+// 통합 관리자 페이지 (V3.0)
+app.get('/admin/:storeId', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  return c.html(renderUnifiedAdmin(storeId));
 });
 
 // ============ Root & Landing ============

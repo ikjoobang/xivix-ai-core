@@ -41,14 +41,16 @@ export function buildGeminiMessages(
 ): GeminiMessage[] {
   const messages: GeminiMessage[] = [];
   
-  // Add conversation history (최근 10개)
-  if (context?.messages) {
+  // Add conversation history (최근 10개) - 안전하게 처리
+  if (context?.messages && Array.isArray(context.messages)) {
     const recentMessages = context.messages.slice(-10);
     for (const msg of recentMessages) {
-      messages.push({
-        role: msg.role === 'user' ? 'user' : 'model',
-        parts: [{ text: msg.content }]
-      });
+      if (msg && msg.role && msg.content) {
+        messages.push({
+          role: msg.role === 'user' ? 'user' : 'model',
+          parts: [{ text: String(msg.content) }]
+        });
+      }
     }
   }
   
@@ -94,9 +96,22 @@ export function buildSystemInstruction(store?: {
   greeting_message?: string;
 }): string {
   // ⭐ 매장에 커스텀 system_prompt가 있으면 그것을 최우선 사용!
-  // 기본 XIVIX 프롬프트는 사용하지 않음
+  // 단, menu_data도 함께 포함하여 할루시네이션 방지
   if (store?.system_prompt) {
-    return store.system_prompt;
+    let fullPrompt = store.system_prompt;
+    
+    // menu_data가 있으면 기본 가격 정보로 추가 (할루시네이션 방지)
+    if (store.menu_data && !store.system_prompt.includes(store.menu_data)) {
+      fullPrompt += `\n\n## ⚠️ 기본 메뉴 가격 (이벤트 아님 - 필수 참조)
+${store.menu_data}
+
+## 할루시네이션 방지 규칙
+- 위 기본 메뉴에 없는 시술은 가격을 추측하지 말 것
+- 커트와 펌은 다른 시술 (레이어드컷 ≠ 레이어드펌)
+- 불확실한 가격은 "원장님 상담 후 정확한 안내 가능합니다"로 답변`;
+    }
+    
+    return fullPrompt;
   }
   
   // system_prompt가 없는 경우에만 기본 프롬프트 사용

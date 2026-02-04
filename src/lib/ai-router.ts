@@ -195,12 +195,13 @@ export async function handleExpertConsultation(
       message || '이 이미지를 분석하고 적절한 상담을 제공해주세요.'
     );
   } else {
-    // 텍스트 상담
-    const messages = buildOpenAIMessages(context, message);
-    gptResponse = await getOpenAIResponse(openaiKey, messages, systemPrompt);
+    // 텍스트 상담 - context.messages 배열을 추출하여 전달
+    const conversationHistory = Array.isArray(context?.messages) ? context.messages : [];
+    const openAIMessages = buildOpenAIMessages(systemPrompt, conversationHistory, message);
+    gptResponse = await getOpenAIResponse(openaiKey, openAIMessages);
   }
   
-  console.log('[AI Router] GPT-4o response:', gptResponse.slice(0, 100) + '...');
+  console.log('[AI Router] GPT-4o response:', String(gptResponse || '').slice(0, 100) + '...');
   
   // 2차: Gemini 2.5 Pro로 검증 (의료/법률/보험 업종만)
   const needsVerification = store && EXPERT_BUSINESS_TYPES.includes(store.business_type || '');
