@@ -5974,7 +5974,7 @@ api.post('/stores/:id/auto-generate-prompt', async (c) => {
   }
 });
 
-// ⭐ 범용 프롬프트 생성 엔진 (지능형 병합 + 가격 보존)
+// ⭐ 데이터 통합 전문가 엔진 (기존 정보 보존 + 신규 정보 병합)
 api.post('/stores/:id/generate-prompt-from-text', async (c) => {
   const storeId = parseInt(c.req.param('id'), 10);
   
@@ -6003,70 +6003,102 @@ api.post('/stores/:id/generate-prompt-from-text', async (c) => {
       }, 400);
     }
     
-    // ⭐ 범용 지능형 프롬프트 엔진
-    const prompt = `당신은 다양한 업종의 원천 데이터를 분석하여 전문가 수준의 AI 상담원을 설계하는 '프롬프트 엔지니어'입니다.
+    // ⭐ 기존 프롬프트에서 매장 정보 추출 (폴백용)
+    let extractedPhone = '';
+    let extractedAddress = '';
+    let extractedHours = '';
+    let extractedReservation = '';
+    
+    if (existingPrompt) {
+      // 전화번호 추출
+      const phoneMatch = existingPrompt.match(/전화번호[:\s]*([0-9\-]+)/);
+      if (phoneMatch) extractedPhone = phoneMatch[1];
+      
+      // 주소 추출
+      const addressMatch = existingPrompt.match(/주소[:\s]*([^\n]+)/);
+      if (addressMatch) extractedAddress = addressMatch[1].trim();
+      
+      // 영업시간 추출
+      const hoursMatch = existingPrompt.match(/영업시간[:\s]*([^\n]+)/);
+      if (hoursMatch) extractedHours = hoursMatch[1].trim();
+      
+      // 예약금 추출
+      const reservationMatch = existingPrompt.match(/예약금[:\s]*([^\n]+)/);
+      if (reservationMatch) extractedReservation = reservationMatch[1].trim();
+    }
+    
+    // ⭐ 데이터 통합 전문가 프롬프트
+    const prompt = `당신은 기존 매장 정보와 새로운 텍스트 데이터를 결합하는 '데이터 통합 전문가'입니다.
 
-## 🔒 핵심 규칙 (절대 위반 금지)
+## 🔒 절대 규칙 (위반 시 실패 처리)
 
-### 1. 가격 보존 법칙 (CRITICAL)
-- 모든 숫자 데이터(예: 70,000원 → 35,000원, 50% 할인)는 **요약하지 말고 원문 그대로** 추출
-- **"가격 변동", "상담 문의", "가격 문의" 등으로 뭉개는 행위 엄격 금지**
-- 숫자와 기호(%, →, 원)가 포함된 문장은 **최우선 순위 데이터**로 취급
+### 1. [기존 정보 유지] - CRITICAL
+${existingPrompt ? `아래 기존 프롬프트에서 다음 정보는 **반드시 유지**하십시오:
+- 매장명, 전화번호, 주소, 예약 규정
+- 기존에 추출된 이용 정보
 
-### 2. 데이터 누적 및 병합
-${existingPrompt ? `- 아래 [기존 시스템 프롬프트]의 매장 정보(주소, 소개 등)를 **최대한 보존**
-- 새로운 이벤트/가격 정보만 **업데이트/추가** (기존 내용 삭제 금지)
+[기존 프롬프트]
+${existingPrompt.substring(0, 4000)}
+` : '- 기존 프롬프트 없음. 새로 생성.'}
 
-[기존 시스템 프롬프트]
-${existingPrompt.substring(0, 3000)}
-` : '- 새로운 프롬프트를 처음부터 생성'}
+### 2. [데이터 매핑] - 원문을 섹션별로 분류
+입력된 텍스트를 분석하여:
+- 할인/이벤트/첫방문 → **🎖️ 핵심 혜택** 섹션에 배치
+- 서비스/메뉴/가격 → **📋 전체 서비스 가격표** 섹션에 배치
+- 영업시간/전화/예약금 → **⏰ 이용 정보** 섹션에 배치
 
-### 3. 섹션별 독립 추출
-- 매장 정체성, 전체 가격표, 현재 이벤트, 예약 규정을 각각 독립 섹션으로 분류
+### 3. [가격 원문 추출] - 숫자 최우선
+- '70,000원 → 35,000원' 같은 가격은 **숫자 그대로** 추출
+- **'가격 변동', '상담 문의'로 뭉개는 행위 엄격 금지**
+- %, →, 원 포함 문장은 **최우선 순위 데이터**
 
-### 4. 할루시네이션 방지
-- 제공된 텍스트에 **없는 정보(임의의 휴무일 등)를 절대 지어내지 마십시오**
+### 4. [중복 제거]
+- 기존 메뉴와 신규 메뉴가 중복 시 **최신 정보(신규 텍스트)** 우선
+
+### 5. [할루시네이션 금지]
+- 텍스트에 없는 정보(임의 휴무일, 임의 가격)를 지어내지 마십시오
 
 ## 📥 입력 데이터
-- 매장명: ${storeName || '(입력 필요)'}
+- 매장명: ${storeName || '(미확인)'}
 - 업종: ${businessType || 'BEAUTY_SKIN'}
 
 [새로 입력된 텍스트]
 ${text}
 
-## 📤 출력 형식 (JSON만 출력)
+## 📤 출력 형식 (JSON만 출력, 코드블록 금지)
 {
-  "menuText": "서비스명 - 가격 (줄바꿈 구분). 할인: 서비스명 - 정가 → 할인가 (할인율%)",
-  "operatingHours": "영업시간 또는 null (없으면 null)",
-  "systemPrompt": "아래 고정 틀 사용"
+  "menuText": "서비스명 - 가격\\n할인 서비스: 정가 → 할인가 (할인율%)",
+  "operatingHours": "영업시간 또는 null",
+  "phone": "전화번호 또는 null",
+  "address": "주소 또는 null",
+  "reservationPolicy": "예약금/예약 규정 또는 null",
+  "systemPrompt": "아래 5단 고정 틀 사용"
 }
 
-## 🎯 시스템 프롬프트 고정 틀 (이 형식 반드시 준수)
+## 🎯 시스템 프롬프트 5단 고정 틀 (반드시 이 형식 유지)
 
-당신은 ${storeName || '[매장명]'}의 전문 AI 상담 지배인입니다.
+당신은 ${storeName || '[매장명]'}의 수석 AI 실장입니다.
 
-## 💎 현재 진행 중인 핵심 혜택
-[이벤트가 있으면 모두 나열. 형식: 서비스명: 정가 → 할인가 (할인율%) - 설명]
-예시:
-- 미라클 필링: 120,000원 → 60,000원 (50% 할인) - 각질 제거, 피부 재생
-- 매직팟 고주파: 80,000원 → 40,000원 (50% 할인) - 리프팅, 탄력
+## 🎖️ 현재 진행 중인 핵심 혜택
+[텍스트에서 '할인/이벤트/첫방문/프로모션' 관련 내용만 추출]
+- 서비스명: 정가 → 할인가 (할인율%) - 설명
 
 ## 📋 전체 서비스 안내 및 가격
-[모든 서비스와 실제 가격을 빠짐없이 나열]
+[기존 메뉴 + 신규 메뉴를 통합하여 깔끔한 리스트로 정리]
+- 서비스명: 가격 (VAT 별도 등 부가정보)
 
 ## ⏰ 이용 정보 및 예약 규정
-- 영업시간: [추출된 영업시간]
-- 전화번호: [추출된 전화번호]
-- 예약금: [추출된 예약금 정보]
-- VAT: [VAT 별도 여부]
+- 영업시간: [기존 정보 유지 또는 신규 추출]
+- 전화번호: [기존 정보 유지 또는 신규 추출]
+- 주소: [기존 정보 유지]
+- 예약안내: [예약금, 취소 규정 등]
+- VAT: 별도
 
-## 📌 응대 원칙
-- 가격 문의 시 **실제 추출된 가격**만 안내 (가격 변동 금지)
-- 현재 진행 중인 이벤트를 적극 안내
-- 모든 상담은 예약으로 마무리
-
----
-JSON만 출력하세요. 마크다운 코드블록(\`\`\`) 금지.`;
+## 📌 응대 지침
+- 가격 문의 시 위에 명시된 **정확한 금액**과 **할인 조건**을 안내
+- '가격 변동'이라고 말하지 말고 실제 가격 안내
+- 현재 이벤트 적극 안내
+- 모든 상담은 예약으로 마무리`;
     
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
@@ -6076,8 +6108,8 @@ JSON만 출력하세요. 마크다운 코드블록(\`\`\`) 금지.`;
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 4096
+            temperature: 0.2,  // 더 정확한 추출을 위해 낮춤
+            maxOutputTokens: 8192  // 긴 프롬프트 허용
           }
         })
       }
@@ -6113,13 +6145,20 @@ JSON만 출력하세요. 마크다운 코드블록(\`\`\`) 금지.`;
     if (!jsonMatch) {
       console.error('[generate-prompt-from-text] JSON not found, raw:', rawText.substring(0, 500));
       
-      // 폴백: 입력 텍스트를 그대로 시스템 프롬프트로 사용
+      // ⭐ 고도화된 폴백: 기존 정보 보존 + 신규 텍스트 매핑
+      const fallbackPrompt = buildStructuredFallback(storeName || '매장', text, existingPrompt, {
+        phone: extractedPhone,
+        address: extractedAddress,
+        hours: extractedHours,
+        reservation: extractedReservation
+      });
+      
       return c.json<ApiResponse>({
         success: true,
         data: {
-          menuText: text,
-          operatingHours: null,
-          systemPrompt: `당신은 ${storeName || '매장'}의 AI 상담원입니다.\n\n## 서비스/가격 정보\n${text}\n\n## 응대 지침\n- 고객 문의에 친절하고 전문적으로 응대합니다\n- 가격 문의 시 정확한 정보를 제공합니다\n- 예약으로 마무리합니다`,
+          menuText: extractMenuFromText(text),
+          operatingHours: extractedHours || extractOperatingHours(text),
+          systemPrompt: fallbackPrompt,
           fallback: true
         },
         timestamp: Date.now()
@@ -6131,13 +6170,21 @@ JSON만 출력하세요. 마크다운 코드블록(\`\`\`) 금지.`;
       result = JSON.parse(jsonMatch[0]);
     } catch (parseErr) {
       console.error('[generate-prompt-from-text] JSON parse error:', parseErr);
-      // 폴백
+      
+      // ⭐ 고도화된 폴백
+      const fallbackPrompt = buildStructuredFallback(storeName || '매장', text, existingPrompt, {
+        phone: extractedPhone,
+        address: extractedAddress,
+        hours: extractedHours,
+        reservation: extractedReservation
+      });
+      
       return c.json<ApiResponse>({
         success: true,
         data: {
-          menuText: text,
-          operatingHours: null,
-          systemPrompt: `당신은 ${storeName || '매장'}의 AI 상담원입니다.\n\n## 서비스/가격 정보\n${text}\n\n## 응대 지침\n- 고객 문의에 친절하고 전문적으로 응대합니다\n- 가격 문의 시 정확한 정보를 제공합니다\n- 예약으로 마무리합니다`,
+          menuText: extractMenuFromText(text),
+          operatingHours: extractedHours || extractOperatingHours(text),
+          systemPrompt: fallbackPrompt,
           fallback: true
         },
         timestamp: Date.now()
@@ -6159,6 +6206,97 @@ JSON만 출력하세요. 마크다운 코드블록(\`\`\`) 금지.`;
     }, 500);
   }
 });
+
+// ⭐ 폴백용 헬퍼 함수들
+function buildStructuredFallback(
+  storeName: string, 
+  newText: string, 
+  existingPrompt: string | undefined,
+  extracted: { phone: string; address: string; hours: string; reservation: string }
+): string {
+  // 신규 텍스트에서 정보 추출
+  const newPhone = newText.match(/전화[:\s]*([0-9\-]+)/)?.[1] || 
+                   newText.match(/(\d{2,3}-\d{3,4}-\d{4})/)?.[1] || '';
+  const newHours = extractOperatingHours(newText);
+  const newReservation = newText.match(/예약금[:\s]*([^\n]+)/)?.[1]?.trim() || '';
+  
+  // 이벤트/할인 추출
+  const events = extractEvents(newText);
+  
+  // 가격 정보 추출
+  const prices = extractPricesFromText(newText);
+  
+  return `당신은 ${storeName}의 수석 AI 실장입니다.
+
+## 🎖️ 현재 진행 중인 핵심 혜택
+${events.length > 0 ? events.join('\n') : '현재 진행 중인 이벤트가 없습니다.'}
+
+## 📋 전체 서비스 안내 및 가격
+${prices.length > 0 ? prices.join('\n') : '(가격 정보를 추가해 주세요)'}
+
+## ⏰ 이용 정보 및 예약 규정
+- 영업시간: ${newHours || extracted.hours || '(확인 필요)'}
+- 전화번호: ${newPhone || extracted.phone || '(확인 필요)'}
+${extracted.address ? `- 주소: ${extracted.address}` : ''}
+- 예약안내: ${newReservation || extracted.reservation || '(확인 필요)'}
+- VAT: 별도
+
+## 📌 응대 지침
+- 가격 문의 시 위에 명시된 정확한 금액과 할인 조건을 안내
+- '가격 변동'이라고 말하지 않고 실제 가격을 안내
+- 현재 이벤트 적극 안내
+- 모든 상담은 예약으로 마무리`;
+}
+
+function extractEvents(text: string): string[] {
+  const events: string[] = [];
+  const lines = text.split('\n');
+  
+  for (const line of lines) {
+    // 할인/이벤트 패턴 감지
+    if (line.includes('→') && line.match(/\d+,?\d*원/)) {
+      // 가격 할인 패턴
+      events.push(`- ${line.trim()}`);
+    } else if (line.match(/(할인|이벤트|첫방문|오픈|프로모션)/i) && line.match(/\d+%/)) {
+      events.push(`- ${line.trim()}`);
+    }
+  }
+  
+  return events;
+}
+
+function extractPricesFromText(text: string): string[] {
+  const prices: string[] = [];
+  const lines = text.split('\n');
+  
+  for (const line of lines) {
+    // 가격 패턴 (원 포함)
+    if (line.match(/\d+,?\d*원/) && !line.match(/(예약금|방문)/)) {
+      prices.push(`- ${line.trim()}`);
+    }
+  }
+  
+  return prices;
+}
+
+function extractMenuFromText(text: string): string {
+  const lines = text.split('\n');
+  const menuLines: string[] = [];
+  
+  for (const line of lines) {
+    if (line.match(/\d+,?\d*원/) || line.includes('→')) {
+      menuLines.push(line.trim());
+    }
+  }
+  
+  return menuLines.join('\n');
+}
+
+function extractOperatingHours(text: string): string {
+  const match = text.match(/영업시간[:\s]*([^\n]+)/i) ||
+                text.match(/(\d{1,2}:\d{2})\s*[-~]\s*(\d{1,2}:\d{2})/);
+  return match ? match[1]?.trim() || `${match[1]}-${match[2]}` : '';
+}
 
 // 이미지 OCR + 프롬프트 생성 (가격표/메뉴판 전용)
 api.post('/stores/:id/ocr-generate-prompt', async (c) => {
