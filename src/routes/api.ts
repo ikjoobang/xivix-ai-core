@@ -1316,22 +1316,37 @@ api.delete('/master/store/:id', async (c) => {
     }
     
     // 2. 관련 데이터 삭제 (CASCADE 효과)
-    // 2-1. 상담 로그 삭제
+    // 2-1. 고객 관련 팔로업 로그 삭제
+    await c.env.DB.prepare(
+      'DELETE FROM xivix_followup_logs WHERE customer_id IN (SELECT id FROM xivix_customers WHERE store_id = ?)'
+    ).bind(storeId).run();
+    
+    // 2-2. 고객 데이터 삭제
+    await c.env.DB.prepare(
+      'DELETE FROM xivix_customers WHERE store_id = ?'
+    ).bind(storeId).run();
+    
+    // 2-3. 메시지 템플릿 삭제 (매장별)
+    await c.env.DB.prepare(
+      'DELETE FROM xivix_message_templates WHERE store_id = ?'
+    ).bind(storeId).run();
+    
+    // 2-4. 상담 로그 삭제
     await c.env.DB.prepare(
       'DELETE FROM xivix_conversation_logs WHERE store_id = ?'
     ).bind(storeId).run();
     
-    // 2-2. 예약 데이터 삭제
+    // 2-5. 예약 데이터 삭제
     await c.env.DB.prepare(
       'DELETE FROM xivix_reservations WHERE store_id = ?'
     ).bind(storeId).run();
     
-    // 2-3. API 토큰 삭제
+    // 2-6. API 토큰 삭제
     await c.env.DB.prepare(
       'DELETE FROM xivix_api_tokens WHERE store_id = ?'
     ).bind(storeId).run();
     
-    // 2-4. 알림 로그 삭제
+    // 2-7. 알림 로그 삭제
     await c.env.DB.prepare(
       'DELETE FROM xivix_notification_logs WHERE store_id = ?'
     ).bind(storeId).run();
