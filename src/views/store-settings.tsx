@@ -1345,13 +1345,17 @@ VAT 별도, 시술시간 약 1시간"></textarea>
       progressBar.style.width = '50%';
       
       try {
+        // ⭐ 기존 프롬프트를 병합용으로 전달 (덮어쓰기 방지)
+        const existingPrompt = document.getElementById('system-prompt').value.trim();
+        
         const res = await fetch(\`/api/stores/\${STORE_ID}/generate-prompt-from-text\`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             text,
             storeName: storeName || '매장',
-            businessType: document.getElementById('business-type').value
+            businessType: document.getElementById('business-type').value,
+            existingPrompt: existingPrompt || undefined  // 기존 프롬프트 전달
           })
         });
         
@@ -1366,14 +1370,23 @@ VAT 별도, 시술시간 약 1시간"></textarea>
             document.getElementById('system-prompt').value = result.systemPrompt;
           }
           
-          // 메뉴 데이터 적용
+          // 메뉴 데이터 적용 (병합)
           if (result.menuText) {
-            document.getElementById('menu-data-text').value = result.menuText;
+            const existingMenu = document.getElementById('menu-data-text').value.trim();
+            if (existingMenu && !existingMenu.includes(result.menuText.substring(0, 50))) {
+              // 기존 메뉴와 새 메뉴가 다르면 병합
+              document.getElementById('menu-data-text').value = result.menuText;
+            } else {
+              document.getElementById('menu-data-text').value = result.menuText;
+            }
           }
           
-          // 영업시간 적용
+          // 영업시간 적용 (비어있을 때만)
           if (result.operatingHours) {
-            document.getElementById('operating-hours-text').value = result.operatingHours;
+            const existingHours = document.getElementById('operating-hours-text').value.trim();
+            if (!existingHours) {
+              document.getElementById('operating-hours-text').value = result.operatingHours;
+            }
           }
           
           showToast('✅ 프롬프트가 생성되었습니다! [전체 저장]을 눌러 저장하세요.', 'success');
@@ -1668,44 +1681,65 @@ VAT 별도, 시술시간 약 1시간"></textarea>
         if (data.success) {
           const result = data.data;
           
-          // 매장 정보 적용
+          // ⭐ 매장 정보 적용 (빈 필드만 채움 - 기존 데이터 보존)
           if (result.storeName) {
-            document.getElementById('store-name-input').value = result.storeName;
-            document.getElementById('store-name').textContent = result.storeName;
+            const existingName = document.getElementById('store-name-input').value.trim();
+            if (!existingName) {
+              document.getElementById('store-name-input').value = result.storeName;
+              document.getElementById('store-name').textContent = result.storeName;
+            }
           }
           if (result.address) {
             const addrEl = document.getElementById('store-address');
-            if (addrEl) addrEl.value = result.address;
+            if (addrEl && !addrEl.value.trim()) addrEl.value = result.address;
           }
           if (result.phone) {
             const phoneEl = document.getElementById('store-phone');
-            if (phoneEl) phoneEl.value = result.phone;
+            if (phoneEl && !phoneEl.value.trim()) phoneEl.value = result.phone;
           }
           if (result.operatingHours) {
-            document.getElementById('operating-hours-text').value = result.operatingHours;
+            const existingHours = document.getElementById('operating-hours-text').value.trim();
+            if (!existingHours) {
+              document.getElementById('operating-hours-text').value = result.operatingHours;
+            }
           }
           if (result.businessType) {
-            document.getElementById('business-type').value = result.businessType;
+            const existingType = document.getElementById('business-type').value;
+            if (!existingType || existingType === 'OTHER') {
+              document.getElementById('business-type').value = result.businessType;
+            }
           }
           
-          // AI 프롬프트 적용
+          // AI 프롬프트 적용 (빈 필드만 채움)
           if (result.aiPersona) {
-            document.getElementById('ai-persona').value = result.aiPersona;
+            const existingPersona = document.getElementById('ai-persona').value.trim();
+            if (!existingPersona) {
+              document.getElementById('ai-persona').value = result.aiPersona;
+            }
           }
           if (result.aiTone) {
             document.getElementById('ai-tone').value = result.aiTone;
           }
           if (result.greetingMessage) {
-            document.getElementById('greeting-message').value = result.greetingMessage;
+            const existingGreeting = document.getElementById('greeting-message').value.trim();
+            if (!existingGreeting) {
+              document.getElementById('greeting-message').value = result.greetingMessage;
+            }
           }
+          
+          // ⭐ 시스템 프롬프트 - 항상 새로 생성된 것으로 교체 (가격/이벤트가 핵심이므로)
           if (result.systemPrompt) {
             document.getElementById('system-prompt').value = result.systemPrompt;
           }
+          
           if (result.forbiddenKeywords) {
-            document.getElementById('forbidden-keywords').value = result.forbiddenKeywords;
+            const existingKeywords = document.getElementById('forbidden-keywords').value.trim();
+            if (!existingKeywords) {
+              document.getElementById('forbidden-keywords').value = result.forbiddenKeywords;
+            }
           }
           
-          // 메뉴/이벤트 데이터
+          // 메뉴/이벤트 데이터 (새로 추출된 데이터로 교체)
           if (result.menuText) {
             document.getElementById('menu-data-text').value = result.menuText;
           }
