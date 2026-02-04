@@ -146,23 +146,27 @@ export function buildSystemInstruction(store?: {
 }
 
 // 모델명 매핑 (환경변수/선택값 → Gemini API 모델명)
-// 2025년 기준 최신 모델로 업그레이드 (Gemini 2.0 Flash 지원 종료 대비)
+// 2025년 6월 기준 안정 버전(Stable) 사용 - Gemini 2.0 Flash 2026-03-31 지원 종료 대비
+// 참고: https://ai.google.dev/gemini-api/docs/models
 function getGeminiModelId(modelSetting: string): string {
   const modelMap: Record<string, string> = {
-    // 일반 상담 - Gemini 2.5 Flash (빠른 응답, Free Tier 지원)
-    'gemini': 'gemini-2.5-flash-preview-05-20',
-    'gemini-flash': 'gemini-2.5-flash-preview-05-20',
-    'gemini-2.5-flash': 'gemini-2.5-flash-preview-05-20',
+    // 일반 상담 - Gemini 2.5 Flash Stable (빠른 응답, Free Tier 지원)
+    // 최신 업데이트: 2025년 6월, 안정적인 프로덕션 환경에 적합
+    'gemini': 'gemini-2.5-flash',
+    'gemini-flash': 'gemini-2.5-flash',
+    'gemini-2.5-flash': 'gemini-2.5-flash',
     
-    // 전문 상담 - Gemini 2.5 Pro (정확도 우선, 의료/법률/보험용)
-    'gemini-pro': 'gemini-2.5-pro-preview-05-06',
-    'gemini-2.5-pro': 'gemini-2.5-pro-preview-05-06',
+    // 전문 상담 - Gemini 2.5 Pro Stable (정확도 우선, 의료/법률/보험/산후조리원용)
+    // 최신 업데이트: 2025년 6월, 복잡한 추론 및 전문 상담에 최적화
+    'gemini-pro': 'gemini-2.5-pro',
+    'gemini-2.5-pro': 'gemini-2.5-pro',
     
     // 레거시 호환 (2.0 Flash → 2.5 Flash로 자동 업그레이드)
-    'gemini-2.0-flash': 'gemini-2.5-flash-preview-05-20',
-    'gemini-1.5-pro': 'gemini-2.5-pro-preview-05-06',
+    // Gemini 2.0 Flash는 2026-03-31에 종료 예정
+    'gemini-2.0-flash': 'gemini-2.5-flash',
+    'gemini-1.5-pro': 'gemini-2.5-pro',
   };
-  return modelMap[modelSetting] || 'gemini-2.5-flash-preview-05-20';
+  return modelMap[modelSetting] || 'gemini-2.5-flash';
 }
 
 // Streaming response generator for Gemini
