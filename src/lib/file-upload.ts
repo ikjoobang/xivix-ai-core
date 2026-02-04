@@ -828,6 +828,7 @@ export async function extractStoreInfoFromContent(
     menuData?: Array<{ name: string; price: string; description?: string }>;
     features?: string[];
     systemPrompt?: string;
+    events?: Array<{ name: string; originalPrice?: string; discountPrice?: string; discount?: string; description?: string }>;
   };
   error?: string;
 }> {
@@ -837,15 +838,18 @@ export async function extractStoreInfoFromContent(
 
 {
   "storeName": "매장명 (없으면 null)",
-  "businessType": "업종 (예: BEAUTY_HAIR, RESTAURANT, FITNESS, MEDICAL 등)",
+  "businessType": "업종 코드 (BEAUTY_HAIR, BEAUTY_SKIN, BEAUTY_NAIL, RESTAURANT, FITNESS, MEDICAL, PROFESSIONAL_LEGAL, EDUCATION, PET_SERVICE, POSTNATAL_CARE, OTHER 중 하나)",
   "address": "주소 (없으면 null)",
   "phone": "전화번호 (없으면 null)",
-  "operatingHours": "영업시간 (예: 10:00-20:00, 없으면 null)",
+  "operatingHours": "영업시간을 보기 좋게 줄바꿈으로 정리 (예: 월-금: 10:00 - 20:00\\n토: 10:00 - 18:00\\n일: 휴무)",
   "menuData": [
-    {"name": "메뉴/서비스명", "price": "가격", "description": "설명"}
+    {"name": "메뉴/서비스명", "price": "가격 (예: 30,000원)", "description": "설명 또는 소요시간"}
   ],
-  "features": ["특징1", "특징2"],
-  "systemPrompt": "이 매장의 AI 상담원이 알아야 할 핵심 정보와 응대 지침을 3-5문장으로 작성"
+  "events": [
+    {"name": "이벤트/프로모션명", "originalPrice": "정가", "discountPrice": "할인가", "discount": "할인율 (예: 50%)", "description": "설명"}
+  ],
+  "features": ["매장의 강점 또는 특징1", "특징2"],
+  "systemPrompt": "아래 형식으로 작성:\\n\\n당신은 [매장명]의 AI 상담원입니다.\\n\\n## 매장 소개\\n[매장에 대한 간략한 소개]\\n\\n## 주요 서비스 및 가격\\n[메뉴/서비스 목록과 가격]\\n\\n## 현재 진행 중인 이벤트/프로모션\\n[이벤트 정보 - 정가, 할인가, 할인율 포함]\\n\\n## 영업시간\\n[영업시간]\\n\\n## 응대 지침\\n- 친절하고 전문적으로 응대합니다.\\n- 가격 문의 시 정확한 가격과 현재 이벤트를 안내합니다.\\n- 예약 유도로 마무리합니다."
 }
 
 분석할 내용:

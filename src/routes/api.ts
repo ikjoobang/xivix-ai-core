@@ -5897,6 +5897,15 @@ api.post('/stores/:id/auto-generate-prompt', async (c) => {
     // 추출된 정보로 매장 업데이트
     const info = extractResult.data!;
     
+    // 메뉴 데이터를 텍스트 형식으로도 변환
+    let menuDataText = '';
+    if (info.menuData && info.menuData.length > 0) {
+      menuDataText = info.menuData.map(m => 
+        `${m.name} - ${m.price}${m.description ? ' (' + m.description + ')' : ''}`
+      ).join('\n');
+    }
+    
+    // system_prompt 필드에 올바르게 저장
     await c.env.DB.prepare(`
       UPDATE xivix_stores SET
         store_name = COALESCE(?, store_name),
@@ -5905,6 +5914,7 @@ api.post('/stores/:id/auto-generate-prompt', async (c) => {
         phone = COALESCE(?, phone),
         operating_hours = COALESCE(?, operating_hours),
         menu_data = COALESCE(?, menu_data),
+        system_prompt = COALESCE(?, system_prompt),
         ai_persona = COALESCE(?, ai_persona),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
@@ -5914,8 +5924,9 @@ api.post('/stores/:id/auto-generate-prompt', async (c) => {
       info.address || null,
       info.phone || null,
       info.operatingHours || null,
-      info.menuData ? JSON.stringify(info.menuData) : null,
+      menuDataText || (info.menuData ? JSON.stringify(info.menuData) : null),
       info.systemPrompt || null,
+      info.features ? info.features.join(', ') : null,
       storeId
     ).run();
     

@@ -108,16 +108,21 @@ export function renderStoreSettings(storeId: number): string {
         <!-- URL 입력 -->
         <div class="mb-4">
           <label class="block text-sm text-white/60 mb-2">
-            <i class="fas fa-link mr-1"></i>URL 입력 (플레이스/블로그/홈페이지/인스타)
+            <i class="fas fa-link mr-1"></i>URL 입력 (플레이스/블로그/홈페이지) - Enter 또는 버튼 클릭 시 자동 적용
           </label>
           <div class="flex gap-2">
             <input type="text" id="auto-url" 
               class="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white"
-              placeholder="https://naver.me/xxx 또는 https://blog.naver.com/xxx">
+              placeholder="https://naver.me/xxx 또는 https://m.place.naver.com/place/xxx"
+              onkeypress="if(event.key==='Enter') analyzeUrl()">
             <button onclick="analyzeUrl()" class="px-6 py-3 btn-primary rounded-xl font-medium whitespace-nowrap">
-              <i class="fas fa-search mr-1"></i>분석
+              <i class="fas fa-magic mr-1"></i>분석 + 자동적용
             </button>
           </div>
+          <p class="text-xs text-white/40 mt-2">
+            <i class="fas fa-info-circle mr-1"></i>
+            URL을 입력하면 AI가 매장 정보, 메뉴, 이벤트/할인 정보를 자동으로 추출하고 프롬프트에 반영합니다.
+          </p>
         </div>
         
         <!-- 파일 업로드 -->
@@ -1281,7 +1286,7 @@ export function renderStoreSettings(storeId: number): string {
     let uploadedFiles = [];
     let analyzedUrl = null;
     
-    // URL 분석 (미리보기)
+    // URL 분석 → 자동 저장 → 폼 반영 (한 번에 실행)
     async function analyzeUrl() {
       const url = document.getElementById('auto-url').value.trim();
       const aiModel = document.querySelector('input[name="ai-model"]:checked')?.value || 'gemini';
@@ -1291,36 +1296,86 @@ export function renderStoreSettings(storeId: number): string {
         return;
       }
       
-      showToast('URL 분석 중...', 'info');
+      // 상태 표시
+      const statusDiv = document.getElementById('analysis-status');
+      const statusText = document.getElementById('analysis-text');
+      const progressBar = document.getElementById('analysis-progress');
+      statusDiv.classList.remove('hidden');
+      statusText.textContent = 'URL 분석 중...';
+      progressBar.style.width = '20%';
       
       try {
-        const res = await fetch(\`/api/stores/\${STORE_ID}/analyze-url\`, {
+        // 자동 프롬프트 생성 및 저장 API 호출 (한 번에 분석 + 저장)
+        statusText.textContent = 'AI가 분석하고 프롬프트를 생성 중...';
+        progressBar.style.width = '50%';
+        
+        const generateRes = await fetch(\`/api/stores/\${STORE_ID}/auto-generate-prompt\`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url, aiModel })
         });
         
-        const data = await res.json();
-        if (data.success) {
-          analyzedUrl = data.data;
+        const generateData = await generateRes.json();
+        progressBar.style.width = '100%';
+        
+        if (generateData.success) {
+          analyzedUrl = generateData.data;
+          const result = generateData.data.extractedInfo;
           
-          // 미리보기 정보 표시
-          const info = data.data.extractedInfo;
-          let preview = '분석 결과:\\n';
-          if (info.storeName) preview += \`• 매장명: \${info.storeName}\\n\`;
-          if (info.businessType) preview += \`• 업종: \${info.businessType}\\n\`;
-          if (info.address) preview += \`• 주소: \${info.address}\\n\`;
-          if (info.phone) preview += \`• 전화: \${info.phone}\\n\`;
-          if (info.menuData?.length) preview += \`• 메뉴/서비스: \${info.menuData.length}개\\n\`;
+          // 폼에 데이터 적용
+          if (result.storeName) {
+            document.getElementById('store-name-input').value = result.storeName;
+            document.getElementById('store-name').textContent = result.storeName;
+          }
+          if (result.address) {
+            const addrEl = document.getElementById('store-address');
+            if (addrEl) addrEl.value = result.address;
+          }
+          if (result.phone) {
+            const phoneEl = document.getElementById('store-phone');
+            if (phoneEl) phoneEl.value = result.phone;
+          }
+          if (result.operatingHours) {
+            document.getElementById('operating-hours-text').value = result.operatingHours;
+          }
+          if (result.businessType) {
+            document.getElementById('business-type').value = result.businessType;
+          }
+          if (result.systemPrompt) {
+            document.getElementById('system-prompt').value = result.systemPrompt;
+          }
+          if (result.features && result.features.length > 0) {
+            document.getElementById('ai-persona').value = result.features.join(', ');
+          }
+          if (result.menuData && result.menuData.length > 0) {
+            const menuText = result.menuData.map(m => 
+              \`\${m.name} - \${m.price}\${m.description ? ' (' + m.description + ')' : ''}\`
+            ).join('\\n');
+            document.getElementById('menu-data-text').value = menuText;
+          }
           
-          console.log(preview);
-          showToast('URL 분석 완료! 자동 생성 버튼을 클릭하면 폼에 적용됩니다', 'success');
+          // 분석 결과 요약
+          let summary = '✅ 자동 분석 및 저장 완료!\\n\\n';
+          if (result.storeName) summary += \`매장명: \${result.storeName}\\n\`;
+          if (result.businessType) summary += \`업종: \${result.businessType}\\n\`;
+          if (result.menuData?.length) summary += \`메뉴/서비스: \${result.menuData.length}개\\n\`;
+          if (result.events?.length) summary += \`이벤트: \${result.events.length}개\\n\`;
+          
+          console.log('AI 분석 결과:', result);
+          showToast('✅ 프롬프트가 자동 생성되고 저장되었습니다!', 'success');
+          
           updateGenerateButton();
         } else {
-          showToast('URL 분석 실패: ' + (data.error || '알 수 없는 오류'), 'error');
+          showToast('분석 실패: ' + (generateData.error || '알 수 없는 오류'), 'error');
         }
       } catch (err) {
-        showToast('URL 분석 중 오류 발생', 'error');
+        console.error('Analysis error:', err);
+        showToast('분석 중 오류 발생: ' + err.message, 'error');
+      } finally {
+        setTimeout(() => {
+          statusDiv.classList.add('hidden');
+          progressBar.style.width = '0%';
+        }, 1000);
       }
     }
     
