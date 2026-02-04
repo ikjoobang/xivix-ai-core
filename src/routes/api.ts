@@ -5213,6 +5213,20 @@ api.post('/chat/test', async (c) => {
       'SELECT * FROM xivix_stores WHERE id = ?'
     ).bind(store_id).first<Store>();
 
+    // ⭐ 첫 인사(안녕, 안녕하세요 등)에는 저장된 환영 인사말 반환
+    const greetingKeywords = ['안녕', '하이', 'hi', 'hello', '처음', '시작'];
+    const isGreeting = greetingKeywords.some(kw => message.toLowerCase().includes(kw));
+    const greetingMessage = prompt_config?.greeting || store?.greeting_message;
+    
+    if (isGreeting && greetingMessage) {
+      return c.json<ApiResponse>({
+        success: true,
+        response: greetingMessage,
+        model: 'greeting',
+        timestamp: Date.now()
+      });
+    }
+
     let response = '';
     const model = ai_model || store?.ai_model || 'gemini';
 
