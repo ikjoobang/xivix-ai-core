@@ -494,30 +494,39 @@ export async function sendButtonMessage(
 
   try {
     // 네이버 톡톡 API는 Bearer prefix 없이 토큰만 사용
+    const requestBody = {
+      event: 'send',
+      user: userId,
+      compositeContent: {
+        compositeList: [{
+          title: text.substring(0, 100), // 제목 최대 100자
+          description: '아래 버튼을 눌러주세요', // description 추가
+          buttonList
+        }]
+      }
+    };
+    
+    console.log(`[TalkTalk] Sending button message to ${userId}`);
+    console.log(`[TalkTalk] Button request:`, JSON.stringify(requestBody));
+    
     const response = await fetch(`${TALKTALK_API_BASE}/event`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json;charset=UTF-8',
         'Authorization': accessToken
       },
-      body: JSON.stringify({
-        event: 'send',
-        user: userId,
-        compositeContent: {
-          compositeList: [{
-            title: text,
-            buttonList
-          }]
-        }
-      })
+      body: JSON.stringify(requestBody)
     });
 
+    const responseText = await response.text();
+    console.log(`[TalkTalk] Button response status: ${response.status}, body: ${responseText}`);
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[TalkTalk] sendButtonMessage error: ${response.status}`, errorText);
-      return { success: false, resultCode: `HTTP_${response.status}`, resultMessage: errorText };
+      console.error(`[TalkTalk] sendButtonMessage error: ${response.status}`, responseText);
+      return { success: false, resultCode: `HTTP_${response.status}`, resultMessage: responseText };
     }
 
+    console.log(`[TalkTalk] Button message sent successfully to ${userId}`);
     return { success: true, resultCode: 'OK' };
   } catch (error: any) {
     console.error('[TalkTalk] sendButtonMessage exception:', error);
