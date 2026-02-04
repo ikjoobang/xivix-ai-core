@@ -406,7 +406,8 @@ export function maskPersonalInfo(text: string): string {
 export async function sendTextMessage(
   env: Env,
   userId: string,
-  text: string
+  text: string,
+  storeId?: number
 ): Promise<TalkTalkResponse> {
   // 테스트 모드 체크
   if (isTestMode(env)) {
@@ -414,11 +415,29 @@ export async function sendTextMessage(
     return { success: true, resultCode: 'TEST_MODE' };
   }
 
-  // 환경 변수에서 Access Token 가져오기
-  const accessToken = env.NAVER_ACCESS_TOKEN;
+  // 1. 먼저 DB에서 매장별 토큰 조회 (storeId가 있는 경우)
+  let accessToken: string | undefined;
+  
+  if (storeId && env.DB) {
+    try {
+      const config = await getTalkTalkConfig(env.DB, storeId);
+      if (config?.accessToken) {
+        accessToken = config.accessToken;
+        console.log(`[TalkTalk] Using DB token for store ${storeId}`);
+      }
+    } catch (err) {
+      console.warn(`[TalkTalk] Failed to get DB token for store ${storeId}:`, err);
+    }
+  }
+  
+  // 2. DB에 없으면 환경 변수에서 가져오기 (fallback)
   if (!accessToken) {
-    console.warn('[TalkTalk] No NAVER_ACCESS_TOKEN configured');
-    return { success: false, resultCode: 'NO_TOKEN', resultMessage: 'Access Token이 설정되지 않았습니다.' };
+    accessToken = env.NAVER_ACCESS_TOKEN;
+  }
+  
+  if (!accessToken) {
+    console.warn('[TalkTalk] No access token available (DB or ENV)');
+    return { success: false, resultCode: 'NO_TOKEN', resultMessage: 'Access Token이 설정되지 않았습니다. 매장 설정에서 Authorization 토큰을 입력해주세요.' };
   }
 
   try {
@@ -471,7 +490,8 @@ export async function sendButtonMessage(
   env: Env,
   userId: string,
   text: string,
-  buttons: ButtonOption[]
+  buttons: ButtonOption[],
+  storeId?: number
 ): Promise<TalkTalkResponse> {
   // 테스트 모드 체크
   if (isTestMode(env)) {
@@ -479,9 +499,28 @@ export async function sendButtonMessage(
     return { success: true, resultCode: 'TEST_MODE' };
   }
 
-  const accessToken = env.NAVER_ACCESS_TOKEN;
+  // 1. 먼저 DB에서 매장별 토큰 조회 (storeId가 있는 경우)
+  let accessToken: string | undefined;
+  
+  if (storeId && env.DB) {
+    try {
+      const config = await getTalkTalkConfig(env.DB, storeId);
+      if (config?.accessToken) {
+        accessToken = config.accessToken;
+        console.log(`[TalkTalk] Using DB token for store ${storeId} (button)`);
+      }
+    } catch (err) {
+      console.warn(`[TalkTalk] Failed to get DB token for store ${storeId}:`, err);
+    }
+  }
+  
+  // 2. DB에 없으면 환경 변수에서 가져오기 (fallback)
   if (!accessToken) {
-    console.warn('[TalkTalk] No NAVER_ACCESS_TOKEN configured');
+    accessToken = env.NAVER_ACCESS_TOKEN;
+  }
+  
+  if (!accessToken) {
+    console.warn('[TalkTalk] No access token available (DB or ENV)');
     return { success: false, resultCode: 'NO_TOKEN', resultMessage: 'Access Token이 설정되지 않았습니다.' };
   }
 

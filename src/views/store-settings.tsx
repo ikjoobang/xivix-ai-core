@@ -91,121 +91,84 @@ export function renderStoreSettings(storeId: number): string {
     <!-- Tab 1: AI 프롬프트 설정 -->
     <div id="tab-prompt" class="tab-content">
       
-      <!-- 🚀 자동 생성 섹션 -->
+      <!-- 🚀 AI 자동 생성 (통합 입력창) -->
       <div class="glass rounded-2xl p-6 mb-6 border-2 border-dashed border-[#D4AF37]/30">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-lg font-bold flex items-center gap-2">
             <i class="fas fa-magic gold"></i>
             AI 자동 생성
-            <span class="text-xs bg-[#D4AF37]/20 text-[#D4AF37] px-2 py-1 rounded-full">NEW</span>
+            <span class="text-xs bg-[#D4AF37]/20 text-[#D4AF37] px-2 py-1 rounded-full">V2.0</span>
           </h2>
+          <div class="flex items-center gap-2 text-xs">
+            <span class="text-green-400"><i class="fas fa-robot mr-1"></i>GPT-4o</span>
+            <span class="text-white/30">→</span>
+            <span class="text-indigo-400"><i class="fas fa-gem mr-1"></i>Gemini 2.5 Pro</span>
+          </div>
         </div>
         
-        <p class="text-sm text-white/60 mb-4">
-          여러 URL을 입력하면 AI가 모든 정보를 종합해 카테고리별로 자동 정리합니다.
-        </p>
-        
-        <!-- 다중 URL 입력 (NEW!) -->
-        <div class="mb-4">
-          <label class="block text-sm text-white/60 mb-2">
-            <i class="fas fa-link mr-1"></i>URL 입력 <span class="text-[#D4AF37]">(여러 개 가능 - 줄바꿈으로 구분)</span>
-          </label>
-          <textarea id="multi-url-input" rows="5"
-            class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm resize-none"
-            placeholder="여러 URL을 줄바꿈으로 구분해서 입력하세요:
-
-https://naver.me/GM3bCTzA (플레이스)
-https://naver.me/Fwj3TxKy (예약)
-https://naver.me/FHOTgAOp (이벤트)
-https://blog.naver.com/ra_on_beauty (블로그)"></textarea>
-          <div class="flex gap-2 mt-2">
-            <button onclick="analyzeMultipleUrls()" class="flex-1 py-3 btn-primary rounded-xl font-medium">
-              <i class="fas fa-magic mr-1"></i>전체 분석 + 자동적용
-            </button>
-            <button onclick="document.getElementById('multi-url-input').value=''" class="px-4 py-3 btn-secondary rounded-xl">
-              <i class="fas fa-trash"></i>
-            </button>
-          </div>
-          <p class="text-xs text-white/40 mt-2">
-            <i class="fas fa-lightbulb mr-1 text-yellow-400"></i>
-            <strong>팁:</strong> 네이버 플레이스, 예약, 이벤트, 블로그 링크를 모두 넣으면 AI가 종합 분석해 프롬프트를 생성합니다.
+        <div class="bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-500/20 rounded-xl p-4 mb-4">
+          <p class="text-sm text-blue-400">
+            <i class="fas fa-info-circle mr-2"></i>
+            <strong>2단계 AI 파이프라인:</strong> GPT-4o가 데이터를 구조화 → Gemini 2.5 Pro가 <span class="text-indigo-400 font-semibold">감정 자극형 문구</span>로 업그레이드
           </p>
         </div>
         
-        <div class="text-center text-white/30 text-sm my-4">─── 또는 ───</div>
-        
-        <!-- ⭐ 텍스트 붙여넣기 (가장 권장) -->
+        <!-- ⭐ 통합 입력창 (텍스트 붙여넣기) -->
         <div class="mb-4">
           <label class="block text-sm text-white/60 mb-2">
-            <i class="fas fa-paste mr-1"></i>텍스트 붙여넣기 <span class="text-[#D4AF37]">(권장 - 가격/이벤트 직접 입력)</span>
+            <i class="fas fa-paste mr-1"></i>📋 매장 정보 붙여넣기 <span class="text-[#D4AF37] font-semibold">(마우스로 긁어서 붙여넣기)</span>
           </label>
-          <textarea id="paste-text" rows="6"
-            class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white resize-none text-sm"
-            placeholder="메뉴/가격/이벤트 정보를 자유롭게 붙여넣으세요. AI가 정리합니다.
+          <textarea id="paste-text" rows="10"
+            class="w-full px-4 py-4 bg-white/5 border border-white/10 rounded-xl text-white resize-none text-sm leading-relaxed"
+            placeholder="네이버 플레이스에서 메뉴/가격/이벤트 정보를 드래그해서 복사 후 여기에 붙여넣으세요!
 
-예시:
-오픈 50% 할인 이벤트
+예시 (아무 형식이나 OK):
+━━━━━━━━━━━━━━
+🎉 오픈 50% 할인 이벤트
+
 미라클 필링 120,000원 → 60,000원
 매직팟 고주파 80,000원 → 40,000원
 토닝 케어 70,000원 → 35,000원
 
 영업시간: 10:00-19:00 (일요일 휴무)
-VAT 별도, 시술시간 약 1시간"></textarea>
-          <div class="flex gap-2 mt-2">
-            <button onclick="analyzeTextInput()" class="flex-1 py-3 btn-primary rounded-xl font-medium">
-              <i class="fas fa-magic mr-1"></i>AI로 프롬프트 생성
+전화: 0507-1234-5678
+━━━━━━━━━━━━━━
+
+💡 AI가 알아서 정리합니다!"></textarea>
+          <div class="flex gap-2 mt-3">
+            <button onclick="runPipeline()" class="flex-1 py-4 btn-primary rounded-xl font-bold text-base">
+              <i class="fas fa-wand-magic-sparkles mr-2"></i>✨ AI 프롬프트 자동 생성 (GPT-4o + Gemini Pro)
             </button>
-            <button onclick="document.getElementById('paste-text').value=''" class="px-4 py-3 btn-secondary rounded-xl">
+            <button onclick="document.getElementById('paste-text').value=''" class="px-4 py-4 btn-secondary rounded-xl">
               <i class="fas fa-trash"></i>
             </button>
           </div>
-        </div>
-
-        <div class="text-center text-white/30 text-sm my-4">─── 또는 ───</div>
-        
-        <!-- 이미지 OCR 업로드 -->
-        <div class="mb-4">
-          <label class="block text-sm text-white/60 mb-2">
-            <i class="fas fa-camera mr-1"></i>가격표/메뉴판 이미지 <span class="text-[#D4AF37]">(OCR 자동 인식)</span>
-          </label>
-          <div class="border-2 border-dashed border-white/20 rounded-xl p-4 text-center hover:border-[#D4AF37]/50 transition-all cursor-pointer" onclick="document.getElementById('ocr-upload').click()">
-            <input type="file" id="ocr-upload" class="hidden" accept="image/*" onchange="handleOcrUpload(event)">
-            <div id="ocr-preview" class="hidden"></div>
-            <div id="ocr-placeholder">
-              <i class="fas fa-image text-2xl text-white/30 mb-2"></i>
-              <p class="text-white/60 text-sm">가격표 이미지를 업로드하면 자동으로 가격 추출</p>
-              <p class="text-xs text-white/40 mt-1">JPG, PNG, WebP (최대 20MB)</p>
-            </div>
-          </div>
-        </div>
-        
-        <!-- OCR 결과 미리보기 -->
-        <div id="ocr-result" class="hidden mb-4">
-          <label class="block text-sm text-white/60 mb-2">
-            <i class="fas fa-check-circle text-green-400 mr-1"></i>OCR 추출 결과
-          </label>
-          <div class="p-4 bg-white/5 rounded-xl">
-            <pre id="ocr-text" class="text-sm text-white/80 whitespace-pre-wrap"></pre>
-          </div>
-          <div class="flex gap-2 mt-2">
-            <button onclick="applyOcrResult()" class="flex-1 py-3 btn-primary rounded-xl font-medium">
-              <i class="fas fa-check mr-1"></i>프롬프트에 적용
-            </button>
-            <button onclick="clearOcrResult()" class="px-4 py-3 btn-secondary rounded-xl">
-              <i class="fas fa-times"></i>
-            </button>
-          </div>
+          <p class="text-xs text-white/40 mt-3">
+            <i class="fas fa-lightbulb mr-1 text-yellow-400"></i>
+            <strong>사용법:</strong> 네이버 플레이스 → 메뉴 탭 → Ctrl+A (전체 선택) → Ctrl+C (복사) → 여기에 Ctrl+V (붙여넣기)
+          </p>
         </div>
         
         <!-- 분석 진행 상태 -->
         <div id="analysis-status" class="hidden mt-4 p-4 bg-white/5 rounded-xl">
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-3 mb-2">
             <div class="w-6 h-6 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin"></div>
-            <span id="analysis-text">분석 중...</span>
+            <span id="analysis-text" class="font-medium">분석 중...</span>
           </div>
-          <div class="mt-2 h-2 bg-white/10 rounded-full overflow-hidden">
-            <div id="analysis-progress" class="h-full bg-[#D4AF37] transition-all duration-300" style="width: 0%"></div>
+          <div class="mt-2 h-3 bg-white/10 rounded-full overflow-hidden">
+            <div id="analysis-progress" class="h-full bg-gradient-to-r from-[#D4AF37] to-indigo-500 transition-all duration-500" style="width: 0%"></div>
           </div>
+          <div id="analysis-stage" class="mt-2 text-xs text-white/50"></div>
+        </div>
+        
+        <!-- 파이프라인 결과 미리보기 -->
+        <div id="pipeline-result" class="hidden mt-4 p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
+          <div class="flex items-center gap-2 mb-3">
+            <i class="fas fa-check-circle text-green-400 text-xl"></i>
+            <span class="font-bold text-green-400">프롬프트 생성 완료!</span>
+          </div>
+          <div class="text-xs text-white/60 mb-2" id="pipeline-models"></div>
+          <p class="text-sm text-white/80">아래 [프롬프트 편집] 영역에서 결과를 확인하고, [전체 저장]을 눌러 적용하세요.</p>
         </div>
       </div>
       
@@ -764,6 +727,26 @@ VAT 별도, 시술시간 약 1시간"></textarea>
                 </button>
               </div>
             </div>
+            
+            <div class="lg:col-span-2">
+              <label class="block text-sm text-white/60 mb-2">
+                <i class="fas fa-key mr-1"></i>
+                Authorization 토큰 
+                <span class="text-[#D4AF37]">*필수</span>
+              </label>
+              <div class="flex gap-2">
+                <input type="text" id="naver-auth-token" placeholder="네이버 파트너센터 > 보내기 API > Authorization 토큰"
+                  class="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:border-[#D4AF37]">
+                <button onclick="saveNaverAuthToken()" class="px-4 py-3 btn-primary rounded-xl">
+                  <i class="fas fa-save mr-1"></i>저장
+                </button>
+              </div>
+              <p class="mt-2 text-xs text-white/40">
+                <i class="fas fa-info-circle mr-1"></i>
+                네이버 톡톡 파트너센터 > 보내기 API > "생성" 버튼 클릭 후 발급받은 토큰을 입력하세요.
+                <br>이 토큰이 없으면 AI가 고객에게 응답을 보낼 수 없습니다.
+              </p>
+            </div>
           </div>
         </div>
         
@@ -860,6 +843,9 @@ VAT 별도, 시술시간 약 1시간"></textarea>
       // 네이버 연동
       document.getElementById('naver-talktalk-id').value = store.naver_talktalk_id || '';
       document.getElementById('naver-reservation-id').value = store.naver_reservation_id || '';
+      
+      // 네이버 톡톡 Authorization 토큰 로드
+      loadNaverAuthToken();
       
       // SMS 알림 연락처 - 원장님 휴대폰
       const ownerPhoneEl = document.getElementById('owner-phone');
@@ -1300,6 +1286,53 @@ VAT 별도, 시술시간 약 1시간"></textarea>
       showToast('Webhook URL이 복사되었습니다', 'success');
     }
     
+    // 네이버 톡톡 Authorization 토큰 로드
+    async function loadNaverAuthToken() {
+      try {
+        const res = await fetch(\`/api/stores/\${STORE_ID}/talktalk/config\`);
+        const data = await res.json();
+        if (data.success && data.data && data.data.accessToken) {
+          document.getElementById('naver-auth-token').value = data.data.accessToken;
+        }
+      } catch (err) {
+        console.log('[loadNaverAuthToken] 설정 없음 또는 오류');
+      }
+    }
+    
+    // 네이버 톡톡 Authorization 토큰 저장
+    async function saveNaverAuthToken() {
+      const token = document.getElementById('naver-auth-token').value.trim();
+      
+      if (!token) {
+        showToast('Authorization 토큰을 입력해주세요', 'error');
+        return;
+      }
+      
+      const partnerId = document.getElementById('naver-talktalk-id').value.trim();
+      
+      try {
+        const res = await fetch(\`/api/stores/\${STORE_ID}/talktalk/config\`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            partner_id: partnerId,
+            account_id: partnerId,
+            access_token: token
+          })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          showToast('Authorization 토큰이 저장되었습니다! 이제 AI가 응답을 보낼 수 있습니다.', 'success');
+        } else {
+          showToast('저장 실패: ' + (data.error || '알 수 없는 오류'), 'error');
+        }
+      } catch (err) {
+        showToast('저장 중 오류 발생', 'error');
+      }
+    }
+    
     // 프롬프트 초기화
     function resetPrompt() {
       if (storeData) {
@@ -1326,8 +1359,105 @@ VAT 별도, 시술시간 약 1시간"></textarea>
     
     // ============ 자동 생성 기능 ============
     
-    // 텍스트 입력으로 프롬프트 생성 (권장 방식)
+    // ⭐ 2단계 AI 파이프라인 실행 (GPT-4o → Gemini 2.5 Pro)
+    async function runPipeline() {
+      const text = document.getElementById('paste-text').value.trim();
+      const storeName = document.getElementById('store-name-input').value.trim();
+      
+      if (!text || text.length < 10) {
+        showToast('텍스트를 입력해주세요 (최소 10자 이상)', 'error');
+        return;
+      }
+      
+      // 상태 표시
+      const statusDiv = document.getElementById('analysis-status');
+      const statusText = document.getElementById('analysis-text');
+      const progressBar = document.getElementById('analysis-progress');
+      const stageText = document.getElementById('analysis-stage');
+      const resultDiv = document.getElementById('pipeline-result');
+      
+      statusDiv.classList.remove('hidden');
+      resultDiv.classList.add('hidden');
+      
+      // Stage 1: GPT-4o
+      statusText.textContent = '🤖 GPT-4o가 데이터를 구조화하는 중...';
+      stageText.textContent = '1단계: 메뉴/가격/이벤트 정보 추출 및 구조화';
+      progressBar.style.width = '30%';
+      
+      try {
+        const existingPrompt = document.getElementById('system-prompt').value.trim();
+        
+        const res = await fetch(\`/api/stores/\${STORE_ID}/generate-prompt-pipeline\`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            rawText: text,
+            storeName: storeName || '매장',
+            businessType: document.getElementById('business-type').value,
+            existingPrompt: existingPrompt || undefined
+          })
+        });
+        
+        // Stage 2: Gemini Pro
+        statusText.textContent = '✨ Gemini 2.5 Pro가 감정 자극형으로 업그레이드 중...';
+        stageText.textContent = '2단계: 구매 욕구 자극 문구로 변환 + 할루시네이션 검수';
+        progressBar.style.width = '70%';
+        
+        const data = await res.json();
+        progressBar.style.width = '100%';
+        
+        if (data.success) {
+          const result = data.data;
+          
+          // 시스템 프롬프트 적용
+          if (result.systemPrompt) {
+            document.getElementById('system-prompt').value = result.systemPrompt;
+          }
+          
+          // 메뉴 데이터 적용
+          if (result.menuText) {
+            document.getElementById('menu-data-text').value = result.menuText;
+          }
+          
+          // 영업시간 적용
+          if (result.operatingHours) {
+            const existingHours = document.getElementById('operating-hours-text').value.trim();
+            if (!existingHours) {
+              document.getElementById('operating-hours-text').value = result.operatingHours;
+            }
+          }
+          
+          // 성공 결과 표시
+          statusText.textContent = '✅ 프롬프트 생성 완료!';
+          stageText.textContent = '';
+          
+          resultDiv.classList.remove('hidden');
+          document.getElementById('pipeline-models').textContent = 
+            \`사용된 모델: \${result.models?.stage1 || 'GPT-4o'} → \${result.models?.stage2 || 'Gemini 2.5 Pro'}\`;
+          
+          showToast('✅ 2단계 AI 파이프라인 완료! [전체 저장]을 눌러 저장하세요.', 'success');
+          console.log('파이프라인 결과:', result);
+        } else {
+          showToast('생성 실패: ' + (data.error || '알 수 없는 오류'), 'error');
+        }
+      } catch (err) {
+        console.error('Pipeline Error:', err);
+        showToast('프롬프트 생성 중 오류 발생', 'error');
+      } finally {
+        setTimeout(() => {
+          statusDiv.classList.add('hidden');
+          progressBar.style.width = '0%';
+        }, 2000);
+      }
+    }
+    
+    // 텍스트 입력으로 프롬프트 생성 (기존 호환용 - runPipeline으로 리다이렉트)
     async function analyzeTextInput() {
+      return runPipeline();
+    }
+    
+    // 텍스트 입력으로 프롬프트 생성 (이전 버전 - 백업용)
+    async function analyzeTextInputLegacy() {
       const text = document.getElementById('paste-text').value.trim();
       const storeName = document.getElementById('store-name-input').value.trim();
       

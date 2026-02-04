@@ -74,6 +74,8 @@ import {
   buildStoreSystemPrompt,
   INDUSTRY_TEMPLATES
 } from '../lib/industry-templates';
+import { runPromptPipeline, type PromptPipelineInput } from '../lib/prompt-pipeline';
+import { saveTalkTalkConfig, getTalkTalkConfig } from '../lib/naver-talktalk';
 
 const api = new Hono<{ Bindings: Env }>();
 
@@ -10163,6 +10165,204 @@ JSON 형식으로 응답:
     
   } catch (error: any) {
     console.error('AI Template Generation Error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// ========== [V2.0] 2단계 AI 프롬프트 파이프라인 ==========
+// GPT-4o (1차 구조화) → Gemini 2.5 Pro (감정 자극형 검수)
+
+api.post('/stores/:id/generate-prompt-pipeline', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const body = await c.req.json() as {
+      rawText: string;
+      storeName?: string;
+      businessType?: string;
+      existingPrompt?: string;
+    };
+
+    if (!body.rawText || body.rawText.trim().length < 10) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '텍스트를 입력해주세요 (최소 10자 이상).',
+        timestamp: Date.now()
+      }, 400);
+    }
+
+    // 매장 정보 조회
+    const store = await c.env.DB.prepare('SELECT store_name, business_type FROM xivix_stores WHERE id = ?')
+      .bind(storeId).first<{ store_name: string; business_type: string }>();
+
+    const input: PromptPipelineInput = {
+      rawText: body.rawText,
+      storeName: body.storeName || store?.store_name || '매장',
+      businessType: body.businessType || store?.business_type || 'BEAUTY_SKIN',
+      existingPrompt: body.existingPrompt
+    };
+
+    console.log(`[Pipeline API] Store ${storeId} - 입력 텍스트 길이: ${input.rawText.length}`);
+
+    // 2단계 파이프라인 실행
+    const result = await runPromptPipeline(c.env, input);
+
+    if (!result.success) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: result.error || '프롬프트 생성 실패',
+        timestamp: Date.now()
+      }, 500);
+    }
+
+    console.log(`[Pipeline API] Store ${storeId} - 완료: Stage1=${result.stage1Model}, Stage2=${result.stage2Model}`);
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        systemPrompt: result.finalPrompt,
+        menuText: result.menuText,
+        eventsText: result.eventsText,
+        operatingHours: result.operatingHours,
+        structuredData: result.structuredData,
+        models: {
+          stage1: result.stage1Model,
+          stage2: result.stage2Model
+        }
+      },
+      timestamp: Date.now()
+    });
+
+  } catch (error: any) {
+    console.error('[Pipeline API] Error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '프롬프트 생성 중 오류 발생',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 텍스트 기반 간단 프롬프트 생성 (기존 API 대체)
+api.post('/stores/:id/generate-prompt-from-text', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const body = await c.req.json() as {
+      text: string;
+      storeName?: string;
+      businessType?: string;
+      existingPrompt?: string;
+    };
+
+    if (!body.text || body.text.trim().length < 10) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '텍스트를 입력해주세요 (최소 10자 이상).',
+        timestamp: Date.now()
+      }, 400);
+    }
+
+    // 매장 정보 조회
+    const store = await c.env.DB.prepare('SELECT store_name, business_type FROM xivix_stores WHERE id = ?')
+      .bind(storeId).first<{ store_name: string; business_type: string }>();
+
+    const input: PromptPipelineInput = {
+      rawText: body.text,
+      storeName: body.storeName || store?.store_name || '매장',
+      businessType: body.businessType || store?.business_type || 'BEAUTY_SKIN',
+      existingPrompt: body.existingPrompt
+    };
+
+    // 2단계 파이프라인 실행
+    const result = await runPromptPipeline(c.env, input);
+
+    if (!result.success) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: result.error || '프롬프트 생성 실패',
+        timestamp: Date.now()
+      }, 500);
+    }
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        systemPrompt: result.finalPrompt,
+        menuText: result.menuText,
+        operatingHours: result.operatingHours,
+        models: {
+          stage1: result.stage1Model,
+          stage2: result.stage2Model
+        }
+      },
+      timestamp: Date.now()
+    });
+
+  } catch (error: any) {
+    console.error('[Text Prompt API] Error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '프롬프트 생성 중 오류 발생',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// ========== 톡톡 설정 API ==========
+
+// 톡톡 설정 저장
+api.post('/stores/:id/talktalk/config', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const body = await c.req.json() as {
+      partner_id?: string;
+      account_id?: string;
+      access_token?: string;
+    };
+
+    await saveTalkTalkConfig(c.env.DB, storeId, {
+      partnerId: body.partner_id,
+      accountId: body.account_id,
+      accessToken: body.access_token,
+      webhookVerified: true
+    });
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: { message: '톡톡 설정이 저장되었습니다' },
+      timestamp: Date.now()
+    });
+
+  } catch (error: any) {
+    console.error('[TalkTalk Config] Error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '설정 저장 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 톡톡 설정 조회
+api.get('/stores/:id/talktalk/config', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const config = await getTalkTalkConfig(c.env.DB, storeId);
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: config || { message: '설정 없음' },
+      timestamp: Date.now()
+    });
+
+  } catch (error: any) {
     return c.json<ApiResponse>({
       success: false,
       error: error.message,

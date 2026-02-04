@@ -162,7 +162,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       console.log(`[Webhook] OPEN event - Sending welcome message for Store ${storeId}`);
       
       const welcomeMsg = generateWelcomeMessage(storeResult);
-      const welcomeResult = await sendTextMessage(env, customerId, welcomeMsg);
+      const welcomeResult = await sendTextMessage(env, customerId, welcomeMsg, storeId);
       console.log(`[Webhook] Welcome message result:`, JSON.stringify(welcomeResult));
       
       // 8개국어 안내 메시지 (환영 인사 바로 다음 - 무조건 표시)
@@ -175,7 +175,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         `🇹🇭 ภาษาไทย → "TH"\n` +
         `🇻🇳 Tiếng Việt → "VN"\n` +
         `🇲🇳 Монгол → "MN"`;
-      const langResult = await sendTextMessage(env, customerId, languageMsg);
+      const langResult = await sendTextMessage(env, customerId, languageMsg, storeId);
       console.log(`[Webhook] Language message result:`, JSON.stringify(langResult));
       
       // [WATCHDOG] 입장 로그 기록
@@ -198,7 +198,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       console.log(`[Webhook] FRIEND event - Sending friend add message for Store ${storeId}`);
       
       const friendMsg = generateFriendAddMessage(storeResult);
-      await sendTextMessage(env, customerId, friendMsg);
+      await sendTextMessage(env, customerId, friendMsg, storeId);
       
       // [WATCHDOG] 친구 추가 로그 기록
       await env.DB.prepare(`
@@ -246,7 +246,8 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         const rateLimit = await checkRateLimit(env.KV, customerId, 30, 60);
         if (!rateLimit.allowed) {
           await sendTextMessage(env, customerId, 
-            '잠시 후 다시 문의해주세요. (요청이 너무 많습니다)'
+            '잠시 후 다시 문의해주세요. (요청이 너무 많습니다)',
+            storeId
           );
           return c.json({ success: true, store_id: storeId });
         }
@@ -294,7 +295,8 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         `📞 ${storeName} 연락처 안내\n\n` +
         `☎️ 전화: ${storePhone}\n` +
         (storeAddress ? `📍 주소: ${storeAddress}\n\n` : '\n') +
-        `전화가 어려우시면 네이버 톡톡으로 문의해주세요! 😊`
+        `전화가 어려우시면 네이버 톡톡으로 문의해주세요! 😊`,
+        storeId
       );
       
       // 로그 저장 후 리턴
@@ -363,14 +365,16 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
               `📱 담당자에게 연락 요청을 전달해드렸어요!\n\n` +
               `입력해주신 번호: ${customerPhone}\n\n` +
               `시술 중이시더라도 확인 후 연락드릴게요.\n` +
-              `조금만 기다려주세요! 😊`
+              `조금만 기다려주세요! 😊`,
+              storeId
             );
           } else {
             // SMS 전송 실패 시 안내
             await sendTextMessage(env, customerId,
               `알림 전송에 문제가 있었어요. 😥\n\n` +
               `직접 전화해주시면 더 빠르게 상담받으실 수 있어요.\n` +
-              `📞 ${storePhone}`
+              `📞 ${storePhone}`,
+              storeId
             );
           }
           
@@ -396,7 +400,8 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
           await sendTextMessage(env, customerId,
             `죄송합니다, 일시적인 오류가 발생했어요.\n\n` +
             `직접 전화주시면 바로 상담해드릴게요!\n` +
-            `📞 ${storePhone}`
+            `📞 ${storePhone}`,
+            storeId
           );
           
           return c.json({ success: false, store_id: storeId, error: 'SMS send failed' }, 500);
@@ -410,7 +415,8 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
           [
             { type: 'TEXT', title: '📞 전화번호 직접 입력', value: '전화번호입력' },
             { type: 'TEXT', title: '💬 직접 전화하기', value: '전화번호알려주세요' }
-          ]
+          ],
+          storeId
         );
         
         // 로그 저장
@@ -473,12 +479,16 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
             `💬 ${messageContent || '상담 요청'}\n\n` +
             `━━━━━━━━━━\n` +
             `확인 후 빠르게 연락드릴게요! 😊`
+          ,
+            storeId
           );
         } else {
           await sendTextMessage(env, customerId,
             `전송에 문제가 있었어요 😥\n\n` +
             `직접 전화주시면 바로 상담해드릴게요!\n` +
             `📞 ${storePhone2}`
+          ,
+            storeId
           );
         }
         
@@ -544,13 +554,17 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
               `입력해주신 번호: ${customerPhone}\n\n` +
               `시술 중이시더라도 확인 후 연락드릴게요.\n` +
               `감사합니다! 😊`
-            );
+            ,
+            storeId
+          );
           } else {
             await sendTextMessage(env, customerId,
               `알림 전송에 문제가 있었어요.\n` +
               `직접 전화해주시면 더 빠르게 상담받으실 수 있어요.\n` +
               `📞 ${storePhone}`
-            );
+            ,
+            storeId
+          );
           }
           
           // 로그 저장
@@ -568,6 +582,8 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
             `죄송합니다, 일시적인 오류가 발생했어요.\n` +
             `직접 전화주시면 바로 상담해드릴게요!\n` +
             `📞 ${storePhone}`
+          ,
+            storeId
           );
           return c.json({ success: false, store_id: storeId, error: 'SMS send failed' }, 500);
         }
@@ -700,7 +716,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         catch (e) { console.warn('[Lang] KV write error:', e); }
       }
       
-      await sendTextMessage(env, customerId, translateGuides[targetLang] || translateGuides.en);
+      await sendTextMessage(env, customerId, translateGuides[targetLang] || translateGuides.en, storeId);
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
@@ -736,7 +752,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       customerLang = detectedLang;
       
       const langData = langMenus[detectedLang];
-      await sendTextMessage(env, customerId, langData.welcome + langData.menu);
+      await sendTextMessage(env, customerId, langData.welcome + langData.menu, storeId);
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
@@ -755,19 +771,35 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     const menuLang = hasExplicitLangChoice ? customerLang : 'ko'; // 명시적 선택 없으면 한국어
     
     if (menuNumber === '1') {
-      // 1. 🎁 오픈 50% 이벤트 메뉴/가격 (8개국어 지원)
-      const priceTemplates: Record<string, string> = {
-        ko: `🎁 오픈 50% 할인 메뉴\n\n처짐/탄력\n→ 매직팟 [4만원]\n\n각질/재생\n→ 미라클 필링 [6만원]\n\n칙칙함/미백\n→ 토닝 케어 [3.5만원]\n\n건조/속광\n→ LDM 물방울 [3.5만원]\n\n보습/광채\n→ 더마-S [3만원]\n\n피지/모공\n→ 아쿠아필링 [2.5만원]\n\n━━━━━━━━━━\n예약 도와드릴까요?`,
-        en: `🎁 50% OFF Grand Opening Menu\n\nSagging/Elasticity\n→ Magic Pot [₩40,000]\n\nExfoliation/Regeneration\n→ Miracle Peeling [₩60,000]\n\nDullness/Brightening\n→ Toning Care [₩35,000]\n\nDryness/Glow\n→ LDM Water Drop [₩35,000]\n\nMoisture/Radiance\n→ Derma-S [₩30,000]\n\nSebum/Pores\n→ Aqua Peeling [₩25,000]\n\n━━━━━━━━━━\nWould you like to book?`,
-        ja: `🎁 オープン記念 50%割引メニュー\n\nたるみ/弾力\n→ マジックポット [4万ウォン]\n\n角質/再生\n→ ミラクルピーリング [6万ウォン]\n\nくすみ/美白\n→ トーニングケア [3.5万ウォン]\n\n乾燥/艶\n→ LDM水滴 [3.5万ウォン]\n\n保湿/輝き\n→ ダーマ-S [3万ウォン]\n\n皮脂/毛穴\n→ アクアピーリング [2.5万ウォン]\n\n━━━━━━━━━━\nご予約されますか?`,
-        zh: `🎁 开业优惠 50%折扣菜单\n\n松弛/弹力\n→ 魔力锅 [4万韩元]\n\n角质/再生\n→ 奇迹焕肤 [6万韩元]\n\n暗沉/美白\n→ 调理护理 [3.5万韩元]\n\n干燥/光泽\n→ LDM水滴 [3.5万韩元]\n\n保湿/光彩\n→ Derma-S [3万韩元]\n\n皮脂/毛孔\n→ 水光焕肤 [2.5万韩元]\n\n━━━━━━━━━━\n需要预约吗?`,
-        tw: `🎁 開幕優惠 50%折扣菜單\n\n鬆弛/彈力\n→ 魔力鍋 [4萬韓元]\n\n角質/再生\n→ 奇蹟煥膚 [6萬韓元]\n\n暗沉/美白\n→ 調理護理 [3.5萬韓元]\n\n乾燥/光澤\n→ LDM水滴 [3.5萬韓元]\n\n保濕/光彩\n→ Derma-S [3萬韓元]\n\n皮脂/毛孔\n→ 水光煥膚 [2.5萬韓元]\n\n━━━━━━━━━━\n需要預約嗎?`,
-        th: `🎁 เมนูลด 50% ฉลองเปิดร้าน\n\nหย่อนคล้อย/กระชับ\n→ Magic Pot [40,000 วอน]\n\nผลัดเซลล์/ฟื้นฟู\n→ Miracle Peeling [60,000 วอน]\n\nหมองคล้ำ/ผิวกระจ่างใส\n→ Toning Care [35,000 วอน]\n\nแห้ง/เปล่งประกาย\n→ LDM Water Drop [35,000 วอน]\n\nความชุ่มชื้น/ผิวเรียบเนียน\n→ Derma-S [30,000 วอน]\n\nรูขุมขน/สิวเสี้ยน\n→ Aqua Peeling [25,000 วอน]\n\n━━━━━━━━━━\nต้องการจองไหมคะ?`,
-        vi: `🎁 Menu giảm 50% Khai trương\n\nChảy xệ/Đàn hồi\n→ Magic Pot [40,000 won]\n\nTẩy tế bào/Tái sinh\n→ Miracle Peeling [60,000 won]\n\nXỉn màu/Làm sáng\n→ Toning Care [35,000 won]\n\nKhô/Rạng rỡ\n→ LDM Water Drop [35,000 won]\n\nDưỡng ẩm/Tỏa sáng\n→ Derma-S [30,000 won]\n\nBã nhờn/Lỗ chân lông\n→ Aqua Peeling [25,000 won]\n\n━━━━━━━━━━\nBạn muốn đặt lịch không?`,
-        mn: `🎁 Нээлтийн 50% хөнгөлөлттэй меню\n\nУналт/Уян хатан\n→ Magic Pot [40,000 вон]\n\nЦэвэрлэгээ/Сэргээлт\n→ Miracle Peeling [60,000 вон]\n\nХар толбо/Гэрэлтүүлэх\n→ Toning Care [35,000 вон]\n\nХуурай/Гялбах\n→ LDM Water Drop [35,000 вон]\n\nЧийглэг/Туяалах\n→ Derma-S [30,000 вон]\n\nТос/Сүвэрхэг\n→ Aqua Peeling [25,000 вон]\n\n━━━━━━━━━━\nЦаг захиалах уу?`
-      };
-      const priceResponse = priceTemplates[menuLang] || priceTemplates.ko;
-      await sendTextMessage(env, customerId, priceResponse);
+      // 1. 🎁 메뉴/가격 (DB에서 매장별 데이터 사용)
+      const storeName = storeResult?.store_name || '매장';
+      const menuData = storeResult?.menu_data || '';
+      const eventsData = storeResult?.events_data || '';
+      
+      // 이벤트 정보 파싱
+      let eventText = '';
+      if (eventsData) {
+        try {
+          const events = JSON.parse(eventsData);
+          if (Array.isArray(events) && events.length > 0) {
+            eventText = events[0].discount_rate ? `${events[0].discount_rate} 할인` : '이벤트 진행 중';
+          }
+        } catch {
+          // 이벤트 파싱 실패 시 무시
+        }
+      }
+      
+      // 메뉴 데이터가 있으면 사용, 없으면 AI에게 맡김
+      let priceResponse = '';
+      if (menuData && menuData.trim()) {
+        const eventHeader = eventText ? `🎁 ${eventText} 메뉴\n\n` : `📋 ${storeName} 메뉴\n\n`;
+        priceResponse = eventHeader + menuData.trim() + `\n\n━━━━━━━━━━\n예약 도와드릴까요?`;
+      } else {
+        // 메뉴 데이터가 없으면 AI 응답으로 처리
+        priceResponse = `📋 ${storeName} 메뉴/가격\n\n정확한 메뉴와 가격은 상담 후 안내드립니다.\n\n예약하시면 자세한 상담 받으실 수 있어요!\n\n━━━━━━━━━━\n예약 도와드릴까요?`;
+      }
+      
+      await sendTextMessage(env, customerId, priceResponse, storeId);
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
@@ -792,7 +824,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         mn: `💡 Арьс шинжилгээ\n\nЗөв оношлохын тулд:\n\n📸 Санаа зовж буй хэсгийн [зураг] илгээнэ үү\n\n✍️ Эсвэл [асуудлаа] бичгээр тайлбарлана уу\n\n━━━━━━━━━━\n20 жилийн туршлагаар\nшинжлэх болно! 😊`
       };
       const skinCheckResponse = skinTemplates[menuLang] || skinTemplates.ko;
-      await sendTextMessage(env, customerId, skinCheckResponse);
+      await sendTextMessage(env, customerId, skinCheckResponse, storeId);
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
@@ -817,7 +849,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         mn: `💬 Захиралд мессеж\n\nБид таны мессежийг шууд дамжуулна!\n\nХолбоо барих болон\nзөвлөгөөний дэлгэрэнгүйг үлдээнэ үү 📝\n\n━━━━━━━━━━\nЖишээ:\n+82-10-1234-5678\nСүвэрхэгийн талаар зөвлөгөө авмаар байна`
       };
       const messageResponse = msgTemplates[menuLang] || msgTemplates.ko;
-      await sendTextMessage(env, customerId, messageResponse);
+      await sendTextMessage(env, customerId, messageResponse, storeId);
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
@@ -845,13 +877,15 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       
       if (naverReservationId) {
         const bookingUrl = getNaverBookingUrl(naverReservationId);
-        await sendTextMessage(env, customerId, bt.msg);
+        await sendTextMessage(env, customerId, bt.msg, storeId);
         await sendButtonMessage(env, customerId, bt.select, [
           { type: 'LINK', title: bt.btn1, linkUrl: bookingUrl },
           { type: 'TEXT', title: bt.btn2, value: '전화번호알려주세요' }
-        ]);
+        ],
+            storeId
+          );
       } else {
-        await sendTextMessage(env, customerId, bt.noBooking);
+        await sendTextMessage(env, customerId, bt.noBooking, storeId);
       }
       
       const responseTime = Date.now() - startTime;
@@ -878,7 +912,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       };
       const lt = locTemplates[menuLang] || locTemplates.ko;
       const locationResponse = `📍 ${storeName}\n\n🏠 ${lt.addr}\n${storeAddress}\n\n📞 ${lt.phone}\n${storePhone}\n\n⏰ ${lt.hours}\n${operatingHours}\n\n━━━━━━━━━━\n${lt.book}`;
-      await sendTextMessage(env, customerId, locationResponse);
+      await sendTextMessage(env, customerId, locationResponse, storeId);
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
@@ -900,7 +934,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         `📞 전화\n${storePhone}\n\n` +
         `⏰ 영업시간\n${storeResult?.operating_hours || '10:00-19:00'}\n\n` +
         `━━━━━━━━━━\n방문 예약 도와드릴까요?`;
-      await sendTextMessage(env, customerId, locationResponse);
+      await sendTextMessage(env, customerId, locationResponse, storeId);
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
@@ -912,17 +946,33 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       return c.json({ success: true, store_id: storeId, intent: 'location' });
     }
     
-    // 가격/메뉴/이벤트 관련 키워드
-    if (/가격|얼마|메뉴|이벤트|할인|50%|오십|50프로/.test(lowerMessage)) {
-      const priceResponse = `🎁 오픈 50% 할인 메뉴\n\n` +
-        `처짐/탄력\n→ 매직팟 [4만원]\n\n` +
-        `각질/재생\n→ 미라클 필링 [6만원]\n\n` +
-        `칙칙함/미백\n→ 토닝 케어 [3.5만원]\n\n` +
-        `건조/속광\n→ LDM 물방울 [3.5만원]\n\n` +
-        `보습/광채\n→ 더마-S [3만원]\n\n` +
-        `피지/모공\n→ 아쿠아필링 [2.5만원]\n\n` +
-        `━━━━━━━━━━\n예약 도와드릴까요?`;
-      await sendTextMessage(env, customerId, priceResponse);
+    // 가격/메뉴/이벤트 관련 키워드 - DB에서 매장별 데이터 사용
+    if (/가격|얼마|메뉴|이벤트|할인|50%|오십|50프로|30%|삼십/.test(lowerMessage)) {
+      const menuData = storeResult?.menu_data || '';
+      const eventsData = storeResult?.events_data || '';
+      
+      // 이벤트 정보 파싱
+      let eventText = '';
+      if (eventsData) {
+        try {
+          const events = JSON.parse(eventsData);
+          if (Array.isArray(events) && events.length > 0) {
+            eventText = events[0].discount_rate ? `${events[0].discount_rate} 할인` : '이벤트 진행 중';
+          }
+        } catch {
+          // 이벤트 파싱 실패 시 무시
+        }
+      }
+      
+      let priceResponse = '';
+      if (menuData && menuData.trim()) {
+        const eventHeader = eventText ? `🎁 ${eventText} 메뉴\n\n` : `📋 ${storeName} 메뉴\n\n`;
+        priceResponse = eventHeader + menuData.trim() + `\n\n━━━━━━━━━━\n예약 도와드릴까요?`;
+      } else {
+        priceResponse = `📋 ${storeName} 메뉴/가격\n\n정확한 메뉴와 가격은 상담 후 안내드립니다.\n\n예약하시면 자세한 상담 받으실 수 있어요!\n\n━━━━━━━━━━\n예약 도와드릴까요?`;
+      }
+      
+      await sendTextMessage(env, customerId, priceResponse, storeId);
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
@@ -940,7 +990,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         `${storeResult?.operating_hours || '10:00-19:00'}\n\n` +
         `📞 전화\n${storePhone}\n\n` +
         `━━━━━━━━━━\n예약 도와드릴까요?`;
-      await sendTextMessage(env, customerId, hoursResponse);
+      await sendTextMessage(env, customerId, hoursResponse, storeId);
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
@@ -986,14 +1036,18 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
               `아래 링크를 눌러 바로 예약하세요! 😊\n\n` +
               `🗓️ 네이버 예약하기 👇\n${bookingUrl}\n\n` +
               `📞 전화 문의: ${storePhone}`
-            );
+            ,
+            storeId
+          );
           } else {
             // 네이버 예약 ID가 없으면 안내 메시지
             await sendTextMessage(env, customerId, 
               `${storeName} 예약 문의 감사합니다! 😊\n\n` +
               `예약은 전화 또는 방문으로 가능합니다.\n` +
               `전화번호를 알려드릴까요?`
-            );
+            ,
+            storeId
+          );
           }
         } catch (bookingError) {
           console.error('[Webhook] Booking inquiry error:', bookingError);
@@ -1007,7 +1061,9 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
             { type: 'LINK', title: '지금 예약하기', linkUrl: getNaverBookingUrl(naverReservationId) },
             { type: 'TEXT', title: '예약 가능 시간 확인', value: '예약가능시간' }
           ]
-        );
+        ,
+            storeId
+          );
       }
       
       // 예약 처리 완료 - 로그 저장 후 리턴
@@ -1056,7 +1112,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       verified = result.verified || false;
       
       // 응답 전송
-      await sendTextMessage(env, customerId, aiResponse);
+      await sendTextMessage(env, customerId, aiResponse, storeId);
       
       console.log(`[Webhook] AI Response (${aiModel}, verified: ${verified}): ${aiResponse.slice(0, 50)}...`);
     } 
@@ -1081,7 +1137,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       
       // ⭐ 항상 전체 응답을 한 번에 전송 (스트리밍 제거 - 메시지 잘림 방지)
       aiResponse = await getGeminiResponse(env, messages, systemInstruction, 'gemini');
-      await sendTextMessage(env, customerId, aiResponse);
+      await sendTextMessage(env, customerId, aiResponse, storeId);
     }
     
     // 대화 컨텍스트 저장
@@ -1162,7 +1218,7 @@ webhook.post('/v1/naver/callback', async (c) => {
       ).first<Store>();
       
       const welcomeMsg = generateWelcomeMessage(storeResult);
-      await sendTextMessage(env, customerId, welcomeMsg);
+      await sendTextMessage(env, customerId, welcomeMsg, storeId);
       
       // [WATCHDOG] 입장 로그 기록
       await env.DB.prepare(`
@@ -1188,7 +1244,7 @@ webhook.post('/v1/naver/callback', async (c) => {
       ).first<Store>();
       
       const friendMsg = generateFriendAddMessage(storeResult);
-      await sendTextMessage(env, customerId, friendMsg);
+      await sendTextMessage(env, customerId, friendMsg, storeId);
       
       // [WATCHDOG] 친구 추가 로그 기록
       await env.DB.prepare(`
@@ -1235,7 +1291,9 @@ webhook.post('/v1/naver/callback', async (c) => {
     if (!rateLimit.allowed) {
       await sendTextMessage(env, customerId, 
         '잠시 후 다시 문의해주세요. (요청이 너무 많습니다)'
-      );
+      ,
+            storeId
+          );
       return c.json({ success: true });
     }
     
@@ -1286,7 +1344,7 @@ webhook.post('/v1/naver/callback', async (c) => {
     // 짧은 메시지는 일반 응답, 긴 메시지는 스트리밍
     if (userMessage.length < 20 && !imageBase64) {
       aiResponse = await getGeminiResponse(env, messages, systemInstruction);
-      await sendTextMessage(env, customerId, aiResponse);
+      await sendTextMessage(env, customerId, aiResponse, storeId);
     } else {
       // 스트리밍 응답 (청크 단위 전송)
       const chunks: string[] = [];
@@ -1301,7 +1359,7 @@ webhook.post('/v1/naver/callback', async (c) => {
             currentChunk.length > 100) {
           chunks.push(currentChunk);
           aiResponse += currentChunk;
-          await sendTextMessage(env, customerId, currentChunk.trim());
+          await sendTextMessage(env, customerId, currentChunk.trim(), storeId);
           currentChunk = '';
           // 타이핑 효과를 위한 짧은 딜레이
           await new Promise(r => setTimeout(r, 100));
@@ -1312,7 +1370,7 @@ webhook.post('/v1/naver/callback', async (c) => {
       if (currentChunk.trim()) {
         chunks.push(currentChunk);
         aiResponse += currentChunk;
-        await sendTextMessage(env, customerId, currentChunk.trim());
+        await sendTextMessage(env, customerId, currentChunk.trim(), storeId);
       }
     }
     
@@ -1325,7 +1383,9 @@ webhook.post('/v1/naver/callback', async (c) => {
           { type: 'LINK', title: '지금 예약하기', linkUrl: `https://booking.naver.com/booking/12/bizes/${storeResult.naver_reservation_id}` },
           { type: 'TEXT', title: '더 알아보기', value: '상담' }
         ]
-      );
+      ,
+            storeId
+          );
     }
     
     // 대화 컨텍스트 저장
