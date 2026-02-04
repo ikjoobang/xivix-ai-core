@@ -221,19 +221,139 @@ function extractNaverPlaceId(url: string): string | null {
   return null;
 }
 
-// 네이버 플레이스 API로 매장 정보 가져오기
+// 네이버 플레이스 전체 크롤링 (기본정보 + 메뉴 + 디자이너/의사 + 이벤트 + 리뷰)
 async function fetchNaverPlaceInfo(placeId: string): Promise<{
   success: boolean;
   data?: any;
   error?: string;
 }> {
   try {
-    // 네이버 플레이스 API (비공식 - 웹에서 사용하는 API)
-    const apiUrl = `https://map.naver.com/p/api/search/allSearch?query=${placeId}&type=all&searchCoord=&boundary=`;
+    console.log(`[NaverPlace] 전체 크롤링 시작: ${placeId}`);
     
-    // 먼저 상세 페이지 HTML에서 정보 추출 시도
-    const detailUrl = `https://m.place.naver.com/place/${placeId}/home`;
-    const response = await fetch(detailUrl, {
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'ko-KR,ko;q=0.9'
+    };
+    
+    // 1. 기본 정보 페이지
+    const homeUrl = `https://m.place.naver.com/place/${placeId}/home`;
+    const homeResponse = await fetch(homeUrl, { headers });
+    const homeHtml = homeResponse.ok ? await homeResponse.text() : '';
+    
+    // 2. 메뉴/가격 페이지 (미용실: menu, 식당: menu)
+    const menuUrl = `https://m.place.naver.com/place/${placeId}/menu/list`;
+    const menuResponse = await fetch(menuUrl, { headers });
+    const menuHtml = menuResponse.ok ? await menuResponse.text() : '';
+    
+    // 3. 전문가/디자이너/의사 페이지 (미용실: stylist, 병원: doctor)
+    const stylistUrl = `https://m.place.naver.com/place/${placeId}/stylist`;
+    const stylistResponse = await fetch(stylistUrl, { headers });
+    const stylistHtml = stylistResponse.ok ? await stylistResponse.text() : '';
+    
+    const doctorUrl = `https://m.place.naver.com/place/${placeId}/doctor`;
+    const doctorResponse = await fetch(doctorUrl, { headers });
+    const doctorHtml = doctorResponse.ok ? await doctorResponse.text() : '';
+    
+    // 4. 이벤트/쿠폰 페이지
+    const eventUrl = `https://m.place.naver.com/place/${placeId}/event`;
+    const eventResponse = await fetch(eventUrl, { headers });
+    const eventHtml = eventResponse.ok ? await eventResponse.text() : '';
+    
+    // 5. 리뷰 페이지 (상위 10개)
+    const reviewUrl = `https://m.place.naver.com/place/${placeId}/review/visitor`;
+    const reviewResponse = await fetch(reviewUrl, { headers });
+    const reviewHtml = reviewResponse.ok ? await reviewResponse.text() : '';
+    
+    // 6. 예약 정보 페이지
+    const bookingUrl = `https://m.place.naver.com/place/${placeId}/booking`;
+    const bookingResponse = await fetch(bookingUrl, { headers });
+    const bookingHtml = bookingResponse.ok ? await bookingResponse.text() : '';
+    
+    // __NEXT_DATA__ 추출 함수
+    const extractNextData = (html: string): any => {
+      const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+      if (match) {
+        try {
+          return JSON.parse(match[1]);
+        } catch {}
+      }
+      return null;
+    };
+    
+    // JSON-LD 추출 함수
+    const extractJsonLd = (html: string): any => {
+      const match = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+      if (match) {
+        try {
+          return JSON.parse(match[1]);
+        } catch {}
+      }
+      return null;
+    };
+    
+    // 데이터 추출
+    const homeNextData = extractNextData(homeHtml);
+    const menuNextData = extractNextData(menuHtml);
+    const stylistNextData = extractNextData(stylistHtml);
+    const doctorNextData = extractNextData(doctorHtml);
+    const eventNextData = extractNextData(eventHtml);
+    const reviewNextData = extractNextData(reviewHtml);
+    const bookingNextData = extractNextData(bookingHtml);
+    const jsonLd = extractJsonLd(homeHtml);
+    
+    // 통합 데이터 구조 생성
+    const combinedData = {
+      jsonLd,
+      html: homeHtml,
+      pages: {
+        home: homeNextData,
+        menu: menuNextData,
+        stylist: stylistNextData,
+        doctor: doctorNextData,
+        event: eventNextData,
+        review: reviewNextData,
+        booking: bookingNextData
+      }
+    };
+    
+    console.log(`[NaverPlace] 크롤링 완료 - 페이지: home=${!!homeNextData}, menu=${!!menuNextData}, stylist=${!!stylistNextData}, doctor=${!!doctorNextData}, event=${!!eventNextData}`);
+    
+    return { success: true, data: combinedData };
+  } catch (error) {
+    console.error('[NaverPlace] Error:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : '네이버 플레이스 정보 가져오기 실패'
+    };
+  }
+}
+
+// 네이버 블로그 콘텐츠 추출
+async function fetchNaverBlogContent(url: string): Promise<{
+  success: boolean;
+  content?: string;
+  title?: string;
+  error?: string;
+}> {
+  try {
+    // 블로그 URL에서 blogId와 logNo 추출
+    const blogIdMatch = url.match(/blog\.naver\.com\/([^\/\?]+)/);
+    const logNoMatch = url.match(/\/(\d+)(?:\?|$)/);
+    
+    if (!blogIdMatch) {
+      return { success: false, error: '블로그 ID를 찾을 수 없습니다' };
+    }
+    
+    const blogId = blogIdMatch[1];
+    const logNo = logNoMatch ? logNoMatch[1] : null;
+    
+    // 모바일 블로그 URL로 변환 (더 깔끔한 HTML)
+    const mobileUrl = logNo 
+      ? `https://m.blog.naver.com/${blogId}/${logNo}`
+      : `https://m.blog.naver.com/${blogId}`;
+    
+    const response = await fetch(mobileUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -242,35 +362,58 @@ async function fetchNaverPlaceInfo(placeId: string): Promise<{
     });
     
     if (!response.ok) {
-      return { success: false, error: `네이버 플레이스 접근 실패: ${response.status}` };
+      return { success: false, error: `블로그 접근 실패: ${response.status}` };
     }
     
     const html = await response.text();
     
-    // JSON-LD 데이터 추출 시도
-    const jsonLdMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
-    if (jsonLdMatch) {
-      try {
-        const jsonLd = JSON.parse(jsonLdMatch[1]);
-        return { success: true, data: { jsonLd, html } };
-      } catch {}
+    // 제목 추출
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const title = titleMatch ? titleMatch[1].replace(' : 네이버 블로그', '').trim() : '';
+    
+    let content = `=== 네이버 블로그 ===\n`;
+    content += `제목: ${title}\n`;
+    content += `블로그 ID: ${blogId}\n`;
+    if (logNo) content += `글 번호: ${logNo}\n`;
+    
+    // 본문 영역 추출 시도
+    const contentAreaMatch = html.match(/<div[^>]*class="[^"]*se-main-container[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+    const postContentMatch = html.match(/<div[^>]*id="postViewArea"[^>]*>([\s\S]*?)<\/div>/i);
+    
+    let bodyContent = contentAreaMatch ? contentAreaMatch[1] : (postContentMatch ? postContentMatch[1] : '');
+    
+    // HTML 태그 제거
+    bodyContent = bodyContent
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    if (bodyContent) {
+      content += `\n=== 블로그 본문 ===\n${bodyContent.slice(0, 40000)}`;
+    } else {
+      // 전체 HTML에서 텍스트 추출
+      const textContent = html
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 40000);
+      content += `\n=== 페이지 내용 ===\n${textContent}`;
     }
     
-    // __NEXT_DATA__ 추출 시도
-    const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
-    if (nextDataMatch) {
-      try {
-        const nextData = JSON.parse(nextDataMatch[1]);
-        return { success: true, data: { nextData, html } };
-      } catch {}
-    }
+    console.log(`[NaverBlog] 크롤링 완료 - 제목: ${title}, 콘텐츠 길이: ${content.length}자`);
     
-    // HTML 직접 반환
-    return { success: true, data: { html } };
+    return { success: true, content, title };
   } catch (error) {
+    console.error('[NaverBlog] Error:', error);
     return { 
       success: false, 
-      error: error instanceof Error ? error.message : '네이버 플레이스 정보 가져오기 실패'
+      error: error instanceof Error ? error.message : '블로그 콘텐츠 추출 실패'
     };
   }
 }
@@ -305,11 +448,12 @@ export async function fetchUrlContent(url: string): Promise<{
         let content = '';
         let title = '';
         
-        // JSON-LD에서 정보 추출
+        // JSON-LD에서 기본 정보 추출
         if (placeInfo.data.jsonLd) {
           const ld = placeInfo.data.jsonLd;
           title = ld.name || '';
-          content = `매장명: ${ld.name || ''}\n`;
+          content = `=== 기본 정보 ===\n`;
+          content += `매장명: ${ld.name || ''}\n`;
           content += `주소: ${ld.address?.streetAddress || ''}\n`;
           content += `전화번호: ${ld.telephone || ''}\n`;
           content += `업종: ${ld['@type'] || ''}\n`;
@@ -321,26 +465,108 @@ export async function fetchUrlContent(url: string): Promise<{
           }
         }
         
-        // __NEXT_DATA__에서 정보 추출
-        if (placeInfo.data.nextData?.props?.pageProps) {
-          const pageProps = placeInfo.data.nextData.props.pageProps;
-          if (pageProps.initialState?.place?.basicInfo) {
-            const basicInfo = pageProps.initialState.place.basicInfo;
-            title = title || basicInfo.name || '';
-            content += `\n[상세정보]\n`;
-            content += `매장명: ${basicInfo.name || ''}\n`;
-            content += `주소: ${basicInfo.address || ''}\n`;
-            content += `전화번호: ${basicInfo.phone || ''}\n`;
-            content += `카테고리: ${basicInfo.category || ''}\n`;
-            
-            // 메뉴 정보
-            if (pageProps.initialState?.place?.menuInfo?.menuList) {
-              content += `\n[메뉴]\n`;
-              for (const menu of pageProps.initialState.place.menuInfo.menuList) {
-                content += `- ${menu.name}: ${menu.price}원\n`;
-              }
-            }
+        // 홈 페이지에서 기본 정보 추출
+        const homeData = placeInfo.data.pages?.home?.props?.pageProps;
+        if (homeData?.initialState?.place?.basicInfo) {
+          const basicInfo = homeData.initialState.place.basicInfo;
+          title = title || basicInfo.name || '';
+          content += `\n=== 상세 정보 ===\n`;
+          content += `매장명: ${basicInfo.name || ''}\n`;
+          content += `주소: ${basicInfo.address || ''}\n`;
+          content += `도로명주소: ${basicInfo.roadAddress || ''}\n`;
+          content += `전화번호: ${basicInfo.phone || ''}\n`;
+          content += `카테고리: ${basicInfo.category || ''}\n`;
+          if (basicInfo.businessHours) {
+            content += `영업시간: ${JSON.stringify(basicInfo.businessHours)}\n`;
           }
+          if (basicInfo.conveniences) {
+            content += `편의시설: ${basicInfo.conveniences.join(', ')}\n`;
+          }
+          if (basicInfo.description) {
+            content += `소개: ${basicInfo.description}\n`;
+          }
+        }
+        
+        // 메뉴/서비스 정보 추출
+        const menuData = placeInfo.data.pages?.menu?.props?.pageProps;
+        if (menuData?.initialState?.place?.menuInfo?.menuList) {
+          content += `\n=== 메뉴/서비스 가격표 ===\n`;
+          for (const menu of menuData.initialState.place.menuInfo.menuList) {
+            const price = menu.price ? `${menu.price.toLocaleString()}원` : '가격문의';
+            const desc = menu.description ? ` (${menu.description})` : '';
+            content += `- ${menu.name}: ${price}${desc}\n`;
+          }
+        } else if (homeData?.initialState?.place?.menuInfo?.menuList) {
+          // 홈에서 메뉴 정보 있으면 사용
+          content += `\n=== 메뉴/서비스 가격표 ===\n`;
+          for (const menu of homeData.initialState.place.menuInfo.menuList) {
+            const price = menu.price ? `${menu.price.toLocaleString()}원` : '가격문의';
+            content += `- ${menu.name}: ${price}\n`;
+          }
+        }
+        
+        // 디자이너/스타일리스트 정보 추출 (미용실)
+        const stylistData = placeInfo.data.pages?.stylist?.props?.pageProps;
+        if (stylistData?.initialState?.place?.stylistInfo?.stylistList) {
+          content += `\n=== 디자이너/스타일리스트 ===\n`;
+          for (const stylist of stylistData.initialState.place.stylistInfo.stylistList) {
+            content += `\n[${stylist.name}]\n`;
+            if (stylist.position) content += `  직책: ${stylist.position}\n`;
+            if (stylist.introduction) content += `  소개: ${stylist.introduction}\n`;
+            if (stylist.career) content += `  경력: ${stylist.career}\n`;
+            if (stylist.specialties) content += `  전문분야: ${stylist.specialties.join(', ')}\n`;
+            if (stylist.workingDays) content += `  근무일: ${stylist.workingDays.join(', ')}\n`;
+            if (stylist.dayOff) content += `  휴무일: ${stylist.dayOff}\n`;
+          }
+        }
+        
+        // 의사/전문가 정보 추출 (병원)
+        const doctorData = placeInfo.data.pages?.doctor?.props?.pageProps;
+        if (doctorData?.initialState?.place?.doctorInfo?.doctorList) {
+          content += `\n=== 의료진/전문가 ===\n`;
+          for (const doctor of doctorData.initialState.place.doctorInfo.doctorList) {
+            content += `\n[${doctor.name}]\n`;
+            if (doctor.position) content += `  직책: ${doctor.position}\n`;
+            if (doctor.department) content += `  진료과: ${doctor.department}\n`;
+            if (doctor.career) content += `  경력: ${doctor.career}\n`;
+            if (doctor.specialties) content += `  전문분야: ${doctor.specialties.join(', ')}\n`;
+            if (doctor.education) content += `  학력: ${doctor.education}\n`;
+            if (doctor.workingHours) content += `  진료시간: ${doctor.workingHours}\n`;
+          }
+        }
+        
+        // 이벤트/쿠폰 정보 추출
+        const eventData = placeInfo.data.pages?.event?.props?.pageProps;
+        if (eventData?.initialState?.place?.eventInfo?.eventList) {
+          content += `\n=== 진행 중인 이벤트 ===\n`;
+          for (const event of eventData.initialState.place.eventInfo.eventList) {
+            content += `\n[${event.title}]\n`;
+            if (event.description) content += `  내용: ${event.description}\n`;
+            if (event.period) content += `  기간: ${event.period}\n`;
+            if (event.discount) content += `  할인: ${event.discount}\n`;
+          }
+        }
+        
+        // 리뷰 요약 추출 (상위 키워드)
+        const reviewData = placeInfo.data.pages?.review?.props?.pageProps;
+        if (reviewData?.initialState?.place?.reviewInfo) {
+          const reviewInfo = reviewData.initialState.place.reviewInfo;
+          content += `\n=== 고객 리뷰 요약 ===\n`;
+          if (reviewInfo.totalCount) content += `총 리뷰: ${reviewInfo.totalCount}개\n`;
+          if (reviewInfo.averageRating) content += `평균 별점: ${reviewInfo.averageRating}점\n`;
+          if (reviewInfo.keywords) {
+            content += `자주 언급되는 키워드: ${reviewInfo.keywords.map((k: any) => k.text).join(', ')}\n`;
+          }
+        }
+        
+        // 예약 정보 추출
+        const bookingData = placeInfo.data.pages?.booking?.props?.pageProps;
+        if (bookingData?.initialState?.place?.bookingInfo) {
+          const bookingInfo = bookingData.initialState.place.bookingInfo;
+          content += `\n=== 예약 정보 ===\n`;
+          if (bookingInfo.available) content += `네이버 예약: 가능\n`;
+          if (bookingInfo.minAdvanceDay) content += `최소 예약일: ${bookingInfo.minAdvanceDay}일 전\n`;
+          if (bookingInfo.cancellationPolicy) content += `취소 정책: ${bookingInfo.cancellationPolicy}\n`;
         }
         
         // HTML에서 텍스트 추출 (fallback)
@@ -358,6 +584,8 @@ export async function fetchUrlContent(url: string): Promise<{
             .slice(0, 50000);
         }
         
+        console.log(`[fetchUrlContent] 추출 완료 - 콘텐츠 길이: ${content.length}자`);
+        
         return {
           success: true,
           content,
@@ -367,7 +595,23 @@ export async function fetchUrlContent(url: string): Promise<{
       }
     }
     
-    // 3. 일반 URL 처리
+    // 3. 네이버 블로그 URL 처리
+    const parsedFinalUrl = new URL(finalUrl);
+    if (parsedFinalUrl.hostname.includes('blog.naver.com')) {
+      console.log('[fetchUrlContent] 네이버 블로그 감지');
+      const blogContent = await fetchNaverBlogContent(finalUrl);
+      if (blogContent.success) {
+        return blogContent;
+      }
+    }
+    
+    // 4. 인스타그램 URL 처리
+    if (parsedFinalUrl.hostname.includes('instagram.com')) {
+      console.log('[fetchUrlContent] 인스타그램 감지 - 기본 크롤링 시도');
+      // 인스타그램은 로그인 필요해서 제한적
+    }
+    
+    // 5. 일반 URL 처리 (홈페이지 등)
     const response = await fetch(finalUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -387,18 +631,46 @@ export async function fetchUrlContent(url: string): Promise<{
     const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
     const title = titleMatch ? titleMatch[1].trim() : '';
     
+    // 메타 정보 추출
+    let content = `=== 웹사이트 정보 ===\n`;
+    content += `제목: ${title}\n`;
+    
+    // Open Graph 메타 태그 추출
+    const ogTitleMatch = html.match(/<meta[^>]*property="og:title"[^>]*content="([^"]+)"/i);
+    const ogDescMatch = html.match(/<meta[^>]*property="og:description"[^>]*content="([^"]+)"/i);
+    const descMatch = html.match(/<meta[^>]*name="description"[^>]*content="([^"]+)"/i);
+    
+    if (ogTitleMatch) content += `OG 제목: ${ogTitleMatch[1]}\n`;
+    if (ogDescMatch) content += `OG 설명: ${ogDescMatch[1]}\n`;
+    if (descMatch) content += `설명: ${descMatch[1]}\n`;
+    
+    // JSON-LD 구조화된 데이터 추출
+    const jsonLdMatches = html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi);
+    for (const match of jsonLdMatches) {
+      try {
+        const jsonLd = JSON.parse(match[1]);
+        content += `\n=== 구조화된 데이터 ===\n`;
+        content += JSON.stringify(jsonLd, null, 2).slice(0, 5000) + '\n';
+      } catch {}
+    }
+    
     // HTML 태그 제거하고 텍스트 추출
     const textContent = html
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
-      .slice(0, 50000); // 최대 50KB 텍스트
+      .slice(0, 40000);
+    
+    content += `\n=== 본문 내용 ===\n${textContent}`;
     
     return {
       success: true,
-      content: textContent,
+      content: content.slice(0, 50000),
       title
     };
   } catch (error) {
