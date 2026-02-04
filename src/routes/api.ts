@@ -45,6 +45,15 @@ import {
 } from '../lib/gemini';
 import { getConversationContext } from '../lib/kv-context';
 import {
+  buildSystemPrompt as buildPromptFromSections,
+  getExtractionPrompt,
+  mergeExtractedData,
+  type StorePromptData,
+  type EventItem,
+  type ServiceItem,
+  type ReservationPolicy
+} from '../lib/prompt-builder';
+import {
   validateFileType,
   validateFileSize,
   uploadFileToR2,
@@ -6297,6 +6306,457 @@ function extractOperatingHours(text: string): string {
                 text.match(/(\d{1,2}:\d{2})\s*[-~]\s*(\d{1,2}:\d{2})/);
   return match ? match[1]?.trim() || `${match[1]}-${match[2]}` : '';
 }
+
+// =====================================================
+// ⭐ 섹션 기반 프롬프트 시스템 (v2.0)
+// AI 의존도 최소화: 데이터 추출만 AI가 담당, 조합은 코드가 담당
+// =====================================================
+
+// 섹션 데이터 조회
+api.get('/stores/:id/prompt-sections', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const store = await c.env.DB.prepare(`
+      SELECT 
+        store_name, business_type, phone, address, operating_hours,
+        events_data, services_data, reservation_policy, store_description,
+        ai_persona, ai_tone, greeting_message, forbidden_keywords,
+        custom_guidelines, prompt_template_type, system_prompt
+      FROM xivix_stores WHERE id = ?
+    `).bind(storeId).first();
+    
+    if (!store) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '매장을 찾을 수 없습니다',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    // JSON 파싱
+    let events_data = [];
+    let services_data = [];
+    let reservation_policy = {};
+    
+    try {
+      events_data = store.events_data ? JSON.parse(store.events_data as string) : [];
+    } catch (e) { events_data = []; }
+    
+    try {
+      services_data = store.services_data ? JSON.parse(store.services_data as string) : [];
+    } catch (e) { services_data = []; }
+    
+    try {
+      reservation_policy = store.reservation_policy ? JSON.parse(store.reservation_policy as string) : {};
+    } catch (e) { reservation_policy = {}; }
+    
+    // 프롬프트 빌더로 최종 프롬프트 생성
+    const promptData: StorePromptData = {
+      store_name: store.store_name as string,
+      business_type: store.business_type as string,
+      phone: store.phone as string,
+      address: store.address as string,
+      operating_hours: store.operating_hours as string,
+      store_description: store.store_description as string,
+      events_data,
+      services_data,
+      reservation_policy,
+      ai_persona: store.ai_persona as string,
+      ai_tone: store.ai_tone as string,
+      greeting_message: store.greeting_message as string,
+      forbidden_keywords: store.forbidden_keywords as string,
+      custom_guidelines: store.custom_guidelines as string,
+      prompt_template_type: store.prompt_template_type as string
+    };
+    
+    const generatedPrompt = buildPromptFromSections(promptData);
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        sections: {
+          events_data,
+          services_data,
+          reservation_policy,
+          store_description: store.store_description,
+          forbidden_keywords: store.forbidden_keywords,
+          custom_guidelines: store.custom_guidelines
+        },
+        storeInfo: {
+          store_name: store.store_name,
+          business_type: store.business_type,
+          phone: store.phone,
+          address: store.address,
+          operating_hours: store.operating_hours
+        },
+        aiSettings: {
+          ai_persona: store.ai_persona,
+          ai_tone: store.ai_tone,
+          greeting_message: store.greeting_message,
+          prompt_template_type: store.prompt_template_type
+        },
+        generatedPrompt,
+        currentPrompt: store.system_prompt
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    console.error('[prompt-sections GET] Error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '섹션 데이터 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 섹션 데이터 저장 (개별 섹션 업데이트)
+api.put('/stores/:id/prompt-sections', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const body = await c.req.json() as {
+      events_data?: EventItem[];
+      services_data?: ServiceItem[];
+      reservation_policy?: ReservationPolicy;
+      store_description?: string;
+      forbidden_keywords?: string;
+      custom_guidelines?: string;
+      operating_hours?: string;
+      phone?: string;
+      address?: string;
+      regenerate_prompt?: boolean;  // true면 프롬프트 재생성
+    };
+    
+    // 현재 데이터 조회
+    const currentStore = await c.env.DB.prepare(`
+      SELECT * FROM xivix_stores WHERE id = ?
+    `).bind(storeId).first();
+    
+    if (!currentStore) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '매장을 찾을 수 없습니다',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    // 업데이트할 필드 준비
+    const updates: string[] = [];
+    const values: any[] = [];
+    
+    if (body.events_data !== undefined) {
+      updates.push('events_data = ?');
+      values.push(JSON.stringify(body.events_data));
+    }
+    
+    if (body.services_data !== undefined) {
+      updates.push('services_data = ?');
+      values.push(JSON.stringify(body.services_data));
+    }
+    
+    if (body.reservation_policy !== undefined) {
+      updates.push('reservation_policy = ?');
+      values.push(JSON.stringify(body.reservation_policy));
+    }
+    
+    if (body.store_description !== undefined) {
+      updates.push('store_description = ?');
+      values.push(body.store_description);
+    }
+    
+    if (body.forbidden_keywords !== undefined) {
+      updates.push('forbidden_keywords = ?');
+      values.push(body.forbidden_keywords);
+    }
+    
+    if (body.custom_guidelines !== undefined) {
+      updates.push('custom_guidelines = ?');
+      values.push(body.custom_guidelines);
+    }
+    
+    if (body.operating_hours !== undefined) {
+      updates.push('operating_hours = ?');
+      values.push(body.operating_hours);
+    }
+    
+    if (body.phone !== undefined) {
+      updates.push('phone = ?');
+      values.push(body.phone);
+    }
+    
+    if (body.address !== undefined) {
+      updates.push('address = ?');
+      values.push(body.address);
+    }
+    
+    // 프롬프트 재생성 요청 시
+    if (body.regenerate_prompt) {
+      // 최신 데이터로 프롬프트 빌드
+      let events_data = body.events_data;
+      let services_data = body.services_data;
+      let reservation_policy = body.reservation_policy;
+      
+      if (!events_data) {
+        try { events_data = JSON.parse(currentStore.events_data as string || '[]'); } catch { events_data = []; }
+      }
+      if (!services_data) {
+        try { services_data = JSON.parse(currentStore.services_data as string || '[]'); } catch { services_data = []; }
+      }
+      if (!reservation_policy) {
+        try { reservation_policy = JSON.parse(currentStore.reservation_policy as string || '{}'); } catch { reservation_policy = {}; }
+      }
+      
+      const promptData: StorePromptData = {
+        store_name: currentStore.store_name as string,
+        business_type: currentStore.business_type as string,
+        phone: body.phone || currentStore.phone as string,
+        address: body.address || currentStore.address as string,
+        operating_hours: body.operating_hours || currentStore.operating_hours as string,
+        store_description: body.store_description || currentStore.store_description as string,
+        events_data: events_data as EventItem[],
+        services_data: services_data as ServiceItem[],
+        reservation_policy: reservation_policy as ReservationPolicy,
+        ai_persona: currentStore.ai_persona as string,
+        ai_tone: currentStore.ai_tone as string,
+        forbidden_keywords: body.forbidden_keywords || currentStore.forbidden_keywords as string,
+        custom_guidelines: body.custom_guidelines || currentStore.custom_guidelines as string
+      };
+      
+      const generatedPrompt = buildPromptFromSections(promptData);
+      updates.push('system_prompt = ?');
+      values.push(generatedPrompt);
+    }
+    
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(storeId);
+    
+    if (updates.length > 1) {
+      await c.env.DB.prepare(`
+        UPDATE xivix_stores SET ${updates.join(', ')} WHERE id = ?
+      `).bind(...values).run();
+    }
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: { updated: updates.length - 1 },  // updated_at 제외
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    console.error('[prompt-sections PUT] Error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '섹션 데이터 저장 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// ⭐ 텍스트에서 섹션 데이터 추출 (AI는 추출만, 조합은 코드가)
+api.post('/stores/:id/extract-sections', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const { text, merge_mode = true } = await c.req.json() as {
+      text: string;
+      merge_mode?: boolean;  // true면 기존 데이터와 병합, false면 덮어쓰기
+    };
+    
+    if (!text || text.trim().length < 10) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '텍스트를 더 입력해주세요 (최소 10자)',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    const geminiApiKey = c.env.GEMINI_API_KEY;
+    if (!geminiApiKey) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'Gemini API 키가 설정되지 않았습니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // 기존 데이터 조회 (병합 모드일 때)
+    let existingData: Partial<StorePromptData> = {};
+    if (merge_mode) {
+      const store = await c.env.DB.prepare(`
+        SELECT events_data, services_data, reservation_policy, phone, address, operating_hours, store_description
+        FROM xivix_stores WHERE id = ?
+      `).bind(storeId).first();
+      
+      if (store) {
+        try { existingData.events_data = JSON.parse(store.events_data as string || '[]'); } catch { existingData.events_data = []; }
+        try { existingData.services_data = JSON.parse(store.services_data as string || '[]'); } catch { existingData.services_data = []; }
+        try { existingData.reservation_policy = JSON.parse(store.reservation_policy as string || '{}'); } catch { existingData.reservation_policy = {}; }
+        existingData.phone = store.phone as string;
+        existingData.address = store.address as string;
+        existingData.operating_hours = store.operating_hours as string;
+        existingData.store_description = store.store_description as string;
+      }
+    }
+    
+    // AI에게 추출만 요청 (프롬프트 빌더의 getExtractionPrompt 사용)
+    const extractionPrompt = getExtractionPrompt(text, existingData);
+    
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: extractionPrompt }] }],
+          generationConfig: {
+            temperature: 0.1,  // 매우 낮은 온도로 정확한 추출
+            maxOutputTokens: 4096
+          }
+        })
+      }
+    );
+    
+    if (!geminiRes.ok) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'AI 추출 실패',
+        timestamp: Date.now()
+      }, 500);
+    }
+    
+    const geminiData = await geminiRes.json() as any;
+    const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    
+    // JSON 파싱
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      // 폴백: 정규식으로 직접 추출
+      const fallbackExtracted = {
+        events: extractEvents(text).map(e => ({ name: e.replace(/^- /, ''), description: '' })),
+        services: extractPricesFromText(text).map(p => ({ name: p.replace(/^- /, ''), price_text: '' })),
+        operating_hours: extractOperatingHours(text),
+        phone: text.match(/(\d{2,3}-\d{3,4}-\d{4})/)?.[1] || null
+      };
+      
+      return c.json<ApiResponse>({
+        success: true,
+        data: {
+          extracted: fallbackExtracted,
+          merged: merge_mode ? mergeExtractedData(existingData, fallbackExtracted) : fallbackExtracted,
+          fallback: true
+        },
+        timestamp: Date.now()
+      });
+    }
+    
+    let extracted;
+    try {
+      extracted = JSON.parse(jsonMatch[0]);
+    } catch {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'AI 응답 파싱 실패',
+        timestamp: Date.now()
+      }, 500);
+    }
+    
+    // 병합
+    const merged = merge_mode ? mergeExtractedData(existingData, extracted) : extracted;
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        extracted,
+        merged,
+        merge_mode
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    console.error('[extract-sections] Error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '섹션 추출 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// ⭐ 섹션 데이터로 프롬프트 미리보기 (저장 없이)
+api.post('/stores/:id/preview-prompt', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const body = await c.req.json() as Partial<StorePromptData>;
+    
+    // 현재 매장 데이터 조회
+    const store = await c.env.DB.prepare(`
+      SELECT * FROM xivix_stores WHERE id = ?
+    `).bind(storeId).first();
+    
+    if (!store) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '매장을 찾을 수 없습니다',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    // 기존 데이터와 새 데이터 병합
+    let events_data = body.events_data;
+    let services_data = body.services_data;
+    let reservation_policy = body.reservation_policy;
+    
+    if (!events_data) {
+      try { events_data = JSON.parse(store.events_data as string || '[]'); } catch { events_data = []; }
+    }
+    if (!services_data) {
+      try { services_data = JSON.parse(store.services_data as string || '[]'); } catch { services_data = []; }
+    }
+    if (!reservation_policy) {
+      try { reservation_policy = JSON.parse(store.reservation_policy as string || '{}'); } catch { reservation_policy = {}; }
+    }
+    
+    const promptData: StorePromptData = {
+      store_name: body.store_name || store.store_name as string,
+      business_type: body.business_type || store.business_type as string,
+      phone: body.phone || store.phone as string,
+      address: body.address || store.address as string,
+      operating_hours: body.operating_hours || store.operating_hours as string,
+      store_description: body.store_description || store.store_description as string,
+      events_data: events_data as EventItem[],
+      services_data: services_data as ServiceItem[],
+      reservation_policy: reservation_policy as ReservationPolicy,
+      ai_persona: body.ai_persona || store.ai_persona as string,
+      ai_tone: body.ai_tone || store.ai_tone as string,
+      forbidden_keywords: body.forbidden_keywords || store.forbidden_keywords as string,
+      custom_guidelines: body.custom_guidelines || store.custom_guidelines as string
+    };
+    
+    const generatedPrompt = buildPromptFromSections(promptData);
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        preview: generatedPrompt,
+        sections: {
+          events_data,
+          services_data,
+          reservation_policy
+        }
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    console.error('[preview-prompt] Error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '프롬프트 미리보기 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
 
 // 이미지 OCR + 프롬프트 생성 (가격표/메뉴판 전용)
 api.post('/stores/:id/ocr-generate-prompt', async (c) => {
