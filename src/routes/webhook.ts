@@ -614,6 +614,68 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       return c.json({ success: true, store_id: storeId, menu_selected: 5 });
     }
 
+    // ============ [키워드 기반 정보 제공 - AI 의존 제거] ============
+    const lowerMessage = userMessage.toLowerCase();
+    
+    // 위치/주소 관련 키워드
+    if (/위치|주소|어디|찾아가|오시는.*길|길.*안내/.test(lowerMessage)) {
+      const locationResponse = `📍 ${storeName}\n\n` +
+        `🏠 주소\n${storeAddress}\n\n` +
+        `📞 전화\n${storePhone}\n\n` +
+        `⏰ 영업시간\n${storeResult?.operating_hours || '10:00-19:00'}\n\n` +
+        `━━━━━━━━━━\n방문 예약 도와드릴까요?`;
+      await sendTextMessage(env, customerId, locationResponse);
+      
+      const responseTime = Date.now() - startTime;
+      await env.DB.prepare(`
+        INSERT INTO xivix_conversation_logs 
+        (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
+        VALUES (?, ?, 'text', ?, ?, ?, 0)
+      `).bind(storeId, customerId, userMessage.slice(0, 100), '[keyword] 위치 안내', responseTime).run();
+      
+      return c.json({ success: true, store_id: storeId, intent: 'location' });
+    }
+    
+    // 가격/메뉴/이벤트 관련 키워드
+    if (/가격|얼마|메뉴|이벤트|할인|50%|오십|50프로/.test(lowerMessage)) {
+      const priceResponse = `🎁 오픈 50% 할인 메뉴\n\n` +
+        `처짐/탄력\n→ 매직팟 [4만원]\n\n` +
+        `각질/재생\n→ 미라클 필링 [6만원]\n\n` +
+        `칙칙함/미백\n→ 토닝 케어 [3.5만원]\n\n` +
+        `건조/속광\n→ LDM 물방울 [3.5만원]\n\n` +
+        `보습/광채\n→ 더마-S [3만원]\n\n` +
+        `피지/모공\n→ 아쿠아필링 [2.5만원]\n\n` +
+        `━━━━━━━━━━\n예약 도와드릴까요?`;
+      await sendTextMessage(env, customerId, priceResponse);
+      
+      const responseTime = Date.now() - startTime;
+      await env.DB.prepare(`
+        INSERT INTO xivix_conversation_logs 
+        (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
+        VALUES (?, ?, 'text', ?, ?, ?, 0)
+      `).bind(storeId, customerId, userMessage.slice(0, 100), '[keyword] 가격 안내', responseTime).run();
+      
+      return c.json({ success: true, store_id: storeId, intent: 'price' });
+    }
+    
+    // 영업시간 관련 키워드
+    if (/영업.*시간|몇.*시|언제.*까지|오픈|마감|휴무|쉬는.*날/.test(lowerMessage)) {
+      const hoursResponse = `⏰ ${storeName} 영업시간\n\n` +
+        `${storeResult?.operating_hours || '10:00-19:00'}\n\n` +
+        `📞 전화\n${storePhone}\n\n` +
+        `━━━━━━━━━━\n예약 도와드릴까요?`;
+      await sendTextMessage(env, customerId, hoursResponse);
+      
+      const responseTime = Date.now() - startTime;
+      await env.DB.prepare(`
+        INSERT INTO xivix_conversation_logs 
+        (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
+        VALUES (?, ?, 'text', ?, ?, ?, 0)
+      `).bind(storeId, customerId, userMessage.slice(0, 100), '[keyword] 영업시간 안내', responseTime).run();
+      
+      return c.json({ success: true, store_id: storeId, intent: 'hours' });
+    }
+
     // ============ [Phase 04] 네이버 예약 연동 처리 (AI 응답 전에 체크) ============
     const bookingIntent = detectBookingIntent(userMessage);
     let bookingState = { isBookingFlow: false, step: 'idle' as const, lastUpdated: Date.now() };
