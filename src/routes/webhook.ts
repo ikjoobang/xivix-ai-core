@@ -162,7 +162,8 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       console.log(`[Webhook] OPEN event - Sending welcome message for Store ${storeId}`);
       
       const welcomeMsg = generateWelcomeMessage(storeResult);
-      await sendTextMessage(env, customerId, welcomeMsg);
+      const welcomeResult = await sendTextMessage(env, customerId, welcomeMsg);
+      console.log(`[Webhook] Welcome message result:`, JSON.stringify(welcomeResult));
       
       // 8개국어 안내 메시지 (환영 인사 바로 다음 - 무조건 표시)
       const languageMsg = `🌐 다른 언어가 필요하신가요?\n` +
@@ -174,13 +175,14 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         `🇹🇭 ภาษาไทย → "TH"\n` +
         `🇻🇳 Tiếng Việt → "VN"\n` +
         `🇲🇳 Монгол → "MN"`;
-      await sendTextMessage(env, customerId, languageMsg);
+      const langResult = await sendTextMessage(env, customerId, languageMsg);
+      console.log(`[Webhook] Language message result:`, JSON.stringify(langResult));
       
       // [WATCHDOG] 입장 로그 기록
       await env.DB.prepare(`
         INSERT INTO xivix_conversation_logs 
         (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
-        VALUES (?, ?, 'system', '[OPEN] 채팅방 입장', ?, ?, 0)
+        VALUES (?, ?, 'text', '[OPEN] 채팅방 입장', ?, ?, 0)
       `).bind(
         storeId,
         customerId,
@@ -202,7 +204,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       await env.DB.prepare(`
         INSERT INTO xivix_conversation_logs 
         (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
-        VALUES (?, ?, 'system', '[FRIEND] 친구 추가', ?, ?, 0)
+        VALUES (?, ?, 'text', '[FRIEND] 친구 추가', ?, ?, 0)
       `).bind(
         storeId,
         customerId,
@@ -1187,7 +1189,7 @@ webhook.post('/v1/naver/callback', async (c) => {
       await env.DB.prepare(`
         INSERT INTO xivix_conversation_logs 
         (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
-        VALUES (?, ?, 'system', '[OPEN] 채팅방 입장', ?, ?, 0)
+        VALUES (?, ?, 'text', '[OPEN] 채팅방 입장', ?, ?, 0)
       `).bind(
         storeResult?.id || 1,
         customerId,
@@ -1213,7 +1215,7 @@ webhook.post('/v1/naver/callback', async (c) => {
       await env.DB.prepare(`
         INSERT INTO xivix_conversation_logs 
         (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
-        VALUES (?, ?, 'system', '[FRIEND] 친구 추가', ?, ?, 0)
+        VALUES (?, ?, 'text', '[FRIEND] 친구 추가', ?, ?, 0)
       `).bind(
         storeResult?.id || 1,
         customerId,

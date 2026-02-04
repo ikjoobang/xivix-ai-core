@@ -423,25 +423,33 @@ export async function sendTextMessage(
 
   try {
     // 네이버 톡톡 API는 Bearer prefix 없이 토큰만 사용
+    const requestBody = {
+      event: 'send',
+      user: userId,
+      textContent: { text }
+    };
+    
+    console.log(`[TalkTalk] Sending message to ${userId}, text length: ${text.length}`);
+    console.log(`[TalkTalk] API URL: ${TALKTALK_API_BASE}/event`);
+    
     const response = await fetch(`${TALKTALK_API_BASE}/event`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json;charset=UTF-8',
         'Authorization': accessToken
       },
-      body: JSON.stringify({
-        event: 'send',
-        user: userId,
-        textContent: { text }
-      })
+      body: JSON.stringify(requestBody)
     });
 
+    const responseText = await response.text();
+    console.log(`[TalkTalk] Response status: ${response.status}, body: ${responseText}`);
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[TalkTalk] sendTextMessage error: ${response.status}`, errorText);
-      return { success: false, resultCode: `HTTP_${response.status}`, resultMessage: errorText };
+      console.error(`[TalkTalk] sendTextMessage error: ${response.status}`, responseText);
+      return { success: false, resultCode: `HTTP_${response.status}`, resultMessage: responseText };
     }
 
+    console.log(`[TalkTalk] Message sent successfully to ${userId}`);
     return { success: true, resultCode: 'OK' };
   } catch (error: any) {
     console.error('[TalkTalk] sendTextMessage exception:', error);
