@@ -6321,11 +6321,12 @@ api.post('/stores/:id/analyze-multiple-urls', async (c) => {
           }
         }
         
-        // 네이버 플레이스
-        const placeIdMatch = finalUrl.match(/place\/(\d+)/);
+        // 네이버 플레이스 (여러 URL 패턴 지원)
+        // map.naver.com/p/search/xxx/place/123 또는 m.place.naver.com/place/123
+        const placeIdMatch = finalUrl.match(/place\/(\d+)/) || finalUrl.match(/entry\/place\/(\d+)/);
         if (placeIdMatch) {
           const placeId = placeIdMatch[1];
-          const pages = ['home', 'menu/list', 'ticket', 'review'];
+          const pages = ['home', 'menu/list', 'ticket'];
           
           for (const page of pages) {
             try {
@@ -6334,13 +6335,43 @@ api.post('/stores/:id/analyze-multiple-urls', async (c) => {
               });
               const html = await pageRes.text();
               
-              // 주요 텍스트 추출
-              const textMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
-              if (textMatch) {
-                content += `\n[네이버플레이스-${page}]\n` + textMatch[1].substring(0, 20000);
+              // 여러 방식으로 텍스트 추출
+              let pageContent = '';
+              
+              // 방법 1: __NEXT_DATA__ (있으면)
+              const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+              if (nextDataMatch) {
+                pageContent = nextDataMatch[1].substring(0, 15000);
+              }
+              
+              // 방법 2: JSON-LD 스크립트
+              const jsonLdMatches = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g);
+              if (jsonLdMatches) {
+                pageContent += '\n' + jsonLdMatches.join('\n').substring(0, 10000);
+              }
+              
+              // 방법 3: HTML에서 가격 정보 추출
+              const priceMatches = html.match(/\d{1,3}(,\d{3})*원/g);
+              if (priceMatches) {
+                pageContent += '\n가격정보: ' + [...new Set(priceMatches)].join(', ');
+              }
+              
+              // 방법 4: 전체 HTML에서 텍스트 추출 (태그 제거)
+              if (!pageContent || pageContent.length < 500) {
+                const cleanText = html
+                  .replace(/<script[\s\S]*?<\/script>/gi, '')
+                  .replace(/<style[\s\S]*?<\/style>/gi, '')
+                  .replace(/<[^>]+>/g, ' ')
+                  .replace(/\s+/g, ' ')
+                  .substring(0, 20000);
+                pageContent += '\n' + cleanText;
+              }
+              
+              if (pageContent.length > 100) {
+                content += `\n[네이버플레이스-${page}]\n${pageContent}`;
               }
             } catch (e) {
-              // 페이지 로드 실패 무시
+              console.error(`네이버 플레이스 ${page} 로드 실패:`, e);
             }
           }
         }
@@ -6353,13 +6384,27 @@ api.post('/stores/:id/analyze-multiple-urls', async (c) => {
             const html = await blogRes.text();
             content += '\n[네이버블로그]\n';
             
-            // 본문 텍스트 추출
+            // 본문 텍스트 추출 (여러 패턴 시도)
+            let blogContent = '';
+            
+            // 방법 1: se-main-container
             const mainMatch = html.match(/se-main-container[^>]*>([\s\S]*?)<\/div>/);
             if (mainMatch) {
-              content += mainMatch[1].replace(/<[^>]+>/g, ' ').substring(0, 10000);
+              blogContent = mainMatch[1].replace(/<[^>]+>/g, ' ');
             }
+            
+            // 방법 2: 전체 텍스트 추출
+            if (!blogContent || blogContent.length < 200) {
+              blogContent = html
+                .replace(/<script[\s\S]*?<\/script>/gi, '')
+                .replace(/<style[\s\S]*?<\/style>/gi, '')
+                .replace(/<[^>]+>/g, ' ')
+                .replace(/\s+/g, ' ');
+            }
+            
+            content += blogContent.substring(0, 15000);
           } catch (e) {
-            // 블로그 로드 실패 무시
+            console.error('블로그 로드 실패:', e);
           }
         }
         // 일반 URL
