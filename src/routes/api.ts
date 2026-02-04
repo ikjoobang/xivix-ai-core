@@ -6053,19 +6053,55 @@ ${text}
     }
     
     const geminiData = await geminiRes.json() as any;
-    const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     
-    // JSON 파싱
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
+    // Gemini 에러 체크
+    if (geminiData.error) {
+      console.error('[generate-prompt-from-text] Gemini Error:', geminiData.error);
       return c.json<ApiResponse>({
         success: false,
-        error: 'AI 응답 파싱 실패',
+        error: 'Gemini API 오류: ' + (geminiData.error.message || '알 수 없는 오류'),
         timestamp: Date.now()
       }, 500);
     }
     
-    const result = JSON.parse(jsonMatch[0]);
+    const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    console.log('[generate-prompt-from-text] Raw response length:', rawText.length);
+    
+    // JSON 파싱
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error('[generate-prompt-from-text] JSON not found, raw:', rawText.substring(0, 500));
+      
+      // 폴백: 입력 텍스트를 그대로 시스템 프롬프트로 사용
+      return c.json<ApiResponse>({
+        success: true,
+        data: {
+          menuText: text,
+          operatingHours: null,
+          systemPrompt: `당신은 ${storeName || '매장'}의 AI 상담원입니다.\n\n## 서비스/가격 정보\n${text}\n\n## 응대 지침\n- 고객 문의에 친절하고 전문적으로 응대합니다\n- 가격 문의 시 정확한 정보를 제공합니다\n- 예약으로 마무리합니다`,
+          fallback: true
+        },
+        timestamp: Date.now()
+      });
+    }
+    
+    let result;
+    try {
+      result = JSON.parse(jsonMatch[0]);
+    } catch (parseErr) {
+      console.error('[generate-prompt-from-text] JSON parse error:', parseErr);
+      // 폴백
+      return c.json<ApiResponse>({
+        success: true,
+        data: {
+          menuText: text,
+          operatingHours: null,
+          systemPrompt: `당신은 ${storeName || '매장'}의 AI 상담원입니다.\n\n## 서비스/가격 정보\n${text}\n\n## 응대 지침\n- 고객 문의에 친절하고 전문적으로 응대합니다\n- 가격 문의 시 정확한 정보를 제공합니다\n- 예약으로 마무리합니다`,
+          fallback: true
+        },
+        timestamp: Date.now()
+      });
+    }
     
     return c.json<ApiResponse>({
       success: true,
@@ -6074,7 +6110,7 @@ ${text}
     });
     
   } catch (error: any) {
-    console.error('Generate prompt from text error:', error);
+    console.error('[generate-prompt-from-text] Error:', error);
     return c.json<ApiResponse>({
       success: false,
       error: error.message || '프롬프트 생성 실패',
