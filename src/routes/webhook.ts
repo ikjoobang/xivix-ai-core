@@ -845,13 +845,11 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       
       if (naverReservationId) {
         const bookingUrl = getNaverBookingUrl(naverReservationId);
-        // 버튼 대신 클릭 가능한 링크로 직접 전송
-        await sendTextMessage(env, customerId, 
-          `${bt.msg}\n\n` +
-          `${bt.select}\n\n` +
-          `${bt.btn1} 👇\n${bookingUrl}\n\n` +
-          `📞 ${storePhone}`
-        );
+        await sendTextMessage(env, customerId, bt.msg);
+        await sendButtonMessage(env, customerId, bt.select, [
+          { type: 'LINK', title: bt.btn1, linkUrl: bookingUrl },
+          { type: 'TEXT', title: bt.btn2, value: '전화번호알려주세요' }
+        ]);
       } else {
         await sendTextMessage(env, customerId, bt.noBooking);
       }
