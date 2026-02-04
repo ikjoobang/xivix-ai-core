@@ -154,28 +154,38 @@ VAT 별도, 시술시간 약 1시간"></textarea>
 
         <div class="text-center text-white/30 text-sm my-4">─── 또는 ───</div>
         
-        <!-- 파일 업로드 -->
+        <!-- 이미지 OCR 업로드 -->
         <div class="mb-4">
           <label class="block text-sm text-white/60 mb-2">
-            <i class="fas fa-file-upload mr-1"></i>파일 업로드 (PDF, 이미지)
+            <i class="fas fa-camera mr-1"></i>가격표/메뉴판 이미지 <span class="text-[#D4AF37]">(OCR 자동 인식)</span>
           </label>
-          <div class="border-2 border-dashed border-white/20 rounded-xl p-4 text-center hover:border-[#D4AF37]/50 transition-all cursor-pointer" onclick="document.getElementById('file-upload').click()">
-            <input type="file" id="file-upload" class="hidden" multiple accept=".pdf,.png,.jpg,.jpeg,.webp" onchange="handleFileUpload(event)">
-            <div id="upload-preview" class="hidden"></div>
-            <div id="upload-placeholder">
-              <i class="fas fa-cloud-upload-alt text-2xl text-white/30 mb-2"></i>
-              <p class="text-white/60 text-sm">메뉴판, 가격표 이미지/PDF 업로드</p>
+          <div class="border-2 border-dashed border-white/20 rounded-xl p-4 text-center hover:border-[#D4AF37]/50 transition-all cursor-pointer" onclick="document.getElementById('ocr-upload').click()">
+            <input type="file" id="ocr-upload" class="hidden" accept="image/*" onchange="handleOcrUpload(event)">
+            <div id="ocr-preview" class="hidden"></div>
+            <div id="ocr-placeholder">
+              <i class="fas fa-image text-2xl text-white/30 mb-2"></i>
+              <p class="text-white/60 text-sm">가격표 이미지를 업로드하면 자동으로 가격 추출</p>
+              <p class="text-xs text-white/40 mt-1">JPG, PNG, WebP (최대 20MB)</p>
             </div>
           </div>
         </div>
         
-        <!-- 업로드된 파일 목록 -->
-        <div id="uploaded-files" class="hidden mb-4">
-          <label class="block text-sm text-white/60 mb-2">업로드된 파일</label>
-          <div id="file-list" class="space-y-2"></div>
-          <button onclick="generatePromptFromSources()" class="w-full mt-2 py-3 btn-secondary rounded-xl font-medium">
-            <i class="fas fa-wand-magic-sparkles mr-1"></i>파일 분석하기
-          </button>
+        <!-- OCR 결과 미리보기 -->
+        <div id="ocr-result" class="hidden mb-4">
+          <label class="block text-sm text-white/60 mb-2">
+            <i class="fas fa-check-circle text-green-400 mr-1"></i>OCR 추출 결과
+          </label>
+          <div class="p-4 bg-white/5 rounded-xl">
+            <pre id="ocr-text" class="text-sm text-white/80 whitespace-pre-wrap"></pre>
+          </div>
+          <div class="flex gap-2 mt-2">
+            <button onclick="applyOcrResult()" class="flex-1 py-3 btn-primary rounded-xl font-medium">
+              <i class="fas fa-check mr-1"></i>프롬프트에 적용
+            </button>
+            <button onclick="clearOcrResult()" class="px-4 py-3 btn-secondary rounded-xl">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
         </div>
         
         <!-- 분석 진행 상태 -->
@@ -1375,6 +1385,129 @@ VAT 별도, 시술시간 약 1시간"></textarea>
     
     let uploadedFiles = [];
     let analyzedUrl = null;
+    let ocrResultData = null;
+    
+    // 이미지 OCR 업로드 처리
+    async function handleOcrUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      if (!file.type.startsWith('image/')) {
+        showToast('이미지 파일만 업로드 가능합니다', 'error');
+        return;
+      }
+      
+      if (file.size > 20 * 1024 * 1024) {
+        showToast('이미지 크기는 최대 20MB입니다', 'error');
+        return;
+      }
+      
+      // 미리보기 표시
+      const placeholder = document.getElementById('ocr-placeholder');
+      const preview = document.getElementById('ocr-preview');
+      placeholder.classList.add('hidden');
+      preview.classList.remove('hidden');
+      preview.innerHTML = \`
+        <div class="flex items-center gap-3">
+          <img src="\${URL.createObjectURL(file)}" class="w-16 h-16 object-cover rounded-lg">
+          <div>
+            <p class="text-sm font-medium">\${file.name}</p>
+            <p class="text-xs text-white/40">\${(file.size / 1024 / 1024).toFixed(2)} MB</p>
+          </div>
+        </div>
+      \`;
+      
+      // 상태 표시
+      const statusDiv = document.getElementById('analysis-status');
+      const statusText = document.getElementById('analysis-text');
+      const progressBar = document.getElementById('analysis-progress');
+      statusDiv.classList.remove('hidden');
+      statusText.textContent = 'GPT-4o Vision으로 가격표 OCR 분석 중...';
+      progressBar.style.width = '30%';
+      
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('storeName', document.getElementById('store-name-input').value || '');
+        formData.append('businessType', document.getElementById('business-type').value || 'BEAUTY_SKIN');
+        
+        const res = await fetch(\`/api/stores/\${STORE_ID}/ocr-generate-prompt\`, {
+          method: 'POST',
+          body: formData
+        });
+        
+        progressBar.style.width = '80%';
+        const data = await res.json();
+        progressBar.style.width = '100%';
+        
+        if (data.success) {
+          ocrResultData = data.data;
+          
+          // OCR 결과 표시
+          const resultDiv = document.getElementById('ocr-result');
+          const ocrText = document.getElementById('ocr-text');
+          resultDiv.classList.remove('hidden');
+          
+          let displayText = '';
+          if (ocrResultData.menuText) {
+            displayText += '## 메뉴/가격\\n' + ocrResultData.menuText + '\\n\\n';
+          }
+          if (ocrResultData.eventsText) {
+            displayText += '## 이벤트\\n' + ocrResultData.eventsText + '\\n\\n';
+          }
+          if (ocrResultData.extractedRaw && !displayText) {
+            displayText = ocrResultData.extractedRaw;
+          }
+          
+          ocrText.textContent = displayText || '(추출된 텍스트 없음)';
+          showToast('✅ OCR 완료! 결과를 확인하고 [프롬프트에 적용]을 클릭하세요.', 'success');
+        } else {
+          showToast('OCR 실패: ' + (data.error || '알 수 없는 오류'), 'error');
+        }
+      } catch (err) {
+        console.error('OCR Error:', err);
+        showToast('OCR 처리 중 오류 발생', 'error');
+      } finally {
+        setTimeout(() => {
+          statusDiv.classList.add('hidden');
+          progressBar.style.width = '0%';
+        }, 1000);
+      }
+    }
+    
+    // OCR 결과 프롬프트에 적용
+    function applyOcrResult() {
+      if (!ocrResultData) {
+        showToast('적용할 OCR 결과가 없습니다', 'error');
+        return;
+      }
+      
+      // 시스템 프롬프트에 적용
+      if (ocrResultData.systemPrompt) {
+        document.getElementById('system-prompt').value = ocrResultData.systemPrompt;
+      }
+      
+      // 메뉴 데이터에 적용
+      if (ocrResultData.menuText || ocrResultData.eventsText) {
+        let menuText = ocrResultData.menuText || '';
+        if (ocrResultData.eventsText) {
+          menuText += '\\n\\n[현재 이벤트]\\n' + ocrResultData.eventsText;
+        }
+        document.getElementById('menu-data-text').value = menuText;
+      }
+      
+      showToast('✅ 프롬프트에 적용되었습니다! [전체 저장]을 눌러 저장하세요.', 'success');
+      clearOcrResult();
+    }
+    
+    // OCR 결과 초기화
+    function clearOcrResult() {
+      ocrResultData = null;
+      document.getElementById('ocr-result').classList.add('hidden');
+      document.getElementById('ocr-placeholder').classList.remove('hidden');
+      document.getElementById('ocr-preview').classList.add('hidden');
+      document.getElementById('ocr-upload').value = '';
+    }
     
     // URL 분석 → 자동 저장 → 폼 반영 (한 번에 실행)
     async function analyzeUrl() {

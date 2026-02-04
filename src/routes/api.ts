@@ -5847,7 +5847,7 @@ api.post('/stores/:id/auto-generate-prompt', async (c) => {
           const text = await new Response(file.body).text();
           content += '\n\n' + text;
         } else {
-          // 이미지/PDF는 AI로 텍스트 추출
+          // 이미지/PDF는 AI로 텍스트 추출 (가격표 전용 OCR 프롬프트)
           const chunks: Uint8Array[] = [];
           const reader = file.body.getReader();
           while (true) {
@@ -5863,13 +5863,29 @@ api.post('/stores/:id/auto-generate-prompt', async (c) => {
           }
           const base64 = await fileToBase64(fileData.buffer);
           
+          // 가격표/메뉴판 전용 OCR 프롬프트
+          const ocrPrompt = `이 이미지에서 모든 텍스트를 정확하게 추출해주세요.
+
+특히 다음 정보를 반드시 포함해주세요:
+1. 서비스/메뉴 이름
+2. 가격 정보 (정가, 할인가, 할인율)
+3. 이벤트/프로모션 내용
+4. 영업시간
+5. 기타 안내 사항 (VAT 별도, 시술시간 등)
+
+원본 형식을 유지하면서 읽기 쉽게 정리해주세요.
+가격은 반드시 숫자와 "원" 또는 "→" (할인 표시)를 포함해주세요.`;
+          
           const contentType = file.contentType.includes('pdf') ? 'pdf' : 'image';
-          const extractResult = model === 'openai'
-            ? await analyzeWithOpenAI(apiKey, { type: contentType as 'image', data: base64, mimeType: file.contentType }, '이 문서의 모든 텍스트와 정보를 추출해주세요.')
-            : await analyzeWithGemini(apiKey, { type: contentType, data: base64, mimeType: file.contentType }, '이 문서의 모든 텍스트와 정보를 추출해주세요.');
+          
+          // 이미지는 GPT-4o Vision이 더 정확 (OpenAI 우선 사용)
+          const openaiKey = c.env.OPENAI_API_KEY;
+          const extractResult = openaiKey && contentType === 'image'
+            ? await analyzeWithOpenAI(openaiKey, { type: 'image', data: base64, mimeType: file.contentType }, ocrPrompt)
+            : await analyzeWithGemini(apiKey, { type: contentType, data: base64, mimeType: file.contentType }, ocrPrompt);
           
           if (extractResult.success && extractResult.result) {
-            content += '\n\n' + extractResult.result;
+            content += '\n\n=== 이미지/파일에서 추출된 정보 ===\n' + extractResult.result;
           }
         }
       }
@@ -6062,6 +6078,208 @@ ${text}
     return c.json<ApiResponse>({
       success: false,
       error: error.message || '프롬프트 생성 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 이미지 OCR + 프롬프트 생성 (가격표/메뉴판 전용)
+api.post('/stores/:id/ocr-generate-prompt', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const formData = await c.req.formData();
+    const file = formData.get('file') as File | null;
+    const storeName = formData.get('storeName') as string || '';
+    const businessType = formData.get('businessType') as string || 'BEAUTY_SKIN';
+    
+    if (!file) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '이미지 파일이 필요합니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // OpenAI API 키 확인 (이미지 OCR은 GPT-4o Vision이 가장 정확)
+    const openaiKey = c.env.OPENAI_API_KEY;
+    const geminiKey = c.env.GEMINI_API_KEY;
+    
+    if (!openaiKey && !geminiKey) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'AI API 키가 설정되지 않았습니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // 파일을 base64로 변환
+    const arrayBuffer = await file.arrayBuffer();
+    const base64 = await fileToBase64(arrayBuffer);
+    
+    // Step 1: OCR - 이미지에서 텍스트 추출
+    const ocrPrompt = `이 가격표/메뉴판 이미지에서 모든 정보를 정확하게 추출해주세요.
+
+반드시 다음 형식으로 출력:
+
+## 서비스/메뉴 가격
+- 서비스명: 가격
+- 서비스명: 정가 → 할인가 (할인율)
+...
+
+## 이벤트/프로모션
+- 이벤트명: 내용
+
+## 기타 안내
+- VAT 별도 여부
+- 시술 소요시간
+- 예약 안내 등
+
+가격은 반드시 숫자로 추출하고, 할인 정보가 있으면 "정가 → 할인가" 형식으로 표시.
+누락 없이 모든 항목을 추출하세요.`;
+    
+    let ocrResult = '';
+    
+    if (openaiKey) {
+      // GPT-4o Vision으로 OCR
+      const ocrResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openaiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: ocrPrompt },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:${file.type};base64,${base64}`,
+                    detail: 'high'
+                  }
+                }
+              ]
+            }
+          ],
+          max_tokens: 4096,
+          temperature: 0.1
+        })
+      });
+      
+      if (!ocrResponse.ok) {
+        const errorText = await ocrResponse.text();
+        console.error('OpenAI OCR Error:', errorText);
+        return c.json<ApiResponse>({
+          success: false,
+          error: 'OCR 실패: ' + ocrResponse.status,
+          timestamp: Date.now()
+        }, 500);
+      }
+      
+      const ocrData = await ocrResponse.json() as any;
+      ocrResult = ocrData.choices?.[0]?.message?.content || '';
+    } else if (geminiKey) {
+      // Gemini로 OCR
+      const result = await analyzeWithGemini(
+        geminiKey,
+        { type: 'image', data: base64, mimeType: file.type },
+        ocrPrompt
+      );
+      ocrResult = result.result || '';
+    }
+    
+    if (!ocrResult) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '이미지에서 텍스트를 추출할 수 없습니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // Step 2: OCR 결과로 프롬프트 생성
+    const promptGenPrompt = `다음 OCR 결과를 바탕으로 AI 상담원 시스템 프롬프트를 생성하세요.
+
+## 매장 정보
+- 매장명: ${storeName || '(입력 필요)'}
+- 업종: ${businessType}
+
+## OCR 추출 결과
+${ocrResult}
+
+## 출력 형식 (JSON만 출력)
+{
+  "menuText": "정리된 메뉴/서비스 목록 (줄바꿈으로 구분)\\n예: 서비스명 - 가격",
+  "eventsText": "이벤트/할인 목록 (줄바꿈으로 구분)\\n예: 이벤트명: 정가 → 할인가 (할인율)",
+  "systemPrompt": "당신은 ${storeName || '[매장명]'}의 전문 AI 상담원입니다.\\n\\n## 서비스 가격표\\n(OCR에서 추출한 모든 메뉴/가격)\\n\\n## 현재 이벤트/프로모션\\n(OCR에서 추출한 이벤트 정보)\\n\\n## 기타 안내\\n(VAT, 시술시간 등)\\n\\n## 응대 지침\\n- 고객 문의에 친절하고 전문적으로 응대\\n- 가격 문의 시 정확한 가격과 현재 이벤트 안내\\n- 대화 마무리 시 예약 유도",
+  "extractedRaw": "OCR 원본 텍스트"
+}`;
+    
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey || c.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: promptGenPrompt }] }],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 4096
+          }
+        })
+      }
+    );
+    
+    if (!geminiRes.ok) {
+      // Gemini 실패 시 OCR 결과만 반환
+      return c.json<ApiResponse>({
+        success: true,
+        data: {
+          menuText: ocrResult,
+          eventsText: '',
+          systemPrompt: `당신은 ${storeName}의 AI 상담원입니다.\n\n${ocrResult}`,
+          extractedRaw: ocrResult
+        },
+        timestamp: Date.now()
+      });
+    }
+    
+    const geminiData = await geminiRes.json() as any;
+    const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    
+    // JSON 파싱
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      // JSON 파싱 실패 시 OCR 결과만 반환
+      return c.json<ApiResponse>({
+        success: true,
+        data: {
+          menuText: ocrResult,
+          eventsText: '',
+          systemPrompt: `당신은 ${storeName}의 AI 상담원입니다.\n\n${ocrResult}`,
+          extractedRaw: ocrResult
+        },
+        timestamp: Date.now()
+      });
+    }
+    
+    const result = JSON.parse(jsonMatch[0]);
+    result.extractedRaw = ocrResult;
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: result,
+      timestamp: Date.now()
+    });
+    
+  } catch (error: any) {
+    console.error('OCR Generate Prompt Error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || 'OCR 프롬프트 생성 실패',
       timestamp: Date.now()
     }, 500);
   }
