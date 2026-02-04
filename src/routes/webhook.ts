@@ -164,11 +164,16 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       const welcomeMsg = generateWelcomeMessage(storeResult);
       await sendTextMessage(env, customerId, welcomeMsg);
       
-      // 다국어 안내 메시지 (환영 인사 바로 다음 - 무조건 표시)
-      const languageMsg = `🌐 영어·중국어·일어 필요하신가요?\n\n` +
-        `• English → "English" 입력\n` +
-        `• 中文服务 → 请输入 "中文"\n` +
-        `• 日本語 → 「日本語」と入力`;
+      // 8개국어 안내 메시지 (환영 인사 바로 다음 - 무조건 표시)
+      const languageMsg = `🌐 다른 언어가 필요하신가요?\n` +
+        `Need another language?\n\n` +
+        `🇺🇸 English → "EN"\n` +
+        `🇯🇵 日本語 → "JP"\n` +
+        `🇨🇳 简体中文 → "CN"\n` +
+        `🇹🇼 繁體中文 → "TW"\n` +
+        `🇹🇭 ภาษาไทย → "TH"\n` +
+        `🇻🇳 Tiếng Việt → "VN"\n` +
+        `🇲🇳 Монгол → "MN"`;
       await sendTextMessage(env, customerId, languageMsg);
       
       // [WATCHDOG] 입장 로그 기록
@@ -584,103 +589,95 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       } catch (e) { console.warn('[Lang] KV read error:', e); }
     }
     
-    // 영어 선택/감지 (확장된 패턴)
-    const isEnglish = lowerMsg === 'english' || lowerMsg === 'eng' || 
-      /^(hi|hello|yes|thanks|thank you|ok|okay|please|help|price|menu|book|location|address|phone).?$/i.test(lowerMsg) ||
-      /^(i want|i need|can i|do you|how much|what is)/i.test(lowerMsg);
+    // ============ [8개국어 지원 시스템] ============
+    // 🇰🇷 한국어(ko) | 🇺🇸 영어(en) | 🇯🇵 일본어(ja) | 🇨🇳 중국어 간체(zh)
+    // 🇹🇼 중국어 번체(tw) | 🇹🇭 태국어(th) | 🇻🇳 베트남어(vi) | 🇲🇳 몽골어(mn)
     
-    if (isEnglish) {
+    // 8개국어 메뉴 메시지 템플릿
+    const langMenus: Record<string, { flag: string; welcome: string; menu: string; logName: string }> = {
+      en: {
+        flag: '🇺🇸',
+        welcome: `🇺🇸 Welcome to ${storeName}!\n\n✨ 50% OFF Grand Opening!\n\nPlease select:\n\n`,
+        menu: `1. 🎁 50% OFF Menu & Prices\n2. 💡 Skin Analysis\n3. 💬 Message to Director\n4. 📅 Book Appointment\n5. 📍 Location & Contact\n\nType a number!`,
+        logName: '[lang] English'
+      },
+      ja: {
+        flag: '🇯🇵',
+        welcome: `🇯🇵 ${storeName}へようこそ!\n\n✨ オープン記念 50% OFF!\n\n選択してください:\n\n`,
+        menu: `1. 🎁 50%割引メニュー\n2. 💡 肌診断\n3. 💬 院長へメッセージ\n4. 📅 予約\n5. 📍 住所・連絡先\n\n番号を入力!`,
+        logName: '[lang] Japanese'
+      },
+      zh: {
+        flag: '🇨🇳',
+        welcome: `🇨🇳 欢迎光临 ${storeName}!\n\n✨ 开业优惠 50% 折扣!\n\n请选择:\n\n`,
+        menu: `1. 🎁 50%折扣菜单和价格\n2. 💡 皮肤分析\n3. 💬 给院长留言\n4. 📅 预约\n5. 📍 地址和联系方式\n\n请输入数字!`,
+        logName: '[lang] Chinese Simplified'
+      },
+      tw: {
+        flag: '🇹🇼',
+        welcome: `🇹🇼 歡迎光臨 ${storeName}!\n\n✨ 開幕優惠 50% 折扣!\n\n請選擇:\n\n`,
+        menu: `1. 🎁 50%折扣菜單和價格\n2. 💡 皮膚分析\n3. 💬 給院長留言\n4. 📅 預約\n5. 📍 地址和聯繫方式\n\n請輸入數字!`,
+        logName: '[lang] Chinese Traditional'
+      },
+      th: {
+        flag: '🇹🇭',
+        welcome: `🇹🇭 ยินดีต้อนรับสู่ ${storeName}!\n\n✨ ลด 50% ฉลองเปิดร้าน!\n\nกรุณาเลือก:\n\n`,
+        menu: `1. 🎁 เมนูลด 50%\n2. 💡 วิเคราะห์ผิว\n3. 💬 ฝากข้อความถึงผู้อำนวยการ\n4. 📅 จองคิว\n5. 📍 ที่ตั้งและติดต่อ\n\nพิมพ์ตัวเลข!`,
+        logName: '[lang] Thai'
+      },
+      vi: {
+        flag: '🇻🇳',
+        welcome: `🇻🇳 Chào mừng đến ${storeName}!\n\n✨ Giảm 50% Khai trương!\n\nVui lòng chọn:\n\n`,
+        menu: `1. 🎁 Menu giảm 50%\n2. 💡 Phân tích da\n3. 💬 Nhắn tin cho Giám đốc\n4. 📅 Đặt lịch hẹn\n5. 📍 Địa chỉ & Liên hệ\n\nNhập số!`,
+        logName: '[lang] Vietnamese'
+      },
+      mn: {
+        flag: '🇲🇳',
+        welcome: `🇲🇳 ${storeName}-д тавтай морил!\n\n✨ Нээлтийн 50% хөнгөлөлт!\n\nСонгоно уу:\n\n`,
+        menu: `1. 🎁 50% хөнгөлөлттэй меню\n2. 💡 Арьс шинжилгээ\n3. 💬 Захиралд мессеж\n4. 📅 Цаг захиалга\n5. 📍 Хаяг & Холбоо барих\n\nТоо оруулна уу!`,
+        logName: '[lang] Mongolian'
+      }
+    };
+    
+    // 언어 감지 패턴 (8개국어)
+    const langPatterns: Record<string, RegExp> = {
+      en: /^(en|eng|english|hi|hello|yes|thanks?|ok(ay)?|please|help|price|menu|book|i want|i need|can i|how much)/i,
+      ja: /^(jp|japanese|日本語|こんにちは|はい|お願い|ありがとう|すみません|予約|いくら)|[\u3040-\u309F\u30A0-\u30FF]/,
+      zh: /^(cn|chinese|中文|简体|你好|是的?|好的?|谢谢|请问|多少钱|价格|预约)/,
+      tw: /^(tw|繁體|繁体|台灣|台湾)|[國際學習體驗點際開關東與這個為於對說過無現]/,
+      th: /^(th|thai|ภาษาไทย|สวัสดี|ขอบคุณ|ราคา|จอง)|[\u0E00-\u0E7F]/,
+      vi: /^(vn|vietnamese|tiếng việt|xin chào|cảm ơn|giá|đặt)|[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i,
+      mn: /^(mn|mongol|монгол|сайн байна уу|баярлалаа)|[\u1800-\u18AF]/
+    };
+    
+    // 언어 선택 처리 (8개국어)
+    let detectedLang: string | null = null;
+    for (const [lang, pattern] of Object.entries(langPatterns)) {
+      if (pattern.test(lowerMsg) || pattern.test(userMessage)) {
+        detectedLang = lang;
+        break;
+      }
+    }
+    
+    if (detectedLang && langMenus[detectedLang]) {
       // KV에 언어 설정 저장
       if (env.KV) {
-        try { await env.KV.put(`lang:${storeId}:${customerId}`, 'en', { expirationTtl: 86400 }); } 
+        try { await env.KV.put(`lang:${storeId}:${customerId}`, detectedLang, { expirationTtl: 86400 }); } 
         catch (e) { console.warn('[Lang] KV write error:', e); }
       }
-      customerLang = 'en';
+      customerLang = detectedLang;
       
-      const englishMenu = `🇺🇸 Welcome to ${storeName}!\n\n` +
-        `✨ 50% OFF Grand Opening!\n\n` +
-        `Please select:\n\n` +
-        `1. 🎁 50% OFF Menu & Prices\n` +
-        `2. 💡 Skin Analysis\n` +
-        `3. 💬 Message to Director\n` +
-        `4. 📅 Book Appointment\n` +
-        `5. 📍 Location & Contact\n\n` +
-        `Type a number!`;
-      await sendTextMessage(env, customerId, englishMenu);
+      const langData = langMenus[detectedLang];
+      await sendTextMessage(env, customerId, langData.welcome + langData.menu);
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
         INSERT INTO xivix_conversation_logs 
         (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
         VALUES (?, ?, 'text', ?, ?, ?, 0)
-      `).bind(storeId, customerId, userMessage, '[lang] English menu', responseTime).run();
+      `).bind(storeId, customerId, userMessage, langData.logName, responseTime).run();
       
-      return c.json({ success: true, store_id: storeId, language: 'en' });
-    }
-    
-    // 중국어 선택/감지 (확장된 패턴)
-    const isChinese = lowerMsg === '中文' || lowerMsg === '中国语' || lowerMsg === 'chinese' ||
-      /^(你好|是的?|好的?|谢谢|请问|多少钱|价格|预约|地址|电话|帮忙|可以|我想|我要)/.test(lowerMsg);
-    
-    if (isChinese) {
-      if (env.KV) {
-        try { await env.KV.put(`lang:${storeId}:${customerId}`, 'zh', { expirationTtl: 86400 }); } 
-        catch (e) { console.warn('[Lang] KV write error:', e); }
-      }
-      customerLang = 'zh';
-      
-      const chineseMenu = `🇨🇳 欢迎光临 ${storeName}!\n\n` +
-        `✨ 开业优惠 50% 折扣!\n\n` +
-        `请选择:\n\n` +
-        `1. 🎁 50%折扣菜单和价格\n` +
-        `2. 💡 皮肤分析\n` +
-        `3. 💬 给院长留言\n` +
-        `4. 📅 预约\n` +
-        `5. 📍 地址和联系方式\n\n` +
-        `请输入数字!`;
-      await sendTextMessage(env, customerId, chineseMenu);
-      
-      const responseTime = Date.now() - startTime;
-      await env.DB.prepare(`
-        INSERT INTO xivix_conversation_logs 
-        (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
-        VALUES (?, ?, 'text', ?, ?, ?, 0)
-      `).bind(storeId, customerId, userMessage, '[lang] Chinese menu', responseTime).run();
-      
-      return c.json({ success: true, store_id: storeId, language: 'zh' });
-    }
-    
-    // 일본어 선택/감지 (확장된 패턴)
-    const isJapanese = lowerMsg === '日本語' || lowerMsg === 'japanese' ||
-      /^(こんにちは|はい|お願い|ありがとう|すみません|予約|住所|電話|いくら|メニュー|値段)/.test(lowerMsg) ||
-      /[\u3040-\u309F\u30A0-\u30FF]/.test(lowerMsg); // 히라가나/카타카나 감지
-    
-    if (isJapanese) {
-      if (env.KV) {
-        try { await env.KV.put(`lang:${storeId}:${customerId}`, 'ja', { expirationTtl: 86400 }); } 
-        catch (e) { console.warn('[Lang] KV write error:', e); }
-      }
-      customerLang = 'ja';
-      
-      const japaneseMenu = `🇯🇵 ${storeName}へようこそ!\n\n` +
-        `✨ オープン記念 50% OFF!\n\n` +
-        `選択してください:\n\n` +
-        `1. 🎁 50%割引メニュー\n` +
-        `2. 💡 肌診断\n` +
-        `3. 💬 院長へメッセージ\n` +
-        `4. 📅 予約\n` +
-        `5. 📍 住所・連絡先\n\n` +
-        `番号を入力!`;
-      await sendTextMessage(env, customerId, japaneseMenu);
-      
-      const responseTime = Date.now() - startTime;
-      await env.DB.prepare(`
-        INSERT INTO xivix_conversation_logs 
-        (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
-        VALUES (?, ?, 'text', ?, ?, ?, 0)
-      `).bind(storeId, customerId, userMessage, '[lang] Japanese menu', responseTime).run();
-      
-      return c.json({ success: true, store_id: storeId, language: 'ja' });
+      return c.json({ success: true, store_id: storeId, language: detectedLang });
     }
 
     // ============ [메뉴 번호 선택 처리 - 다국어 지원] ============
@@ -688,45 +685,18 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     const menuNumber = userMessage.trim();
     
     if (menuNumber === '1') {
-      // 1. 🎁 오픈 50% 이벤트 메뉴/가격 (다국어 지원)
-      let priceResponse = '';
-      if (customerLang === 'en') {
-        priceResponse = `🎁 50% OFF Grand Opening Menu\n\n` +
-          `Sagging/Elasticity\n→ Magic Pot [₩40,000]\n\n` +
-          `Exfoliation/Regeneration\n→ Miracle Peeling [₩60,000]\n\n` +
-          `Dullness/Brightening\n→ Toning Care [₩35,000]\n\n` +
-          `Dryness/Glow\n→ LDM Water Drop [₩35,000]\n\n` +
-          `Moisture/Radiance\n→ Derma-S [₩30,000]\n\n` +
-          `Sebum/Pores\n→ Aqua Peeling [₩25,000]\n\n` +
-          `━━━━━━━━━━\nWould you like to book?`;
-      } else if (customerLang === 'zh') {
-        priceResponse = `🎁 开业优惠 50%折扣菜单\n\n` +
-          `松弛/弹力\n→ 魔力锅 [4万韩元]\n\n` +
-          `角质/再生\n→ 奇迹焕肤 [6万韩元]\n\n` +
-          `暗沉/美白\n→ 调理护理 [3.5万韩元]\n\n` +
-          `干燥/光泽\n→ LDM水滴 [3.5万韩元]\n\n` +
-          `保湿/光彩\n→ Derma-S [3万韩元]\n\n` +
-          `皮脂/毛孔\n→ 水光焕肤 [2.5万韩元]\n\n` +
-          `━━━━━━━━━━\n需要预约吗?`;
-      } else if (customerLang === 'ja') {
-        priceResponse = `🎁 オープン記念 50%割引メニュー\n\n` +
-          `たるみ/弾力\n→ マジックポット [4万ウォン]\n\n` +
-          `角質/再生\n→ ミラクルピーリング [6万ウォン]\n\n` +
-          `くすみ/美白\n→ トーニングケア [3.5万ウォン]\n\n` +
-          `乾燥/艶\n→ LDM水滴 [3.5万ウォン]\n\n` +
-          `保湿/輝き\n→ ダーマ-S [3万ウォン]\n\n` +
-          `皮脂/毛穴\n→ アクアピーリング [2.5万ウォン]\n\n` +
-          `━━━━━━━━━━\nご予約されますか?`;
-      } else {
-        priceResponse = `🎁 오픈 50% 할인 메뉴\n\n` +
-          `처짐/탄력\n→ 매직팟 [4만원]\n\n` +
-          `각질/재생\n→ 미라클 필링 [6만원]\n\n` +
-          `칙칙함/미백\n→ 토닝 케어 [3.5만원]\n\n` +
-          `건조/속광\n→ LDM 물방울 [3.5만원]\n\n` +
-          `보습/광채\n→ 더마-S [3만원]\n\n` +
-          `피지/모공\n→ 아쿠아필링 [2.5만원]\n\n` +
-          `━━━━━━━━━━\n예약 도와드릴까요?`;
-      }
+      // 1. 🎁 오픈 50% 이벤트 메뉴/가격 (8개국어 지원)
+      const priceTemplates: Record<string, string> = {
+        ko: `🎁 오픈 50% 할인 메뉴\n\n처짐/탄력\n→ 매직팟 [4만원]\n\n각질/재생\n→ 미라클 필링 [6만원]\n\n칙칙함/미백\n→ 토닝 케어 [3.5만원]\n\n건조/속광\n→ LDM 물방울 [3.5만원]\n\n보습/광채\n→ 더마-S [3만원]\n\n피지/모공\n→ 아쿠아필링 [2.5만원]\n\n━━━━━━━━━━\n예약 도와드릴까요?`,
+        en: `🎁 50% OFF Grand Opening Menu\n\nSagging/Elasticity\n→ Magic Pot [₩40,000]\n\nExfoliation/Regeneration\n→ Miracle Peeling [₩60,000]\n\nDullness/Brightening\n→ Toning Care [₩35,000]\n\nDryness/Glow\n→ LDM Water Drop [₩35,000]\n\nMoisture/Radiance\n→ Derma-S [₩30,000]\n\nSebum/Pores\n→ Aqua Peeling [₩25,000]\n\n━━━━━━━━━━\nWould you like to book?`,
+        ja: `🎁 オープン記念 50%割引メニュー\n\nたるみ/弾力\n→ マジックポット [4万ウォン]\n\n角質/再生\n→ ミラクルピーリング [6万ウォン]\n\nくすみ/美白\n→ トーニングケア [3.5万ウォン]\n\n乾燥/艶\n→ LDM水滴 [3.5万ウォン]\n\n保湿/輝き\n→ ダーマ-S [3万ウォン]\n\n皮脂/毛穴\n→ アクアピーリング [2.5万ウォン]\n\n━━━━━━━━━━\nご予約されますか?`,
+        zh: `🎁 开业优惠 50%折扣菜单\n\n松弛/弹力\n→ 魔力锅 [4万韩元]\n\n角质/再生\n→ 奇迹焕肤 [6万韩元]\n\n暗沉/美白\n→ 调理护理 [3.5万韩元]\n\n干燥/光泽\n→ LDM水滴 [3.5万韩元]\n\n保湿/光彩\n→ Derma-S [3万韩元]\n\n皮脂/毛孔\n→ 水光焕肤 [2.5万韩元]\n\n━━━━━━━━━━\n需要预约吗?`,
+        tw: `🎁 開幕優惠 50%折扣菜單\n\n鬆弛/彈力\n→ 魔力鍋 [4萬韓元]\n\n角質/再生\n→ 奇蹟煥膚 [6萬韓元]\n\n暗沉/美白\n→ 調理護理 [3.5萬韓元]\n\n乾燥/光澤\n→ LDM水滴 [3.5萬韓元]\n\n保濕/光彩\n→ Derma-S [3萬韓元]\n\n皮脂/毛孔\n→ 水光煥膚 [2.5萬韓元]\n\n━━━━━━━━━━\n需要預約嗎?`,
+        th: `🎁 เมนูลด 50% ฉลองเปิดร้าน\n\nหย่อนคล้อย/กระชับ\n→ Magic Pot [40,000 วอน]\n\nผลัดเซลล์/ฟื้นฟู\n→ Miracle Peeling [60,000 วอน]\n\nหมองคล้ำ/ผิวกระจ่างใส\n→ Toning Care [35,000 วอน]\n\nแห้ง/เปล่งประกาย\n→ LDM Water Drop [35,000 วอน]\n\nความชุ่มชื้น/ผิวเรียบเนียน\n→ Derma-S [30,000 วอน]\n\nรูขุมขน/สิวเสี้ยน\n→ Aqua Peeling [25,000 วอน]\n\n━━━━━━━━━━\nต้องการจองไหมคะ?`,
+        vi: `🎁 Menu giảm 50% Khai trương\n\nChảy xệ/Đàn hồi\n→ Magic Pot [40,000 won]\n\nTẩy tế bào/Tái sinh\n→ Miracle Peeling [60,000 won]\n\nXỉn màu/Làm sáng\n→ Toning Care [35,000 won]\n\nKhô/Rạng rỡ\n→ LDM Water Drop [35,000 won]\n\nDưỡng ẩm/Tỏa sáng\n→ Derma-S [30,000 won]\n\nBã nhờn/Lỗ chân lông\n→ Aqua Peeling [25,000 won]\n\n━━━━━━━━━━\nBạn muốn đặt lịch không?`,
+        mn: `🎁 Нээлтийн 50% хөнгөлөлттэй меню\n\nУналт/Уян хатан\n→ Magic Pot [40,000 вон]\n\nЦэвэрлэгээ/Сэргээлт\n→ Miracle Peeling [60,000 вон]\n\nХар толбо/Гэрэлтүүлэх\n→ Toning Care [35,000 вон]\n\nХуурай/Гялбах\n→ LDM Water Drop [35,000 вон]\n\nЧийглэг/Туяалах\n→ Derma-S [30,000 вон]\n\nТос/Сүвэрхэг\n→ Aqua Peeling [25,000 вон]\n\n━━━━━━━━━━\nЦаг захиалах уу?`
+      };
+      const priceResponse = priceTemplates[customerLang] || priceTemplates.ko;
       await sendTextMessage(env, customerId, priceResponse);
       
       const responseTime = Date.now() - startTime;
@@ -740,33 +710,18 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     }
     
     if (menuNumber === '2') {
-      // 2. 💡 내 피부 상태 체크 (다국어 지원)
-      let skinCheckResponse = '';
-      if (customerLang === 'en') {
-        skinCheckResponse = `💡 Skin Analysis\n\n` +
-          `For accurate diagnosis:\n\n` +
-          `📸 Send a [photo] of your concern\n\n` +
-          `✍️ Or describe your [concern] in text\n\n` +
-          `━━━━━━━━━━\nWe'll analyze with 20 years\nof data expertise! 😊`;
-      } else if (customerLang === 'zh') {
-        skinCheckResponse = `💡 皮肤分析\n\n` +
-          `为了准确诊断:\n\n` +
-          `📸 请发送问题部位的[照片]\n\n` +
-          `✍️ 或用文字描述您的[问题]\n\n` +
-          `━━━━━━━━━━\n我们将用20年的数据\n为您分析! 😊`;
-      } else if (customerLang === 'ja') {
-        skinCheckResponse = `💡 肌診断\n\n` +
-          `正確な診断のため:\n\n` +
-          `📸 お悩み部位の[写真]を送信\n\n` +
-          `✍️ または[お悩み]をテキストで\n\n` +
-          `━━━━━━━━━━\n20年のデータロジックで\n分析いたします! 😊`;
-      } else {
-        skinCheckResponse = `💡 피부 상태 체크\n\n` +
-          `정확한 진단을 위해\n\n` +
-          `📸 고민 부위 [사진] 보내주시거나\n\n` +
-          `✍️ [고민]을 텍스트로 알려주세요\n\n` +
-          `━━━━━━━━━━\n20년 데이터 로직으로\n분석해 드릴게요! 😊`;
-      }
+      // 2. 💡 내 피부 상태 체크 (8개국어 지원)
+      const skinTemplates: Record<string, string> = {
+        ko: `💡 피부 상태 체크\n\n정확한 진단을 위해\n\n📸 고민 부위 [사진] 보내주시거나\n\n✍️ [고민]을 텍스트로 알려주세요\n\n━━━━━━━━━━\n20년 데이터 로직으로\n분석해 드릴게요! 😊`,
+        en: `💡 Skin Analysis\n\nFor accurate diagnosis:\n\n📸 Send a [photo] of your concern\n\n✍️ Or describe your [concern] in text\n\n━━━━━━━━━━\nWe'll analyze with 20 years\nof data expertise! 😊`,
+        ja: `💡 肌診断\n\n正確な診断のため:\n\n📸 お悩み部位の[写真]を送信\n\n✍️ または[お悩み]をテキストで\n\n━━━━━━━━━━\n20年のデータロジックで\n分析いたします! 😊`,
+        zh: `💡 皮肤分析\n\n为了准确诊断:\n\n📸 请发送问题部位的[照片]\n\n✍️ 或用文字描述您的[问题]\n\n━━━━━━━━━━\n我们将用20年的数据\n为您分析! 😊`,
+        tw: `💡 皮膚分析\n\n為了準確診斷:\n\n📸 請發送問題部位的[照片]\n\n✍️ 或用文字描述您的[問題]\n\n━━━━━━━━━━\n我們將用20年的數據\n為您分析! 😊`,
+        th: `💡 วิเคราะห์ผิว\n\nเพื่อการวินิจฉัยที่แม่นยำ:\n\n📸 ส่ง[รูปภาพ]บริเวณที่กังวล\n\n✍️ หรืออธิบาย[ปัญหา]เป็นข้อความ\n\n━━━━━━━━━━\nเราจะวิเคราะห์ด้วยประสบการณ์\n20 ปี! 😊`,
+        vi: `💡 Phân tích da\n\nĐể chẩn đoán chính xác:\n\n📸 Gửi [ảnh] vùng da cần tư vấn\n\n✍️ Hoặc mô tả [vấn đề] bằng văn bản\n\n━━━━━━━━━━\nChúng tôi sẽ phân tích với\n20 năm kinh nghiệm! 😊`,
+        mn: `💡 Арьс шинжилгээ\n\nЗөв оношлохын тулд:\n\n📸 Санаа зовж буй хэсгийн [зураг] илгээнэ үү\n\n✍️ Эсвэл [асуудлаа] бичгээр тайлбарлана уу\n\n━━━━━━━━━━\n20 жилийн туршлагаар\nшинжлэх болно! 😊`
+      };
+      const skinCheckResponse = skinTemplates[customerLang] || skinTemplates.ko;
       await sendTextMessage(env, customerId, skinCheckResponse);
       
       const responseTime = Date.now() - startTime;
@@ -780,41 +735,18 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     }
     
     if (menuNumber === '3') {
-      // 3. 💬 원장님께 상담 메시지 남기기 (다국어 지원)
-      let messageResponse = '';
-      if (customerLang === 'en') {
-        messageResponse = `💬 Message to Director\n\n` +
-          `We'll deliver your message right away!\n\n` +
-          `Please leave your contact\nand consultation details 📝\n\n` +
-          `━━━━━━━━━━\n` +
-          `Example:\n` +
-          `+82-10-1234-5678\n` +
-          `I want to consult about pore care`;
-      } else if (customerLang === 'zh') {
-        messageResponse = `💬 给院长留言\n\n` +
-          `我们会立即转达您的留言!\n\n` +
-          `请留下您的联系方式\n和咨询内容 📝\n\n` +
-          `━━━━━━━━━━\n` +
-          `示例:\n` +
-          `+82-10-1234-5678\n` +
-          `想咨询毛孔问题`;
-      } else if (customerLang === 'ja') {
-        messageResponse = `💬 院長へメッセージ\n\n` +
-          `すぐにお伝えします!\n\n` +
-          `連絡先と相談内容を\n残してください 📝\n\n` +
-          `━━━━━━━━━━\n` +
-          `例:\n` +
-          `+82-10-1234-5678\n` +
-          `毛穴について相談したいです`;
-      } else {
-        messageResponse = `💬 원장님께 메시지 남기기\n\n` +
-          `원장님께 바로 전달해 드릴게요!\n\n` +
-          `답변받으실 연락처와 함께\n상담 내용을 남겨주세요 📝\n\n` +
-          `━━━━━━━━━━\n` +
-          `예시)\n` +
-          `010-1234-5678\n` +
-          `모공이 고민인데 상담받고 싶어요`;
-      }
+      // 3. 💬 원장님께 상담 메시지 남기기 (8개국어 지원)
+      const msgTemplates: Record<string, string> = {
+        ko: `💬 원장님께 메시지 남기기\n\n원장님께 바로 전달해 드릴게요!\n\n답변받으실 연락처와 함께\n상담 내용을 남겨주세요 📝\n\n━━━━━━━━━━\n예시)\n010-1234-5678\n모공이 고민인데 상담받고 싶어요`,
+        en: `💬 Message to Director\n\nWe'll deliver your message right away!\n\nPlease leave your contact\nand consultation details 📝\n\n━━━━━━━━━━\nExample:\n+82-10-1234-5678\nI want to consult about pore care`,
+        ja: `💬 院長へメッセージ\n\nすぐにお伝えします!\n\n連絡先と相談内容を\n残してください 📝\n\n━━━━━━━━━━\n例:\n+82-10-1234-5678\n毛穴について相談したいです`,
+        zh: `💬 给院长留言\n\n我们会立即转达您的留言!\n\n请留下您的联系方式\n和咨询内容 📝\n\n━━━━━━━━━━\n示例:\n+82-10-1234-5678\n想咨询毛孔问题`,
+        tw: `💬 給院長留言\n\n我們會立即轉達您的留言!\n\n請留下您的聯繫方式\n和諮詢內容 📝\n\n━━━━━━━━━━\n範例:\n+82-10-1234-5678\n想諮詢毛孔問題`,
+        th: `💬 ฝากข้อความถึงผู้อำนวยการ\n\nเราจะส่งข้อความให้ทันที!\n\nกรุณาฝากเบอร์ติดต่อ\nและรายละเอียดการปรึกษา 📝\n\n━━━━━━━━━━\nตัวอย่าง:\n+82-10-1234-5678\nอยากปรึกษาเรื่องรูขุมขน`,
+        vi: `💬 Nhắn tin cho Giám đốc\n\nChúng tôi sẽ chuyển tin nhắn ngay!\n\nVui lòng để lại số liên hệ\nvà nội dung tư vấn 📝\n\n━━━━━━━━━━\nVí dụ:\n+82-10-1234-5678\nTôi muốn tư vấn về lỗ chân lông`,
+        mn: `💬 Захиралд мессеж\n\nБид таны мессежийг шууд дамжуулна!\n\nХолбоо барих болон\nзөвлөгөөний дэлгэрэнгүйг үлдээнэ үү 📝\n\n━━━━━━━━━━\nЖишээ:\n+82-10-1234-5678\nСүвэрхэгийн талаар зөвлөгөө авмаар байна`
+      };
+      const messageResponse = msgTemplates[customerLang] || msgTemplates.ko;
       await sendTextMessage(env, customerId, messageResponse);
       
       const responseTime = Date.now() - startTime;
@@ -828,53 +760,28 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     }
     
     if (menuNumber === '4') {
-      // 4. 📅 오늘 예약 가능한 시간 확인 (다국어 지원)
+      // 4. 📅 오늘 예약 가능한 시간 확인 (8개국어 지원)
+      const bookingTemplates: Record<string, { msg: string; select: string; btn1: string; btn2: string; noBooking: string }> = {
+        ko: { msg: `📅 예약 가능 시간 확인\n\n네이버 예약에서\n실시간 빈 시간을 확인하세요!`, select: '🗓️ 날짜와 시간을 선택해주세요!', btn1: '📱 네이버 예약하기', btn2: '💬 전화 문의', noBooking: `📅 예약 안내\n\n예약은 전화로 가능합니다\n\n📞 ${storePhone}\n\n━━━━━━━━━━\n전화 연결해드릴까요?` },
+        en: { msg: `📅 Check Available Times\n\nCheck real-time availability\non Naver Booking!`, select: '🗓️ Select date and time!', btn1: '📱 Book on Naver', btn2: '💬 Call Inquiry', noBooking: `📅 Booking Info\n\nReservations by phone\n\n📞 ${storePhone}\n\n━━━━━━━━━━\nShall I connect you?` },
+        ja: { msg: `📅 予約可能時間確認\n\nNaverで\nリアルタイムの空き時間を確認!`, select: '🗓️ 日時を選択してください!', btn1: '📱 Naver予約', btn2: '💬 電話問い合わせ', noBooking: `📅 予約案内\n\nお電話で予約可能です\n\n📞 ${storePhone}\n\n━━━━━━━━━━\nお電話おつなぎしますか?` },
+        zh: { msg: `📅 查看可预约时间\n\n在Naver预约\n查看实时空闲时间!`, select: '🗓️ 请选择日期和时间!', btn1: '📱 Naver预约', btn2: '💬 电话咨询', noBooking: `📅 预约指南\n\n可电话预约\n\n📞 ${storePhone}\n\n━━━━━━━━━━\n需要我帮您联系吗?` },
+        tw: { msg: `📅 查看可預約時間\n\n在Naver預約\n查看即時空閒時間!`, select: '🗓️ 請選擇日期和時間!', btn1: '📱 Naver預約', btn2: '💬 電話諮詢', noBooking: `📅 預約指南\n\n可電話預約\n\n📞 ${storePhone}\n\n━━━━━━━━━━\n需要我幫您聯繫嗎?` },
+        th: { msg: `📅 ตรวจสอบเวลาว่าง\n\nตรวจสอบเวลาว่าง\nบน Naver Booking!`, select: '🗓️ เลือกวันและเวลา!', btn1: '📱 จองบน Naver', btn2: '💬 โทรสอบถาม', noBooking: `📅 ข้อมูลการจอง\n\nจองทางโทรศัพท์\n\n📞 ${storePhone}\n\n━━━━━━━━━━\nให้โทรติดต่อไหมคะ?` },
+        vi: { msg: `📅 Kiểm tra giờ trống\n\nKiểm tra thời gian thực\ntrên Naver Booking!`, select: '🗓️ Chọn ngày và giờ!', btn1: '📱 Đặt trên Naver', btn2: '💬 Gọi điện', noBooking: `📅 Thông tin đặt lịch\n\nĐặt lịch qua điện thoại\n\n📞 ${storePhone}\n\n━━━━━━━━━━\nBạn muốn tôi kết nối không?` },
+        mn: { msg: `📅 Боломжтой цаг шалгах\n\nNaver дээр\nцаг шалгана уу!`, select: '🗓️ Огноо, цаг сонгоно уу!', btn1: '📱 Naver захиалга', btn2: '💬 Утасны лавлагаа', noBooking: `📅 Захиалгын мэдээлэл\n\nУтсаар захиалах\n\n📞 ${storePhone}\n\n━━━━━━━━━━\nХолбох уу?` }
+      };
+      const bt = bookingTemplates[customerLang] || bookingTemplates.ko;
+      
       if (naverReservationId) {
         const bookingUrl = getNaverBookingUrl(naverReservationId);
-        let bookingMsg = '';
-        let buttonTitle1 = '';
-        let buttonTitle2 = '';
-        let selectMsg = '';
-        
-        if (customerLang === 'en') {
-          bookingMsg = `📅 Check Available Times\n\nCheck real-time availability\non Naver Booking!`;
-          selectMsg = '🗓️ Select date and time!';
-          buttonTitle1 = '📱 Book on Naver';
-          buttonTitle2 = '💬 Call Inquiry';
-        } else if (customerLang === 'zh') {
-          bookingMsg = `📅 查看可预约时间\n\n在Naver预约\n查看实时空闲时间!`;
-          selectMsg = '🗓️ 请选择日期和时间!';
-          buttonTitle1 = '📱 Naver预约';
-          buttonTitle2 = '💬 电话咨询';
-        } else if (customerLang === 'ja') {
-          bookingMsg = `📅 予約可能時間確認\n\nNaverで\nリアルタイムの空き時間を確認!`;
-          selectMsg = '🗓️ 日時を選択してください!';
-          buttonTitle1 = '📱 Naver予約';
-          buttonTitle2 = '💬 電話問い合わせ';
-        } else {
-          bookingMsg = `📅 예약 가능 시간 확인\n\n네이버 예약에서\n실시간 빈 시간을 확인하세요!`;
-          selectMsg = '🗓️ 날짜와 시간을 선택해주세요!';
-          buttonTitle1 = '📱 네이버 예약하기';
-          buttonTitle2 = '💬 전화 문의';
-        }
-        
-        await sendTextMessage(env, customerId, bookingMsg);
-        await sendButtonMessage(env, customerId, selectMsg, [
-          { type: 'LINK', title: buttonTitle1, linkUrl: bookingUrl },
-          { type: 'TEXT', title: buttonTitle2, value: '전화번호알려주세요' }
+        await sendTextMessage(env, customerId, bt.msg);
+        await sendButtonMessage(env, customerId, bt.select, [
+          { type: 'LINK', title: bt.btn1, linkUrl: bookingUrl },
+          { type: 'TEXT', title: bt.btn2, value: '전화번호알려주세요' }
         ]);
       } else {
-        let noBookingMsg = '';
-        if (customerLang === 'en') {
-          noBookingMsg = `📅 Booking Info\n\nReservations by phone\n\n📞 ${storePhone}\n\n━━━━━━━━━━\nShall I connect you?`;
-        } else if (customerLang === 'zh') {
-          noBookingMsg = `📅 预约指南\n\n可电话预约\n\n📞 ${storePhone}\n\n━━━━━━━━━━\n需要我帮您联系吗?`;
-        } else if (customerLang === 'ja') {
-          noBookingMsg = `📅 予約案内\n\nお電話で予約可能です\n\n📞 ${storePhone}\n\n━━━━━━━━━━\nお電話おつなぎしますか?`;
-        } else {
-          noBookingMsg = `📅 예약 안내\n\n예약은 전화로 가능합니다\n\n📞 ${storePhone}\n\n━━━━━━━━━━\n전화 연결해드릴까요?`;
-        }
-        await sendTextMessage(env, customerId, noBookingMsg);
+        await sendTextMessage(env, customerId, bt.noBooking);
       }
       
       const responseTime = Date.now() - startTime;
@@ -888,33 +795,19 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     }
     
     if (menuNumber === '5') {
-      // 5. 📍 매장 위치 및 전화 연결 (다국어 지원)
-      let locationResponse = '';
-      if (customerLang === 'en') {
-        locationResponse = `📍 ${storeName}\n\n` +
-          `🏠 Address\n${storeAddress}\n\n` +
-          `📞 Phone\n${storePhone}\n\n` +
-          `⏰ Hours\n${operatingHours}\n\n` +
-          `━━━━━━━━━━\nWould you like to book?`;
-      } else if (customerLang === 'zh') {
-        locationResponse = `📍 ${storeName}\n\n` +
-          `🏠 地址\n${storeAddress}\n\n` +
-          `📞 电话\n${storePhone}\n\n` +
-          `⏰ 营业时间\n${operatingHours}\n\n` +
-          `━━━━━━━━━━\n需要帮您预约吗?`;
-      } else if (customerLang === 'ja') {
-        locationResponse = `📍 ${storeName}\n\n` +
-          `🏠 住所\n${storeAddress}\n\n` +
-          `📞 電話\n${storePhone}\n\n` +
-          `⏰ 営業時間\n${operatingHours}\n\n` +
-          `━━━━━━━━━━\nご予約しますか?`;
-      } else {
-        locationResponse = `📍 ${storeName}\n\n` +
-          `🏠 주소\n${storeAddress}\n\n` +
-          `📞 전화\n${storePhone}\n\n` +
-          `⏰ 영업시간\n${operatingHours}\n\n` +
-          `━━━━━━━━━━\n방문 예약 도와드릴까요?`;
-      }
+      // 5. 📍 매장 위치 및 전화 연결 (8개국어 지원)
+      const locTemplates: Record<string, { addr: string; phone: string; hours: string; book: string }> = {
+        ko: { addr: '주소', phone: '전화', hours: '영업시간', book: '방문 예약 도와드릴까요?' },
+        en: { addr: 'Address', phone: 'Phone', hours: 'Hours', book: 'Would you like to book?' },
+        ja: { addr: '住所', phone: '電話', hours: '営業時間', book: 'ご予約しますか?' },
+        zh: { addr: '地址', phone: '电话', hours: '营业时间', book: '需要帮您预约吗?' },
+        tw: { addr: '地址', phone: '電話', hours: '營業時間', book: '需要幫您預約嗎?' },
+        th: { addr: 'ที่อยู่', phone: 'โทรศัพท์', hours: 'เวลาเปิด', book: 'ต้องการจองไหมคะ?' },
+        vi: { addr: 'Địa chỉ', phone: 'Điện thoại', hours: 'Giờ mở cửa', book: 'Bạn muốn đặt lịch không?' },
+        mn: { addr: 'Хаяг', phone: 'Утас', hours: 'Ажлын цаг', book: 'Захиалах уу?' }
+      };
+      const lt = locTemplates[customerLang] || locTemplates.ko;
+      const locationResponse = `📍 ${storeName}\n\n🏠 ${lt.addr}\n${storeAddress}\n\n📞 ${lt.phone}\n${storePhone}\n\n⏰ ${lt.hours}\n${operatingHours}\n\n━━━━━━━━━━\n${lt.book}`;
       await sendTextMessage(env, customerId, locationResponse);
       
       const responseTime = Date.now() - startTime;
