@@ -7882,6 +7882,287 @@ api.put('/templates/:id', async (c) => {
   }
 });
 
+// 템플릿 단일 조회
+api.get('/templates/:id', async (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  
+  try {
+    const template = await c.env.DB.prepare(`
+      SELECT * FROM xivix_message_templates WHERE id = ?
+    `).bind(id).first();
+
+    if (!template) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '템플릿을 찾을 수 없습니다',
+        timestamp: Date.now()
+      }, 404);
+    }
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: template,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 템플릿 삭제
+api.delete('/templates/:id', async (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  
+  try {
+    await c.env.DB.prepare(`
+      DELETE FROM xivix_message_templates WHERE id = ?
+    `).bind(id).run();
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: { deleted: id },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// AI 템플릿 생성 API
+api.post('/stores/:storeId/generate-template', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  
+  try {
+    const { prompt } = await c.req.json() as { prompt: string };
+    
+    if (!prompt) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '프롬프트를 입력해주세요',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // 매장 정보 가져오기
+    const store = await c.env.DB.prepare(`
+      SELECT store_name, business_type FROM xivix_stores WHERE id = ?
+    `).bind(storeId).first() as { store_name: string; business_type: string } | null;
+    
+    const storeName = store?.store_name || '매장';
+    const businessType = store?.business_type || 'GENERAL';
+    
+    // Gemini API로 템플릿 생성
+    const systemPrompt = `당신은 ${businessType} 업종의 고객 재방문 메시지 템플릿을 만드는 전문가입니다.
+매장명: ${storeName}
+
+다음 조건을 반드시 지키세요:
+1. 메시지는 친근하고 전문적인 톤으로 작성
+2. 이모지를 적절히 사용 (1-2개)
+3. 변수를 활용: {고객명}, {매장명}, {시술명}, {경과일}, {방문일}
+4. 50자 이상 150자 이내로 작성
+5. 마지막에 예약이나 방문을 유도하는 문구 포함
+6. 메시지만 출력하고 다른 설명은 하지 마세요
+
+사용자 요청: ${prompt}`;
+
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${c.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: systemPrompt }] }],
+          generationConfig: {
+            temperature: 0.8,
+            maxOutputTokens: 300
+          }
+        })
+      }
+    );
+
+    const geminiData = await geminiResponse.json() as {
+      candidates?: Array<{ content: { parts: Array<{ text: string }> } }>;
+      error?: { message: string };
+    };
+
+    if (geminiData.error) {
+      throw new Error(geminiData.error.message);
+    }
+
+    const template = geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+
+    if (!template) {
+      throw new Error('템플릿 생성 실패');
+    }
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: { template },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    console.error('Template generation error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '템플릿 생성 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 일괄 메시지 발송 API
+api.post('/stores/:storeId/send-bulk-message', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  
+  try {
+    const { customer_ids, template_id } = await c.req.json() as { 
+      customer_ids: number[];
+      template_id?: number;
+    };
+    
+    if (!customer_ids || customer_ids.length === 0) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '고객을 선택해주세요',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // 매장 정보 가져오기
+    const store = await c.env.DB.prepare(`
+      SELECT * FROM xivix_stores WHERE id = ?
+    `).bind(storeId).first() as any;
+    
+    if (!store) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '매장을 찾을 수 없습니다',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    // 템플릿 가져오기 (없으면 기본 템플릿)
+    let template: any;
+    if (template_id) {
+      template = await c.env.DB.prepare(`
+        SELECT * FROM xivix_message_templates WHERE id = ?
+      `).bind(template_id).first();
+    } else {
+      template = await c.env.DB.prepare(`
+        SELECT * FROM xivix_message_templates 
+        WHERE (store_id = ? OR is_default = 1) AND is_active = 1
+        ORDER BY is_default ASC
+        LIMIT 1
+      `).bind(storeId).first();
+    }
+    
+    // 기본 메시지
+    const defaultMessage = `안녕하세요 {고객명}님! ${store.store_name}입니다.\n\n{시술명} 시술 후 {경과일}일이 지났네요.\n관리가 필요하실 때 언제든 방문해주세요! 💆‍♀️`;
+    const messageTemplate = template?.message_content || defaultMessage;
+    
+    // 고객 정보 가져오기
+    const placeholders = customer_ids.map(() => '?').join(',');
+    const customers = await c.env.DB.prepare(`
+      SELECT * FROM xivix_customers WHERE id IN (${placeholders})
+    `).bind(...customer_ids).all();
+    
+    let sent = 0;
+    let failed = 0;
+    
+    // 각 고객에게 메시지 발송 (네이버 톡톡 또는 SMS)
+    for (const customer of (customers.results || []) as any[]) {
+      try {
+        // 변수 치환
+        const today = new Date();
+        const visitDate = customer.last_visit_date ? new Date(customer.last_visit_date) : new Date();
+        const daysDiff = Math.floor((today.getTime() - visitDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        const message = messageTemplate
+          .replace(/{고객명}/g, customer.customer_name || '고객')
+          .replace(/{매장명}/g, store.store_name || '매장')
+          .replace(/{시술명}/g, customer.last_service || '시술')
+          .replace(/{경과일}/g, String(daysDiff))
+          .replace(/{방문일}/g, customer.last_visit_date || '-');
+        
+        // 발송 로그 저장 (실제 발송은 톡톡 연동 시 구현)
+        await c.env.DB.prepare(`
+          INSERT INTO xivix_followup_logs (
+            store_id, customer_id, template_id, message_content, 
+            channel, status, sent_at
+          ) VALUES (?, ?, ?, ?, 'talktalk', 'sent', datetime('now'))
+        `).bind(
+          storeId,
+          customer.id,
+          template?.id || null,
+          message
+        ).run();
+        
+        sent++;
+      } catch (err) {
+        console.error('Message send error:', err);
+        failed++;
+      }
+    }
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: { sent, failed, total: customer_ids.length },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    console.error('Bulk message error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 고객 일괄 삭제 API
+api.delete('/stores/:storeId/customers/bulk-delete', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  
+  try {
+    const { customer_ids } = await c.req.json() as { customer_ids: number[] };
+    
+    if (!customer_ids || customer_ids.length === 0) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '삭제할 고객을 선택해주세요',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    const placeholders = customer_ids.map(() => '?').join(',');
+    
+    await c.env.DB.prepare(`
+      DELETE FROM xivix_customers 
+      WHERE id IN (${placeholders}) AND store_id = ?
+    `).bind(...customer_ids, storeId).run();
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: { deleted: customer_ids.length },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
 // 팔로업 로그 조회
 api.get('/stores/:storeId/followup-logs', async (c) => {
   const storeId = parseInt(c.req.param('storeId'), 10);
