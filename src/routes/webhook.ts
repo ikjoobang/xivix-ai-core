@@ -580,12 +580,19 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     const operatingHours = storeResult?.operating_hours || '영업시간 미등록';
     const naverReservationId = storeResult?.naver_reservation_id;
     
-    // KV에서 고객 언어 설정 조회
-    let customerLang = 'ko'; // 기본값: 한국어
+    // KV에서 고객 언어 설정 조회 (외국어는 명시적 선택 시에만 사용)
+    // 기본값은 항상 한국어 - 외국어로 응답하려면 반드시 언어를 선택해야 함
+    let customerLang = 'ko'; // 기본값: 한국어 (절대 변경 금지)
+    let hasExplicitLangChoice = false; // 명시적 언어 선택 여부
     if (env.KV) {
       try {
         const savedLang = await env.KV.get(`lang:${storeId}:${customerId}`);
-        if (savedLang) customerLang = savedLang;
+        if (savedLang && savedLang !== 'ko') {
+          // 외국어가 저장되어 있어도, 이번 대화에서 명시적으로 선택하지 않으면 무시
+          // hasExplicitLangChoice는 언어 선택 처리 시 true로 설정됨
+          customerLang = savedLang;
+          hasExplicitLangChoice = true;
+        }
       } catch (e) { console.warn('[Lang] KV read error:', e); }
     }
     
@@ -688,8 +695,10 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     }
 
     // ============ [메뉴 번호 선택 처리 - 다국어 지원] ============
-    // 환영 인사말의 번호(1~5)는 AI 없이 직접 처리, 저장된 언어로 응답
+    // 환영 인사말의 번호(1~5)는 AI 없이 직접 처리
+    // 중요: 명시적 언어 선택 없이는 무조건 한국어로 응답
     const menuNumber = userMessage.trim();
+    const menuLang = hasExplicitLangChoice ? customerLang : 'ko'; // 명시적 선택 없으면 한국어
     
     if (menuNumber === '1') {
       // 1. 🎁 오픈 50% 이벤트 메뉴/가격 (8개국어 지원)
@@ -703,7 +712,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         vi: `🎁 Menu giảm 50% Khai trương\n\nChảy xệ/Đàn hồi\n→ Magic Pot [40,000 won]\n\nTẩy tế bào/Tái sinh\n→ Miracle Peeling [60,000 won]\n\nXỉn màu/Làm sáng\n→ Toning Care [35,000 won]\n\nKhô/Rạng rỡ\n→ LDM Water Drop [35,000 won]\n\nDưỡng ẩm/Tỏa sáng\n→ Derma-S [30,000 won]\n\nBã nhờn/Lỗ chân lông\n→ Aqua Peeling [25,000 won]\n\n━━━━━━━━━━\nBạn muốn đặt lịch không?`,
         mn: `🎁 Нээлтийн 50% хөнгөлөлттэй меню\n\nУналт/Уян хатан\n→ Magic Pot [40,000 вон]\n\nЦэвэрлэгээ/Сэргээлт\n→ Miracle Peeling [60,000 вон]\n\nХар толбо/Гэрэлтүүлэх\n→ Toning Care [35,000 вон]\n\nХуурай/Гялбах\n→ LDM Water Drop [35,000 вон]\n\nЧийглэг/Туяалах\n→ Derma-S [30,000 вон]\n\nТос/Сүвэрхэг\n→ Aqua Peeling [25,000 вон]\n\n━━━━━━━━━━\nЦаг захиалах уу?`
       };
-      const priceResponse = priceTemplates[customerLang] || priceTemplates.ko;
+      const priceResponse = priceTemplates[menuLang] || priceTemplates.ko;
       await sendTextMessage(env, customerId, priceResponse);
       
       const responseTime = Date.now() - startTime;
@@ -728,7 +737,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         vi: `💡 Phân tích da\n\nĐể chẩn đoán chính xác:\n\n📸 Gửi [ảnh] vùng da cần tư vấn\n\n✍️ Hoặc mô tả [vấn đề] bằng văn bản\n\n━━━━━━━━━━\nChúng tôi sẽ phân tích với\n20 năm kinh nghiệm! 😊`,
         mn: `💡 Арьс шинжилгээ\n\nЗөв оношлохын тулд:\n\n📸 Санаа зовж буй хэсгийн [зураг] илгээнэ үү\n\n✍️ Эсвэл [асуудлаа] бичгээр тайлбарлана уу\n\n━━━━━━━━━━\n20 жилийн туршлагаар\nшинжлэх болно! 😊`
       };
-      const skinCheckResponse = skinTemplates[customerLang] || skinTemplates.ko;
+      const skinCheckResponse = skinTemplates[menuLang] || skinTemplates.ko;
       await sendTextMessage(env, customerId, skinCheckResponse);
       
       const responseTime = Date.now() - startTime;
@@ -753,7 +762,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         vi: `💬 Nhắn tin cho Giám đốc\n\nChúng tôi sẽ chuyển tin nhắn ngay!\n\nVui lòng để lại số liên hệ\nvà nội dung tư vấn 📝\n\n━━━━━━━━━━\nVí dụ:\n+82-10-1234-5678\nTôi muốn tư vấn về lỗ chân lông`,
         mn: `💬 Захиралд мессеж\n\nБид таны мессежийг шууд дамжуулна!\n\nХолбоо барих болон\nзөвлөгөөний дэлгэрэнгүйг үлдээнэ үү 📝\n\n━━━━━━━━━━\nЖишээ:\n+82-10-1234-5678\nСүвэрхэгийн талаар зөвлөгөө авмаар байна`
       };
-      const messageResponse = msgTemplates[customerLang] || msgTemplates.ko;
+      const messageResponse = msgTemplates[menuLang] || msgTemplates.ko;
       await sendTextMessage(env, customerId, messageResponse);
       
       const responseTime = Date.now() - startTime;
@@ -778,7 +787,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         vi: { msg: `📅 Kiểm tra giờ trống\n\nKiểm tra thời gian thực\ntrên Naver Booking!`, select: '🗓️ Chọn ngày và giờ!', btn1: '📱 Đặt trên Naver', btn2: '💬 Gọi điện', noBooking: `📅 Thông tin đặt lịch\n\nĐặt lịch qua điện thoại\n\n📞 ${storePhone}\n\n━━━━━━━━━━\nBạn muốn tôi kết nối không?` },
         mn: { msg: `📅 Боломжтой цаг шалгах\n\nNaver дээр\nцаг шалгана уу!`, select: '🗓️ Огноо, цаг сонгоно уу!', btn1: '📱 Naver захиалга', btn2: '💬 Утасны лавлагаа', noBooking: `📅 Захиалгын мэдээлэл\n\nУтсаар захиалах\n\n📞 ${storePhone}\n\n━━━━━━━━━━\nХолбох уу?` }
       };
-      const bt = bookingTemplates[customerLang] || bookingTemplates.ko;
+      const bt = bookingTemplates[menuLang] || bookingTemplates.ko;
       
       if (naverReservationId) {
         const bookingUrl = getNaverBookingUrl(naverReservationId);
@@ -813,7 +822,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         vi: { addr: 'Địa chỉ', phone: 'Điện thoại', hours: 'Giờ mở cửa', book: 'Bạn muốn đặt lịch không?' },
         mn: { addr: 'Хаяг', phone: 'Утас', hours: 'Ажлын цаг', book: 'Захиалах уу?' }
       };
-      const lt = locTemplates[customerLang] || locTemplates.ko;
+      const lt = locTemplates[menuLang] || locTemplates.ko;
       const locationResponse = `📍 ${storeName}\n\n🏠 ${lt.addr}\n${storeAddress}\n\n📞 ${lt.phone}\n${storePhone}\n\n⏰ ${lt.hours}\n${operatingHours}\n\n━━━━━━━━━━\n${lt.book}`;
       await sendTextMessage(env, customerId, locationResponse);
       
