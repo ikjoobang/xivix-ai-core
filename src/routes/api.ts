@@ -1351,6 +1351,26 @@ api.delete('/master/store/:id', async (c) => {
       'DELETE FROM xivix_notification_logs WHERE store_id = ?'
     ).bind(storeId).run();
     
+    // 2-8. 네이버 톡톡 설정 삭제
+    await c.env.DB.prepare(
+      'DELETE FROM xivix_naver_talktalk_config WHERE store_id = ?'
+    ).bind(storeId).run();
+    
+    // 2-9. 리마인더 스케줄 삭제
+    await c.env.DB.prepare(
+      'DELETE FROM xivix_reminder_schedules WHERE store_id = ?'
+    ).bind(storeId).run();
+    
+    // 2-10. 월간 리포트 삭제
+    await c.env.DB.prepare(
+      'DELETE FROM xivix_monthly_reports WHERE store_id = ?'
+    ).bind(storeId).run();
+    
+    // 2-11. 변경 요청 삭제
+    await c.env.DB.prepare(
+      'DELETE FROM xivix_change_requests WHERE store_id = ?'
+    ).bind(storeId).run();
+    
     // 3. 매장 삭제
     await c.env.DB.prepare(
       'DELETE FROM xivix_stores WHERE id = ?'
