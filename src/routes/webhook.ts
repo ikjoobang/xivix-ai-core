@@ -642,17 +642,73 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       }
     };
     
-    // 언어 감지 패턴 (8개국어 + 한국어)
+    // 언어 감지 패턴 (8개국어 + 한국어) - 한국어로 언어명 입력도 지원
     const langPatterns: Record<string, RegExp> = {
       ko: /^(ko|kr|korean|한국어|한글)$/i,
-      en: /^(en|eng|english|hi|hello|yes|thanks?|ok(ay)?|please|help|price|menu|book|i want|i need|can i|how much)/i,
-      ja: /^(jp|japanese|日本語|こんにちは|はい|お願い|ありがとう|すみません|予約|いくら)|[\u3040-\u309F\u30A0-\u30FF]/,
-      zh: /^(cn|chinese|中文|简体|你好|是的?|好的?|谢谢|请问|多少钱|价格|预约)/,
-      tw: /^(tw|繁體|繁体|台灣|台湾)|[國際學習體驗點際開關東與這個為於對說過無現]/,
-      th: /^(th|thai|ภาษาไทย|สวัสดี|ขอบคุณ|ราคา|จอง)|[\u0E00-\u0E7F]/,
-      vi: /^(vn|vietnamese|tiếng việt|xin chào|cảm ơn|giá|đặt)|[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i,
-      mn: /^(mn|mongol|монгол|сайн байна уу|баярлалаа)|[\u1800-\u18AF]/
+      en: /^(en|eng|english|영어|hi|hello|yes|thanks?|ok(ay)?|please|help)/i,
+      ja: /^(jp|japanese|日本語|일본어|일어|こんにちは|はい|お願い|ありがとう)|[\u3040-\u309F\u30A0-\u30FF]/,
+      zh: /^(cn|chinese|中文|简体|중국어|중문|你好|是的?|好的?|谢谢)/,
+      tw: /^(tw|繁體|繁体|台灣|台湾|번체|대만)/i,
+      th: /^(th|thai|ภาษาไทย|태국어|สวัสดี|ขอบคุณ)|[\u0E00-\u0E7F]/,
+      vi: /^(vn|vietnamese|tiếng việt|베트남어|xin chào|cảm ơn)/i,
+      mn: /^(mn|mongol|монгол|몽골어|сайн байна уу|баярлалаа)|[\u1800-\u18AF]/
     };
+    
+    // ============ [번역 기능] ============
+    // "영어로 번역", "일본어로 번역해줘", "translate to english" 등
+    const translatePattern = /(.+)(?:로|으로)\s*번역|translate\s+(?:to\s+)?(\w+)|(.+)(?:로|으로)\s*(?:바꿔|변환|알려)/i;
+    const translateMatch = userMessage.match(translatePattern);
+    
+    if (translateMatch) {
+      // 번역 대상 언어 감지
+      let targetLang = 'en';
+      const langKeywords: Record<string, string> = {
+        '영어': 'en', 'english': 'en', 'en': 'en',
+        '일본어': 'ja', '일어': 'ja', 'japanese': 'ja', 'jp': 'ja',
+        '중국어': 'zh', '중문': 'zh', 'chinese': 'zh', 'cn': 'zh',
+        '번체': 'tw', '대만': 'tw', 'taiwanese': 'tw', 'tw': 'tw',
+        '태국어': 'th', 'thai': 'th', 'th': 'th',
+        '베트남어': 'vi', 'vietnamese': 'vi', 'vn': 'vi',
+        '몽골어': 'mn', 'mongolian': 'mn', 'mn': 'mn',
+        '한국어': 'ko', '한글': 'ko', 'korean': 'ko', 'ko': 'ko'
+      };
+      
+      for (const [keyword, lang] of Object.entries(langKeywords)) {
+        if (userMessage.toLowerCase().includes(keyword.toLowerCase())) {
+          targetLang = lang;
+          break;
+        }
+      }
+      
+      // 번역 안내 메시지 (해당 언어로)
+      const translateGuides: Record<string, string> = {
+        ko: `🇰🇷 한국어로 변경되었습니다!\n\n원하시는 서비스를 선택해주세요:\n\n1. 🎁 50% 할인 메뉴\n2. 💡 피부 분석\n3. 💬 원장님께 메시지\n4. 📅 예약\n5. 📍 위치/연락처`,
+        en: `🇺🇸 Switched to English!\n\nPlease select:\n\n1. 🎁 50% OFF Menu\n2. 💡 Skin Analysis\n3. 💬 Message to Director\n4. 📅 Book Appointment\n5. 📍 Location & Contact`,
+        ja: `🇯🇵 日本語に変更しました!\n\n選択してください:\n\n1. 🎁 50%割引メニュー\n2. 💡 肌診断\n3. 💬 院長へメッセージ\n4. 📅 予約\n5. 📍 住所・連絡先`,
+        zh: `🇨🇳 已切换到中文!\n\n请选择:\n\n1. 🎁 50%折扣菜单\n2. 💡 皮肤分析\n3. 💬 给院长留言\n4. 📅 预约\n5. 📍 地址和联系方式`,
+        tw: `🇹🇼 已切換到繁體中文!\n\n請選擇:\n\n1. 🎁 50%折扣菜單\n2. 💡 皮膚分析\n3. 💬 給院長留言\n4. 📅 預約\n5. 📍 地址和聯繫方式`,
+        th: `🇹🇭 เปลี่ยนเป็นภาษาไทยแล้ว!\n\nกรุณาเลือก:\n\n1. 🎁 เมนูลด 50%\n2. 💡 วิเคราะห์ผิว\n3. 💬 ฝากข้อความ\n4. 📅 จองคิว\n5. 📍 ที่ตั้ง`,
+        vi: `🇻🇳 Đã chuyển sang tiếng Việt!\n\nVui lòng chọn:\n\n1. 🎁 Menu giảm 50%\n2. 💡 Phân tích da\n3. 💬 Nhắn tin\n4. 📅 Đặt lịch\n5. 📍 Địa chỉ`,
+        mn: `🇲🇳 Монгол хэл рүү шилжлээ!\n\nСонгоно уу:\n\n1. 🎁 50% хөнгөлөлт\n2. 💡 Арьс шинжилгээ\n3. 💬 Мессеж\n4. 📅 Захиалга\n5. 📍 Хаяг`
+      };
+      
+      // KV에 언어 설정 저장
+      if (env.KV) {
+        try { await env.KV.put(`lang:${storeId}:${customerId}`, targetLang, { expirationTtl: 86400 }); } 
+        catch (e) { console.warn('[Lang] KV write error:', e); }
+      }
+      
+      await sendTextMessage(env, customerId, translateGuides[targetLang] || translateGuides.en);
+      
+      const responseTime = Date.now() - startTime;
+      await env.DB.prepare(`
+        INSERT INTO xivix_conversation_logs 
+        (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
+        VALUES (?, ?, 'text', ?, ?, ?, 0)
+      `).bind(storeId, customerId, userMessage, `[translate] ${targetLang}`, responseTime).run();
+      
+      return c.json({ success: true, store_id: storeId, action: 'translate', language: targetLang });
+    }
     
     // 언어 선택 처리 (8개국어)
     let detectedLang: string | null = null;
