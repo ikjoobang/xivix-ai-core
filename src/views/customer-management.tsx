@@ -126,45 +126,77 @@ export function renderCustomerManagement(storeId: number): string {
 
   <main class="max-w-7xl mx-auto px-4 py-8">
     
-    <!-- Tab 1: 고객 등록 (복붙 영역) -->
+    <!-- Tab 1: 고객 등록 (PDF + 복붙) -->
     <div id="tab-import" class="tab-content">
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        <!-- 붙여넣기 영역 -->
-        <div class="glass rounded-2xl p-6">
-          <h2 class="text-lg font-bold flex items-center gap-2 mb-4">
-            <i class="fas fa-paste gold"></i>
-            고객 데이터 붙여넣기
-          </h2>
-          
-          <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 mb-4">
-            <p class="text-sm text-blue-400">
-              <i class="fas fa-lightbulb mr-2"></i>
-              <strong>사용법:</strong> 네이버 플레이스, CRM 프로그램에서 고객 데이터를 복사해서 아래에 붙여넣기 하세요. AI가 자동으로 정리합니다!
-            </p>
+        <!-- 왼쪽: 입력 영역 -->
+        <div class="space-y-6">
+          <!-- 네이버 예약 PDF 업로드 (추천) -->
+          <div class="glass rounded-2xl p-6">
+            <h2 class="text-lg font-bold flex items-center gap-2 mb-4">
+              <i class="fas fa-file-pdf text-red-500"></i>
+              네이버 예약 PDF 업로드
+              <span class="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full ml-2">추천</span>
+            </h2>
+            
+            <div class="bg-green-500/10 border border-green-500/30 rounded-xl p-4 mb-4">
+              <p class="text-sm text-green-400">
+                <i class="fas fa-check-circle mr-2"></i>
+                <strong>네이버 예약 관리자</strong>에서 PDF 출력 후 업로드하세요!<br>
+                <span class="text-white/60">예약자명, 전화번호, 시술명, 담당자, 금액 등 자동 추출</span>
+              </p>
+            </div>
+            
+            <!-- PDF 드래그앤드롭 영역 -->
+            <div id="pdf-drop-zone" 
+              class="border-2 border-dashed border-white/20 rounded-xl p-8 text-center cursor-pointer hover:border-green-500/50 hover:bg-green-500/5 transition-all"
+              ondragover="handleDragOver(event)"
+              ondragleave="handleDragLeave(event)"
+              ondrop="handlePdfDrop(event)"
+              onclick="document.getElementById('pdf-input').click()">
+              <i class="fas fa-cloud-upload-alt text-4xl text-white/40 mb-3"></i>
+              <p class="text-white/60">PDF 파일을 여기에 드래그하거나 클릭하세요</p>
+              <p class="text-xs text-white/40 mt-2">네이버 예약 PDF 형식 지원</p>
+              <input type="file" id="pdf-input" accept=".pdf" class="hidden" onchange="handlePdfSelect(event)">
+            </div>
+            
+            <!-- PDF 분석 상태 -->
+            <div id="pdf-status" class="hidden mt-4 p-4 bg-white/5 rounded-xl">
+              <div class="flex items-center gap-3">
+                <i id="pdf-status-icon" class="fas fa-spinner fa-spin text-yellow-400"></i>
+                <div class="flex-1">
+                  <p id="pdf-status-text" class="font-medium">PDF 분석 중...</p>
+                  <p id="pdf-status-detail" class="text-sm text-white/60"></p>
+                </div>
+              </div>
+            </div>
           </div>
           
-          <textarea id="paste-input" 
-            class="paste-area w-full px-4 py-4 bg-white/5 rounded-xl text-white resize-none focus:outline-none"
-            rows="12"
-            placeholder="여기에 고객 데이터를 붙여넣기 하세요...
+          <!-- 텍스트 복붙 영역 -->
+          <div class="glass rounded-2xl p-6">
+            <h2 class="text-lg font-bold flex items-center gap-2 mb-4">
+              <i class="fas fa-paste gold"></i>
+              또는 직접 붙여넣기
+            </h2>
+            
+            <textarea id="paste-input" 
+              class="paste-area w-full px-4 py-4 bg-white/5 rounded-xl text-white resize-none focus:outline-none"
+              rows="8"
+              placeholder="고객 데이터를 붙여넣기 하세요...
 
-예시 형식 (자유롭게 입력 가능):
-김미영 010-1234-5678 미라클필링 2024.02.03
-박서연 010-9876-5432 매직팟고주파 2024.02.01
-이지은 01055556666 토닝케어 24.1.28
-
-또는 탭/콤마로 구분된 형식:
-김미영	010-1234-5678	미라클필링	2024-02-03
-박서연,010-9876-5432,매직팟고주파,2024-02-01"></textarea>
-          
-          <div class="flex gap-3 mt-4">
-            <button onclick="parseCustomerData()" class="flex-1 py-3 btn-primary rounded-xl font-medium">
-              <i class="fas fa-magic mr-2"></i>AI로 분석하기
-            </button>
-            <button onclick="clearPasteArea()" class="px-6 py-3 btn-secondary rounded-xl">
-              <i class="fas fa-trash"></i>
-            </button>
+예시:
+김미영 010-1234-5678 여성커트 2024.02.03
+박서연 010-9876-5432 남성커트 2024.02.01"></textarea>
+            
+            <div class="flex gap-3 mt-4">
+              <button onclick="parseCustomerData()" class="flex-1 py-3 btn-primary rounded-xl font-medium">
+                <i class="fas fa-magic mr-2"></i>AI로 분석하기
+              </button>
+              <button onclick="clearPasteArea()" class="px-6 py-3 btn-secondary rounded-xl">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
           </div>
         </div>
         
@@ -296,7 +328,7 @@ export function renderCustomerManagement(storeId: number): string {
           </div>
         </div>
         
-        <!-- 고객 목록 테이블 (컴팩트) -->
+        <!-- 고객 목록 테이블 (최근 시술 확대) -->
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
@@ -304,13 +336,13 @@ export function renderCustomerManagement(storeId: number): string {
                 <th class="pb-3 pl-2 w-8">
                   <input type="checkbox" id="select-all" class="custom-checkbox" onclick="toggleSelectAll()">
                 </th>
-                <th class="pb-3 w-32">고객</th>
+                <th class="pb-3 w-24">고객</th>
                 <th class="pb-3 w-28">연락처</th>
-                <th class="pb-3">최근 시술</th>
-                <th class="pb-3 w-24">방문일</th>
-                <th class="pb-3 w-24">다음 알림</th>
-                <th class="pb-3 w-16 text-center">횟수</th>
-                <th class="pb-3 w-28 text-center">관리</th>
+                <th class="pb-3 min-w-[300px]">최근 시술</th>
+                <th class="pb-3 w-20">방문일</th>
+                <th class="pb-3 w-20">다음 알림</th>
+                <th class="pb-3 w-14 text-center">횟수</th>
+                <th class="pb-3 w-24 text-center">관리</th>
               </tr>
             </thead>
             <tbody id="customer-table-body">
@@ -621,17 +653,22 @@ export function renderCustomerManagement(storeId: number): string {
       
       container.innerHTML = customers.map((c, i) => \`
         <div class="flex items-center gap-3 p-3 bg-white/5 rounded-xl customer-row" data-index="\${i}">
-          <div class="w-8 h-8 rounded-full bg-gradient-to-r \${getCustomerColor(c.customer_name)} flex items-center justify-center text-black font-bold text-sm">
+          <div class="w-8 h-8 rounded-full bg-gradient-to-r \${getCustomerColor(c.customer_name)} flex items-center justify-center text-black font-bold text-sm flex-shrink-0">
             \${c.customer_name?.charAt(0) || '?'}
           </div>
           <div class="flex-1 min-w-0">
-            <p class="font-medium truncate">\${c.customer_name || '이름 없음'}</p>
-            <p class="text-sm text-white/60">\${c.phone || '-'} · \${c.last_service || '-'}</p>
+            <p class="font-medium">\${c.customer_name || '이름 없음'}</p>
+            <p class="text-xs text-white/60">\${c.phone || '-'}</p>
           </div>
-          <div class="text-sm text-white/60">
-            \${c.last_visit_date || '-'}
+          <div class="flex-1 min-w-0 text-sm">
+            <p class="text-white/80">\${c.last_service || '-'}</p>
+            \${c.designer ? \`<p class="text-xs text-white/50">담당: \${c.designer}</p>\` : ''}
           </div>
-          <button onclick="removeParsedCustomer(\${i})" class="text-white/40 hover:text-red-400 px-2">
+          <div class="text-right flex-shrink-0">
+            <p class="text-xs text-white/60">\${c.last_visit_date || '-'}</p>
+            \${c.price ? \`<p class="text-xs text-green-400">\${Number(c.price).toLocaleString()}원</p>\` : ''}
+          </div>
+          <button onclick="removeParsedCustomer(\${i})" class="text-white/40 hover:text-red-400 px-2 flex-shrink-0">
             <i class="fas fa-times"></i>
           </button>
         </div>
@@ -676,6 +713,88 @@ export function renderCustomerManagement(storeId: number): string {
           showToast('저장 실패: ' + (data.error || '알 수 없는 오류'), 'error');
         }
       } catch (err) {
+        showToast('네트워크 오류', 'error');
+      }
+    }
+    
+    // ========== PDF 업로드 관련 ==========
+    
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      document.getElementById('pdf-drop-zone').classList.add('border-green-500', 'bg-green-500/10');
+    }
+    
+    function handleDragLeave(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      document.getElementById('pdf-drop-zone').classList.remove('border-green-500', 'bg-green-500/10');
+    }
+    
+    function handlePdfDrop(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      document.getElementById('pdf-drop-zone').classList.remove('border-green-500', 'bg-green-500/10');
+      
+      const files = e.dataTransfer.files;
+      if (files.length > 0 && files[0].type === 'application/pdf') {
+        processPdfFile(files[0]);
+      } else {
+        showToast('PDF 파일만 업로드 가능합니다', 'error');
+      }
+    }
+    
+    function handlePdfSelect(e) {
+      const file = e.target.files[0];
+      if (file) {
+        processPdfFile(file);
+      }
+    }
+    
+    async function processPdfFile(file) {
+      const statusDiv = document.getElementById('pdf-status');
+      const statusIcon = document.getElementById('pdf-status-icon');
+      const statusText = document.getElementById('pdf-status-text');
+      const statusDetail = document.getElementById('pdf-status-detail');
+      
+      statusDiv.classList.remove('hidden');
+      statusIcon.className = 'fas fa-spinner fa-spin text-yellow-400';
+      statusText.textContent = 'PDF 업로드 중...';
+      statusDetail.textContent = file.name;
+      
+      try {
+        // FormData로 PDF 업로드
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('store_id', STORE_ID);
+        
+        const res = await fetch('/api/customers/parse-pdf', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const data = await res.json();
+        
+        if (data.success && data.data.customers) {
+          parsedCustomers = data.data.customers;
+          
+          statusIcon.className = 'fas fa-check-circle text-green-400';
+          statusText.textContent = '분석 완료!';
+          statusDetail.textContent = parsedCustomers.length + '명의 고객 정보를 추출했습니다 (이용완료: ' + (data.data.completed || 0) + '명, 취소: ' + (data.data.cancelled || 0) + '명)';
+          
+          renderParsedCustomers(parsedCustomers);
+          showToast(parsedCustomers.length + '명의 고객 정보를 분석했습니다!', 'success');
+        } else {
+          statusIcon.className = 'fas fa-times-circle text-red-400';
+          statusText.textContent = '분석 실패';
+          statusDetail.textContent = data.error || '알 수 없는 오류';
+          showToast('PDF 분석 실패', 'error');
+        }
+      } catch (err) {
+        console.error(err);
+        statusIcon.className = 'fas fa-times-circle text-red-400';
+        statusText.textContent = '업로드 실패';
+        statusDetail.textContent = '네트워크 오류가 발생했습니다';
         showToast('네트워크 오류', 'error');
       }
     }
@@ -807,8 +926,12 @@ export function renderCustomerManagement(storeId: number): string {
               </div>
             </td>
             <td class="py-2 text-white/70 text-xs">\${formatPhone(c.phone)}</td>
-            <td class="py-2 truncate max-w-[150px]" title="\${c.last_service || '-'}">
-              <span class="px-2 py-1 bg-white/10 rounded text-xs">\${c.last_service || '-'}</span>
+            <td class="py-2">
+              <div class="text-xs leading-relaxed">
+                <span class="inline-block px-2 py-1 bg-white/10 rounded mb-1">\${c.last_service || '-'}</span>
+                \${c.designer ? \`<span class="block text-white/50 text-[10px]">담당: \${c.designer}</span>\` : ''}
+                \${c.price ? \`<span class="block text-green-400/70 text-[10px]">\${Number(c.price).toLocaleString()}원</span>\` : ''}
+              </div>
             </td>
             <td class="py-2 text-white/60 text-xs">\${formatDate(c.last_visit_date)}</td>
             <td class="py-2">

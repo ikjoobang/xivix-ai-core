@@ -7552,6 +7552,154 @@ api.post('/stores/:storeId/booking/:bookingId/setup-reminders', async (c) => {
 
 // ============ 고객 관리 API ============
 
+// 네이버 예약 PDF 파싱
+api.post('/customers/parse-pdf', async (c) => {
+  try {
+    const formData = await c.req.formData();
+    const file = formData.get('file') as File;
+    const storeId = formData.get('store_id');
+    
+    if (!file) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'PDF 파일이 없습니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // PDF를 텍스트로 변환 (Gemini Vision API 사용)
+    const arrayBuffer = await file.arrayBuffer();
+    const base64Data = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    
+    // Gemini로 PDF 내용 추출 및 파싱
+    const parsePrompt = `
+이 PDF는 네이버 예약 관리자에서 출력한 예약 목록입니다.
+
+PDF에서 다음 정보를 추출해서 JSON 배열로 반환해주세요:
+- 예약자명 (customer_name)
+- 전화번호 (phone) - 마스킹되어 있으면 ******으로 표시된 부분도 포함
+- 상품명/시술명 (last_service)
+- 이용시간 (last_visit_date) - YYYY-MM-DD 형식으로 변환
+- 담당자/디자이너명 (designer) - "하린 원장", "유나 원장" 같은 정보
+- 결제금액 (price) - 숫자만
+
+반환 형식 (JSON 배열만 반환):
+[
+  {
+    "customer_name": "홍길동",
+    "phone": "******1234",
+    "last_service": "남성커트",
+    "last_visit_date": "2026-01-04",
+    "designer": "하린 원장",
+    "price": 18000,
+    "status": "이용완료"
+  }
+]
+
+규칙:
+1. "취소" 상태인 예약은 status: "취소"로 표시하고 포함해주세요
+2. "이용완료" 상태인 예약만 필터링 가능하도록 status 필드 포함
+3. 날짜 형식: 26. 1. 4.(일) → 2026-01-04
+4. 금액에서 쉼표, "원" 등 제거하고 숫자만
+5. 담당자가 "다듬다헤어(현장결제)" 같은 경우는 designer를 null로
+6. JSON 배열만 반환하고 다른 텍스트는 포함하지 마세요
+`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${c.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: parsePrompt },
+              { 
+                inline_data: { 
+                  mime_type: 'application/pdf',
+                  data: base64Data 
+                }
+              }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 8192
+          }
+        })
+      }
+    );
+
+    const result = await response.json() as any;
+    
+    if (result.error) {
+      console.error('[PDF Parse] Gemini Error:', result.error);
+      return c.json<ApiResponse>({
+        success: false,
+        error: result.error.message || 'Gemini API 오류',
+        timestamp: Date.now()
+      }, 500);
+    }
+    
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+    
+    // JSON 추출
+    let jsonStr = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    
+    // JSON 배열 부분만 추출
+    const jsonMatch = jsonStr.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      jsonStr = jsonMatch[0];
+    }
+    
+    let allCustomers = [];
+    try {
+      allCustomers = JSON.parse(jsonStr);
+    } catch (e) {
+      console.error('[PDF Parse] JSON Parse Error:', e, 'Raw:', jsonStr.substring(0, 500));
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'PDF 내용 파싱 실패. 네이버 예약 PDF인지 확인해주세요.',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // 이용완료만 필터 (취소 제외)
+    const completedCustomers = allCustomers.filter((c: any) => c.status !== '취소');
+    const cancelledCount = allCustomers.filter((c: any) => c.status === '취소').length;
+    
+    // 중복 제거 (같은 이름 + 같은 전화번호 → 가장 최근 것만)
+    const uniqueMap = new Map();
+    for (const customer of completedCustomers) {
+      const key = customer.customer_name + '_' + (customer.phone || '');
+      const existing = uniqueMap.get(key);
+      if (!existing || (customer.last_visit_date > existing.last_visit_date)) {
+        uniqueMap.set(key, customer);
+      }
+    }
+    const uniqueCustomers = Array.from(uniqueMap.values());
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: { 
+        customers: uniqueCustomers, 
+        count: uniqueCustomers.length,
+        completed: completedCustomers.length,
+        cancelled: cancelledCount,
+        total: allCustomers.length
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    console.error('[customers/parse-pdf] Error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || 'PDF 파싱 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
 // AI로 고객 데이터 파싱
 api.post('/customers/parse', async (c) => {
   try {
@@ -7658,6 +7806,8 @@ api.post('/customers/bulk', async (c) => {
         last_service?: string;
         last_visit_date?: string;
         naver_user_id?: string;
+        designer?: string;
+        price?: number;
       }>;
       followup_cycle_days: number;
     };
@@ -7686,14 +7836,20 @@ api.post('/customers/bulk', async (c) => {
         visitDate.setDate(visitDate.getDate() + followup_cycle_days);
         nextFollowupDate = visitDate.toISOString().split('T')[0];
       }
+      
+      // 메모에 담당자 및 가격 정보 저장
+      const notes = [];
+      if (customer.designer) notes.push(`담당: ${customer.designer}`);
+      if (customer.price) notes.push(`금액: ${customer.price}원`);
+      const noteStr = notes.length > 0 ? notes.join(', ') : null;
 
       try {
         await c.env.DB.prepare(`
           INSERT INTO xivix_customers (
             store_id, customer_name, phone, last_service, 
             last_visit_date, next_followup_date, followup_cycle_days,
-            naver_user_id
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            naver_user_id, notes
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           store_id,
           customer.customer_name,
@@ -7702,7 +7858,8 @@ api.post('/customers/bulk', async (c) => {
           customer.last_visit_date || null,
           nextFollowupDate,
           followup_cycle_days,
-          customer.naver_user_id || null
+          customer.naver_user_id || null,
+          noteStr
         ).run();
         inserted++;
       } catch (e) {
