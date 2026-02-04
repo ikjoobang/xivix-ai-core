@@ -6,27 +6,48 @@ import type { Env, Store, ConversationContext, GeminiMessage } from '../types';
 import { buildGeminiMessages, buildSystemInstruction, getGeminiResponse, streamGeminiResponse } from './gemini';
 import { getOpenAIResponse, buildOpenAIMessages, buildOpenAISystemPrompt, analyzeImageWithOpenAI } from './openai';
 
-// 업종별 전문 상담 필요 여부
+// 업종별 전문 상담 필요 여부 (GPT-4o + Gemini Pro 검증 사용)
+// 할루시네이션이 위험한 업종 - 정확도 최우선
 const EXPERT_BUSINESS_TYPES = [
-  'MEDICAL',           // 의료/병원
-  'PROFESSIONAL_LEGAL', // 법률/세무/보험
+  // 의료/건강
+  'MEDICAL',           // 의료/병원/치과
   'PHARMACY',          // 약국
-  'FINANCE',           // 금융
+  'POSTNATAL_CARE',    // 산후조리원 ⭐ 추가
+  'MATERNITY',         // 산부인과/산후조리
+  'MENTAL_HEALTH',     // 정신건강/상담센터
+  
+  // 법률/금융
+  'PROFESSIONAL_LEGAL', // 법률/세무/회계
+  'FINANCE',           // 금융/증권
   'INSURANCE',         // 보험
+  'REAL_ESTATE',       // 부동산 (계약 관련)
+  
+  // 교육/자격
+  'EDUCATION_CERT',    // 자격증/인허가 교육
 ];
 
 // 전문 상담 키워드 (정확도가 중요한 주제)
 const EXPERT_KEYWORDS = [
   // 의료
   '진료', '처방', '약', '증상', '질병', '수술', '치료', '보험청구', '진단',
+  '부작용', '복용', '주사', '검사', '입원', '퇴원',
+  // 산후조리원
+  '산모', '신생아', '모유수유', '산후', '출산', '진통', '분만', '제왕절개',
+  '아기', '수유', '젖병', '기저귀', '목욕', '배꼽',
   // 법률
   '계약', '법률', '소송', '분쟁', '손해배상', '변호사', '법적',
+  '위약금', '해지', '위반', '고소', '합의',
   // 보험
   '보험료', '보장', '가입', '청구', '약관', '만기', '해지', '환급',
+  '보상', '면책', '특약', '갱신',
   // 금융
   '대출', '금리', '이자', '투자', '원금', '수익률',
+  '예금', '적금', '펀드', '주식', '채권',
   // 세무
   '세금', '신고', '공제', '연말정산', '부가세', '종합소득',
+  '증여', '상속', '양도', '취득세',
+  // 부동산
+  '등기', '전세', '월세', '계약금', '중도금', '잔금',
 ];
 
 // 일반 문의 키워드 (빠른 응답 OK)

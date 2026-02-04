@@ -146,15 +146,23 @@ export function buildSystemInstruction(store?: {
 }
 
 // 모델명 매핑 (환경변수/선택값 → Gemini API 모델명)
+// 2025년 기준 최신 모델로 업그레이드 (Gemini 2.0 Flash 지원 종료 대비)
 function getGeminiModelId(modelSetting: string): string {
   const modelMap: Record<string, string> = {
-    'gemini': 'gemini-2.0-flash',              // 일반 상담 - 빠른 응답 (안정 버전)
-    'gemini-flash': 'gemini-2.0-flash',
-    'gemini-2.5-flash': 'gemini-2.0-flash',
-    'gemini-pro': 'gemini-1.5-pro',            // 전문 상담 - 정확도 우선 (안정 버전)
-    'gemini-2.5-pro': 'gemini-1.5-pro',
+    // 일반 상담 - Gemini 2.5 Flash (빠른 응답, Free Tier 지원)
+    'gemini': 'gemini-2.5-flash-preview-05-20',
+    'gemini-flash': 'gemini-2.5-flash-preview-05-20',
+    'gemini-2.5-flash': 'gemini-2.5-flash-preview-05-20',
+    
+    // 전문 상담 - Gemini 2.5 Pro (정확도 우선, 의료/법률/보험용)
+    'gemini-pro': 'gemini-2.5-pro-preview-05-06',
+    'gemini-2.5-pro': 'gemini-2.5-pro-preview-05-06',
+    
+    // 레거시 호환 (2.0 Flash → 2.5 Flash로 자동 업그레이드)
+    'gemini-2.0-flash': 'gemini-2.5-flash-preview-05-20',
+    'gemini-1.5-pro': 'gemini-2.5-pro-preview-05-06',
   };
-  return modelMap[modelSetting] || 'gemini-2.0-flash';
+  return modelMap[modelSetting] || 'gemini-2.5-flash-preview-05-20';
 }
 
 // Streaming response generator for Gemini
