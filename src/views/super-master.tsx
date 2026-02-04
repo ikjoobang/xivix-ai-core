@@ -121,9 +121,21 @@ export function renderSuperMasterDashboard(): string {
     
     <!-- Tab: 연동 대기 -->
     <div id="tab-pending" class="tab-content">
-      <div class="mb-6">
-        <h2 class="text-2xl font-bold mb-2">연동 대기 매장</h2>
-        <p class="text-white/50">버튼 하나로 AI 셋팅을 완료하세요</p>
+      <div class="mb-6 flex items-center justify-between">
+        <div>
+          <h2 class="text-2xl font-bold mb-2">연동 대기 매장</h2>
+          <p class="text-white/50">버튼 하나로 AI 셋팅을 완료하세요</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <label class="flex items-center gap-2 text-sm text-white/60 cursor-pointer">
+            <input type="checkbox" id="select-all-pending" onchange="toggleSelectAll('pending')" class="w-4 h-4 rounded">
+            전체 선택
+          </label>
+          <button onclick="bulkDeleteStores('pending')" id="bulk-delete-pending" class="px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl text-sm flex items-center gap-2 hidden">
+            <i class="fas fa-trash-alt"></i>
+            <span id="bulk-delete-pending-count">0</span>개 삭제
+          </button>
+        </div>
       </div>
       
       <div id="pending-list" class="grid gap-4">
@@ -140,6 +152,16 @@ export function renderSuperMasterDashboard(): string {
         <div>
           <h2 class="text-2xl font-bold mb-2">🤖 봇 매장 관리</h2>
           <p class="text-white/50">활성화된 AI 봇을 관리하고 기간을 설정하세요</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <label class="flex items-center gap-2 text-sm text-white/60 cursor-pointer">
+            <input type="checkbox" id="select-all-bots" onchange="toggleSelectAll('bots')" class="w-4 h-4 rounded">
+            전체 선택
+          </label>
+          <button onclick="bulkDeleteStores('bots')" id="bulk-delete-bots" class="px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl text-sm flex items-center gap-2 hidden">
+            <i class="fas fa-trash-alt"></i>
+            <span id="bulk-delete-bots-count">0</span>개 삭제
+          </button>
         </div>
       </div>
       
@@ -511,9 +533,12 @@ export function renderSuperMasterDashboard(): string {
           document.getElementById('pending-list').innerHTML = pending.map(store => {
             const ind = getIndustryInfo(store.business_type);
             return \`
-              <div class="glass rounded-2xl p-6 card-hover">
+              <div class="glass rounded-2xl p-6 card-hover" data-store-id="\${store.id}" data-store-name="\${store.store_name}" data-list-type="pending">
                 <div class="flex items-start justify-between">
                   <div class="flex items-center gap-4">
+                    <input type="checkbox" class="store-checkbox pending-checkbox w-5 h-5 rounded cursor-pointer" 
+                      data-store-id="\${store.id}" data-store-name="\${store.store_name}"
+                      onchange="updateBulkDeleteButton('pending')">
                     <div class="w-14 h-14 rounded-2xl bg-yellow-500/20 flex items-center justify-center">
                       <i class="fas \${ind.icon} text-yellow-400 text-xl"></i>
                     </div>
@@ -574,9 +599,12 @@ export function renderSuperMasterDashboard(): string {
             const isRunning = !store.bot_end_date || new Date(store.bot_end_date) >= new Date();
             
             return \`
-              <div class="glass rounded-2xl p-6 card-hover">
+              <div class="glass rounded-2xl p-6 card-hover" data-store-id="\${store.id}" data-store-name="\${store.store_name}" data-list-type="bots">
                 <div class="flex items-start justify-between">
                   <div class="flex items-center gap-4">
+                    <input type="checkbox" class="store-checkbox bots-checkbox w-5 h-5 rounded cursor-pointer" 
+                      data-store-id="\${store.id}" data-store-name="\${store.store_name}"
+                      onchange="updateBulkDeleteButton('bots')">
                     <div class="w-14 h-14 rounded-2xl \${isRunning ? 'bg-green-500/20' : 'bg-red-500/20'} flex items-center justify-center relative">
                       <i class="fas fa-robot \${isRunning ? 'text-green-400' : 'text-red-400'} text-xl"></i>
                       \${isRunning ? '<span class="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full pulse-dot"></span>' : ''}
@@ -800,6 +828,94 @@ export function renderSuperMasterDashboard(): string {
         console.error('Delete store error:', e);
         alert('네트워크 오류가 발생했습니다.');
       }
+    }
+    
+    // ========== [V2.0] 일괄 삭제 기능 ==========
+    function toggleSelectAll(listType) {
+      const selectAllCheckbox = document.getElementById('select-all-' + listType);
+      const checkboxes = document.querySelectorAll('.' + listType + '-checkbox');
+      
+      checkboxes.forEach(cb => {
+        cb.checked = selectAllCheckbox.checked;
+      });
+      
+      updateBulkDeleteButton(listType);
+    }
+    
+    function updateBulkDeleteButton(listType) {
+      const checkboxes = document.querySelectorAll('.' + listType + '-checkbox:checked');
+      const bulkDeleteBtn = document.getElementById('bulk-delete-' + listType);
+      const countSpan = document.getElementById('bulk-delete-' + listType + '-count');
+      
+      if (checkboxes.length > 0) {
+        bulkDeleteBtn.classList.remove('hidden');
+        countSpan.textContent = checkboxes.length;
+      } else {
+        bulkDeleteBtn.classList.add('hidden');
+      }
+      
+      // 전체 선택 체크박스 상태 업데이트
+      const allCheckboxes = document.querySelectorAll('.' + listType + '-checkbox');
+      const selectAllCheckbox = document.getElementById('select-all-' + listType);
+      if (selectAllCheckbox) {
+        selectAllCheckbox.checked = allCheckboxes.length > 0 && checkboxes.length === allCheckboxes.length;
+      }
+    }
+    
+    async function bulkDeleteStores(listType) {
+      const checkboxes = document.querySelectorAll('.' + listType + '-checkbox:checked');
+      const storeIds = Array.from(checkboxes).map(cb => ({
+        id: cb.dataset.storeId,
+        name: cb.dataset.storeName
+      }));
+      
+      if (storeIds.length === 0) {
+        alert('삭제할 매장을 선택해주세요.');
+        return;
+      }
+      
+      const storeNames = storeIds.map(s => s.name).join(', ');
+      const confirmed = confirm(\`\${storeIds.length}개 매장을 삭제하시겠습니까?\\n\\n삭제 대상:\\n\${storeNames}\\n\\n⚠️ 주의: 삭제 시 해당 매장의 모든 데이터가 함께 삭제됩니다.\\n이 작업은 되돌릴 수 없습니다.\`);
+      
+      if (!confirmed) return;
+      
+      const doubleConfirm = confirm(\`마지막 확인: 정말 \${storeIds.length}개 매장을 삭제합니까?\`);
+      if (!doubleConfirm) return;
+      
+      // 삭제 진행
+      let successCount = 0;
+      let failCount = 0;
+      
+      for (const store of storeIds) {
+        try {
+          const res = await fetch('/api/master/store/' + store.id, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          
+          const data = await res.json();
+          
+          if (data.success) {
+            successCount++;
+          } else {
+            failCount++;
+            console.error('Failed to delete store', store.id, data.error);
+          }
+        } catch (e) {
+          failCount++;
+          console.error('Delete error for store', store.id, e);
+        }
+      }
+      
+      alert(\`삭제 완료!\\n- 성공: \${successCount}개\\n- 실패: \${failCount}개\`);
+      
+      // 체크박스 초기화
+      document.getElementById('select-all-' + listType).checked = false;
+      
+      // 목록 새로고침
+      loadPendingStores();
+      loadBotStores();
+      loadStats();
     }
     
     // ========== 인증 관리 ==========
