@@ -580,21 +580,11 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     const operatingHours = storeResult?.operating_hours || '영업시간 미등록';
     const naverReservationId = storeResult?.naver_reservation_id;
     
-    // KV에서 고객 언어 설정 조회 (외국어는 명시적 선택 시에만 사용)
-    // 기본값은 항상 한국어 - 외국어로 응답하려면 반드시 언어를 선택해야 함
+    // ============ [언어 설정 - 한국어 기본값 강제] ============
+    // 중요: 메뉴 선택(1~5)은 무조건 한국어로 응답
+    // 외국어는 이번 대화에서 명시적으로 선택한 경우에만 사용
     let customerLang = 'ko'; // 기본값: 한국어 (절대 변경 금지)
-    let hasExplicitLangChoice = false; // 명시적 언어 선택 여부
-    if (env.KV) {
-      try {
-        const savedLang = await env.KV.get(`lang:${storeId}:${customerId}`);
-        if (savedLang && savedLang !== 'ko') {
-          // 외국어가 저장되어 있어도, 이번 대화에서 명시적으로 선택하지 않으면 무시
-          // hasExplicitLangChoice는 언어 선택 처리 시 true로 설정됨
-          customerLang = savedLang;
-          hasExplicitLangChoice = true;
-        }
-      } catch (e) { console.warn('[Lang] KV read error:', e); }
-    }
+    // KV 저장된 언어는 무시 - 매번 새로 선택해야 함
     
     // ============ [8개국어 지원 시스템] ============
     // 🇰🇷 한국어(ko) | 🇺🇸 영어(en) | 🇯🇵 일본어(ja) | 🇨🇳 중국어 간체(zh)
@@ -666,6 +656,8 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     
     // 언어 선택 처리 (8개국어)
     let detectedLang: string | null = null;
+    let hasExplicitLangChoice = false; // 이번 대화에서 명시적 언어 선택 여부
+    
     for (const [lang, pattern] of Object.entries(langPatterns)) {
       if (pattern.test(lowerMsg) || pattern.test(userMessage)) {
         detectedLang = lang;
@@ -674,6 +666,10 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     }
     
     if (detectedLang && langMenus[detectedLang]) {
+      // 명시적 언어 선택 완료
+      hasExplicitLangChoice = true;
+      customerLang = detectedLang;
+      
       // KV에 언어 설정 저장
       if (env.KV) {
         try { await env.KV.put(`lang:${storeId}:${customerId}`, detectedLang, { expirationTtl: 86400 }); } 
