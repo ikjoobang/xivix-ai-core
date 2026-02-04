@@ -6449,8 +6449,9 @@ api.post('/stores/:id/analyze-multiple-urls', async (c) => {
       }, 400);
     }
     
-    // Gemini로 종합 분석
-    const combinedContent = allContents.join('\n\n---\n\n').substring(0, 100000);
+    // Gemini로 종합 분석 (토큰 제한을 위해 30KB로 제한)
+    const combinedContent = allContents.join('\n\n---\n\n').substring(0, 30000);
+    console.log('[analyze-multiple-urls] Combined content length:', combinedContent.length);
     
     const analyzePrompt = `여러 URL에서 수집한 매장 정보입니다. 이 정보를 종합 분석해서 AI 상담원 설정에 필요한 데이터를 추출해주세요.
 
@@ -6497,27 +6498,71 @@ ${combinedContent}
     );
 
     if (!geminiRes.ok) {
+      const errorText = await geminiRes.text();
+      console.error('[analyze-multiple-urls] Gemini API Error:', geminiRes.status, errorText);
       return c.json<ApiResponse>({
         success: false,
-        error: 'AI 분석 실패',
+        error: `AI 분석 실패 (${geminiRes.status})`,
         timestamp: Date.now()
       }, 500);
     }
 
     const geminiData = await geminiRes.json() as any;
+    console.log('[analyze-multiple-urls] Gemini response received');
+    
+    // Gemini 에러 체크
+    if (geminiData.error) {
+      console.error('[analyze-multiple-urls] Gemini Error:', geminiData.error);
+      return c.json<ApiResponse>({
+        success: false,
+        error: geminiData.error.message || 'Gemini API 오류',
+        timestamp: Date.now()
+      }, 500);
+    }
+    
     const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    console.log('[analyze-multiple-urls] Raw text length:', rawText.length);
     
     // JSON 추출
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
+      console.error('[analyze-multiple-urls] JSON not found in response:', rawText.substring(0, 500));
+      
+      // 폴백: 원본 콘텐츠로 기본 결과 생성
       return c.json<ApiResponse>({
-        success: false,
-        error: 'AI 응답 파싱 실패',
+        success: true,
+        data: {
+          storeName: null,
+          businessType: 'OTHER',
+          systemPrompt: `수집된 정보:\n${combinedContent.substring(0, 5000)}`,
+          menuText: '',
+          analyzedCount,
+          rawContent: combinedContent.substring(0, 3000),
+          parseError: 'AI가 JSON 형식으로 응답하지 않았습니다. 텍스트 붙여넣기를 사용해주세요.'
+        },
         timestamp: Date.now()
-      }, 500);
+      });
     }
 
-    const result = JSON.parse(jsonMatch[0]);
+    let result;
+    try {
+      result = JSON.parse(jsonMatch[0]);
+    } catch (parseErr) {
+      console.error('[analyze-multiple-urls] JSON parse error:', parseErr);
+      return c.json<ApiResponse>({
+        success: true,
+        data: {
+          storeName: null,
+          businessType: 'OTHER',
+          systemPrompt: rawText.substring(0, 5000),
+          menuText: '',
+          analyzedCount,
+          parseError: 'JSON 파싱 실패. 텍스트 붙여넣기를 사용해주세요.'
+        },
+        timestamp: Date.now()
+      });
+    }
+    
     result.analyzedCount = analyzedCount;
 
     return c.json<ApiResponse>({
