@@ -639,40 +639,9 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         greeting_message: storeResult.greeting_message
       } : undefined);
       
-      // 짧은 메시지는 일반 응답, 긴 메시지는 스트리밍
-      if (userMessage.length < 20 && !imageBase64) {
-        aiResponse = await getGeminiResponse(env, messages, systemInstruction, 'gemini');
-        await sendTextMessage(env, customerId, aiResponse);
-      } else {
-        // 스트리밍 응답 (청크 단위 전송)
-        const chunks: string[] = [];
-        let currentChunk = '';
-        
-        for await (const text of streamGeminiResponse(env, messages, systemInstruction, 'gemini')) {
-          currentChunk += text;
-          
-          // 문장 완료 시 전송
-          if (currentChunk.includes('다.') || currentChunk.includes('요.') || 
-              currentChunk.includes('니다.') || currentChunk.includes('세요.') ||
-              currentChunk.length > 100) {
-            chunks.push(currentChunk);
-            aiResponse += currentChunk;
-            await sendTextMessage(env, customerId, currentChunk.trim());
-            currentChunk = '';
-            // 타이핑 효과를 위한 짧은 딜레이
-            await new Promise(r => setTimeout(r, 100));
-          }
-        }
-        
-        // 남은 텍스트 전송
-        if (currentChunk.trim()) {
-          chunks.push(currentChunk);
-          aiResponse += currentChunk;
-          await sendTextMessage(env, customerId, currentChunk.trim());
-        }
-        
-        aiModel = 'gemini-flash-stream';
-      }
+      // ⭐ 항상 전체 응답을 한 번에 전송 (스트리밍 제거 - 메시지 잘림 방지)
+      aiResponse = await getGeminiResponse(env, messages, systemInstruction, 'gemini');
+      await sendTextMessage(env, customerId, aiResponse);
     }
     
     // 대화 컨텍스트 저장
