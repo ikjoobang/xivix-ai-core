@@ -1344,13 +1344,27 @@ export function renderStoreSettings(storeId: number): string {
           if (result.systemPrompt) {
             document.getElementById('system-prompt').value = result.systemPrompt;
           }
+          if (result.greetingMessage) {
+            document.getElementById('greeting-message').value = result.greetingMessage;
+          }
           if (result.features && result.features.length > 0) {
             document.getElementById('ai-persona').value = result.features.join(', ');
           }
+          
+          // 메뉴 데이터 + 이벤트 정보 합쳐서 표시
+          let menuText = '';
           if (result.menuData && result.menuData.length > 0) {
-            const menuText = result.menuData.map(m => 
+            menuText = result.menuData.map(m => 
               \`\${m.name} - \${m.price}\${m.description ? ' (' + m.description + ')' : ''}\`
             ).join('\\n');
+          }
+          if (result.events && result.events.length > 0) {
+            menuText += '\\n\\n[현재 이벤트]\\n';
+            menuText += result.events.map(e => 
+              \`\${e.name}: \${e.originalPrice} → \${e.discountPrice} (\${e.discount})\`
+            ).join('\\n');
+          }
+          if (menuText) {
             document.getElementById('menu-data-text').value = menuText;
           }
           
@@ -1359,7 +1373,7 @@ export function renderStoreSettings(storeId: number): string {
           if (result.storeName) summary += \`매장명: \${result.storeName}\\n\`;
           if (result.businessType) summary += \`업종: \${result.businessType}\\n\`;
           if (result.menuData?.length) summary += \`메뉴/서비스: \${result.menuData.length}개\\n\`;
-          if (result.events?.length) summary += \`이벤트: \${result.events.length}개\\n\`;
+          if (result.events?.length) summary += \`🎉 이벤트: \${result.events.length}개\\n\`;
           
           console.log('AI 분석 결과:', result);
           showToast('✅ 프롬프트가 자동 생성되고 저장되었습니다!', 'success');
