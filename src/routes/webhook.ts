@@ -845,11 +845,13 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       
       if (naverReservationId) {
         const bookingUrl = getNaverBookingUrl(naverReservationId);
-        await sendTextMessage(env, customerId, bt.msg);
-        await sendButtonMessage(env, customerId, bt.select, [
-          { type: 'LINK', title: bt.btn1, linkUrl: bookingUrl },
-          { type: 'TEXT', title: bt.btn2, value: '전화번호알려주세요' }
-        ]);
+        // 버튼 대신 클릭 가능한 링크로 직접 전송
+        await sendTextMessage(env, customerId, 
+          `${bt.msg}\n\n` +
+          `${bt.select}\n\n` +
+          `${bt.btn1} 👇\n${bookingUrl}\n\n` +
+          `📞 ${storePhone}`
+        );
       } else {
         await sendTextMessage(env, customerId, bt.noBooking);
       }
@@ -975,39 +977,18 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       // 예약 문의 또는 가능 시간 조회 요청
       if (bookingIntent.intentType === 'check_available' || bookingIntent.intentType === 'inquiry') {
         try {
-          // 네이버 예약 ID가 있으면 바로 예약 버튼 제공
+          // 네이버 예약 ID가 있으면 바로 예약 링크 제공
           if (naverReservationId) {
             const bookingUrl = getNaverBookingUrl(naverReservationId);
             console.log(`[Webhook] Booking URL generated: ${bookingUrl}`);
             
-            // 예약 안내 메시지
-            const textResult = await sendTextMessage(env, customerId, 
+            // 예약 안내 메시지 + 클릭 가능한 링크
+            await sendTextMessage(env, customerId, 
               `📅 ${storeName} 예약 안내\n\n` +
-              `아래 버튼을 눌러 바로 예약하실 수 있어요!\n` +
-              `네이버 예약창에서 원하시는 날짜와 시술을 선택해주세요. 😊`
+              `아래 링크를 눌러 바로 예약하세요! 😊\n\n` +
+              `🗓️ 네이버 예약하기 👇\n${bookingUrl}\n\n` +
+              `📞 전화 문의: ${storePhone}`
             );
-            console.log(`[Webhook] Text message result:`, JSON.stringify(textResult));
-            
-            // 예약 버튼 전송
-            const buttonResult = await sendButtonMessage(env, customerId,
-              '🗓️ 네이버 예약창에서 빈 시간을 확인하고 바로 예약하세요!',
-              [
-                { type: 'LINK', title: '📱 네이버 예약하기', linkUrl: bookingUrl },
-                { type: 'TEXT', title: '💬 전화 문의', value: '전화번호알려주세요' }
-              ]
-            );
-            console.log(`[Webhook] Button message result:`, JSON.stringify(buttonResult));
-            
-            // 버튼 전송 실패 시 대체 메시지
-            if (!buttonResult.success) {
-              console.error(`[Webhook] Button send failed: ${buttonResult.resultCode} - ${buttonResult.resultMessage}`);
-              // 버튼 대신 링크가 포함된 텍스트 메시지 전송
-              await sendTextMessage(env, customerId,
-                `📱 네이버 예약하기\n\n` +
-                `아래 링크를 클릭하세요:\n${bookingUrl}\n\n` +
-                `전화 문의: "전화번호알려주세요"라고 입력해주세요!`
-              );
-            }
           } else {
             // 네이버 예약 ID가 없으면 안내 메시지
             await sendTextMessage(env, customerId, 
