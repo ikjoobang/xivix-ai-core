@@ -599,11 +599,21 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     const operatingHours = storeResult?.operating_hours || '영업시간 미등록';
     const naverReservationId = storeResult?.naver_reservation_id;
     
-    // ============ [언어 설정 - 한국어 기본값 강제] ============
-    // 중요: 메뉴 선택(1~5)은 무조건 한국어로 응답
-    // 외국어는 이번 대화에서 명시적으로 선택한 경우에만 사용
-    let customerLang = 'ko'; // 기본값: 한국어 (절대 변경 금지)
-    // KV 저장된 언어는 무시 - 매번 새로 선택해야 함
+    // ============ [언어 설정 - KV에서 저장된 언어 유지] ============
+    // 고객이 선택한 언어를 KV에서 읽어와서 유지
+    let customerLang = 'ko'; // 기본값: 한국어
+    
+    // KV에서 저장된 언어 읽기
+    if (env.KV) {
+      try {
+        const savedLang = await env.KV.get(`lang:${storeId}:${customerId}`);
+        if (savedLang && ['ko', 'en', 'ja', 'zh', 'tw', 'th', 'vi', 'mn'].includes(savedLang)) {
+          customerLang = savedLang;
+        }
+      } catch (e) {
+        console.warn('[Lang] KV read error:', e);
+      }
+    }
     
     // ============ [8개국어 지원 시스템] ============
     // 🇰🇷 한국어(ko) | 🇺🇸 영어(en) | 🇯🇵 일본어(ja) | 🇨🇳 중국어 간체(zh)
@@ -613,57 +623,71 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     const langMenus: Record<string, { flag: string; welcome: string; menu: string; logName: string }> = {
       ko: {
         flag: '🇰🇷',
-        welcome: `🇰🇷 ${storeName}에 오신 것을 환영합니다!\n\n✨ 오픈 기념 50% 할인!\n\n원하시는 서비스를 선택해 주세요:\n\n`,
-        menu: `1. 🎁 오픈 50% 이벤트 메뉴/가격\n2. 💡 내 피부 상태 체크\n3. 💬 원장님께 상담 메시지 남기기\n4. 📅 오늘 예약 가능한 시간 확인\n5. 📍 매장 위치 및 전화 연결\n\n번호를 입력해주세요!`,
+        welcome: `🇰🇷 ${storeName}에 오신 것을 환영합니다!\n\n✨ 첫 방문 30% 할인!\n\n원하시는 서비스를 선택해 주세요:\n\n`,
+        menu: `1. 🎁 메뉴/가격 안내\n2. 💇 스타일 상담\n3. 💬 원장님께 상담 요청\n4. 📅 예약하기\n5. 📍 매장 위치 및 전화\n\n번호를 입력해주세요!`,
         logName: '[lang] Korean'
       },
       en: {
         flag: '🇺🇸',
-        welcome: `🇺🇸 Welcome to ${storeName}!\n\n✨ 50% OFF Grand Opening!\n\nPlease select:\n\n`,
-        menu: `1. 🎁 50% OFF Menu & Prices\n2. 💡 Skin Analysis\n3. 💬 Message to Director\n4. 📅 Book Appointment\n5. 📍 Location & Contact\n\nType a number!`,
+        welcome: `🇺🇸 Welcome to ${storeName}!\n\n✨ 30% OFF First Visit!\n\nPlease select:\n\n`,
+        menu: `1. 🎁 Menu & Prices\n2. 💇 Style Consultation\n3. 💬 Message to Director\n4. 📅 Book Appointment\n5. 📍 Location & Contact\n\nType a number!`,
         logName: '[lang] English'
       },
       ja: {
         flag: '🇯🇵',
-        welcome: `🇯🇵 ${storeName}へようこそ!\n\n✨ オープン記念 50% OFF!\n\n選択してください:\n\n`,
-        menu: `1. 🎁 50%割引メニュー\n2. 💡 肌診断\n3. 💬 院長へメッセージ\n4. 📅 予約\n5. 📍 住所・連絡先\n\n番号を入力!`,
+        welcome: `🇯🇵 ${storeName}へようこそ!\n\n✨ 初回 30% OFF!\n\n選択してください:\n\n`,
+        menu: `1. 🎁 メニュー・料金\n2. 💇 スタイル相談\n3. 💬 院長へメッセージ\n4. 📅 予約\n5. 📍 住所・連絡先\n\n番号を入力!`,
         logName: '[lang] Japanese'
       },
       zh: {
         flag: '🇨🇳',
-        welcome: `🇨🇳 欢迎光临 ${storeName}!\n\n✨ 开业优惠 50% 折扣!\n\n请选择:\n\n`,
-        menu: `1. 🎁 50%折扣菜单和价格\n2. 💡 皮肤分析\n3. 💬 给院长留言\n4. 📅 预约\n5. 📍 地址和联系方式\n\n请输入数字!`,
+        welcome: `🇨🇳 欢迎光临 ${storeName}!\n\n✨ 首次 30% 优惠!\n\n请选择:\n\n`,
+        menu: `1. 🎁 菜单和价格\n2. 💇 发型咨询\n3. 💬 给院长留言\n4. 📅 预约\n5. 📍 地址和联系方式\n\n请输入数字!`,
         logName: '[lang] Chinese Simplified'
       },
       tw: {
         flag: '🇹🇼',
-        welcome: `🇹🇼 歡迎光臨 ${storeName}!\n\n✨ 開幕優惠 50% 折扣!\n\n請選擇:\n\n`,
-        menu: `1. 🎁 50%折扣菜單和價格\n2. 💡 皮膚分析\n3. 💬 給院長留言\n4. 📅 預約\n5. 📍 地址和聯繫方式\n\n請輸入數字!`,
+        welcome: `🇹🇼 歡迎光臨 ${storeName}!\n\n✨ 首次 30% 優惠!\n\n請選擇:\n\n`,
+        menu: `1. 🎁 菜單和價格\n2. 💇 髮型諮詢\n3. 💬 給院長留言\n4. 📅 預約\n5. 📍 地址和聯繫方式\n\n請輸入數字!`,
         logName: '[lang] Chinese Traditional'
       },
       th: {
         flag: '🇹🇭',
-        welcome: `🇹🇭 ยินดีต้อนรับสู่ ${storeName}!\n\n✨ ลด 50% ฉลองเปิดร้าน!\n\nกรุณาเลือก:\n\n`,
-        menu: `1. 🎁 เมนูลด 50%\n2. 💡 วิเคราะห์ผิว\n3. 💬 ฝากข้อความถึงผู้อำนวยการ\n4. 📅 จองคิว\n5. 📍 ที่ตั้งและติดต่อ\n\nพิมพ์ตัวเลข!`,
+        welcome: `🇹🇭 ยินดีต้อนรับสู่ ${storeName}!\n\n✨ ลด 30% ครั้งแรก!\n\nกรุณาเลือก:\n\n`,
+        menu: `1. 🎁 เมนูและราคา\n2. 💇 ปรึกษาทรงผม\n3. 💬 ฝากข้อความถึงผู้อำนวยการ\n4. 📅 จองคิว\n5. 📍 ที่ตั้งและติดต่อ\n\nพิมพ์ตัวเลข!`,
         logName: '[lang] Thai'
       },
       vi: {
         flag: '🇻🇳',
-        welcome: `🇻🇳 Chào mừng đến ${storeName}!\n\n✨ Giảm 50% Khai trương!\n\nVui lòng chọn:\n\n`,
-        menu: `1. 🎁 Menu giảm 50%\n2. 💡 Phân tích da\n3. 💬 Nhắn tin cho Giám đốc\n4. 📅 Đặt lịch hẹn\n5. 📍 Địa chỉ & Liên hệ\n\nNhập số!`,
+        welcome: `🇻🇳 Chào mừng đến ${storeName}!\n\n✨ Giảm 30% lần đầu!\n\nVui lòng chọn:\n\n`,
+        menu: `1. 🎁 Menu & Giá\n2. 💇 Tư vấn kiểu tóc\n3. 💬 Nhắn tin cho Giám đốc\n4. 📅 Đặt lịch hẹn\n5. 📍 Địa chỉ & Liên hệ\n\nNhập số!`,
         logName: '[lang] Vietnamese'
       },
       mn: {
         flag: '🇲🇳',
-        welcome: `🇲🇳 ${storeName}-д тавтай морил!\n\n✨ Нээлтийн 50% хөнгөлөлт!\n\nСонгоно уу:\n\n`,
-        menu: `1. 🎁 50% хөнгөлөлттэй меню\n2. 💡 Арьс шинжилгээ\n3. 💬 Захиралд мессеж\n4. 📅 Цаг захиалга\n5. 📍 Хаяг & Холбоо барих\n\nТоо оруулна уу!`,
+        welcome: `🇲🇳 ${storeName}-д тавтай морил!\n\n✨ Анх удаа 30% хөнгөлөлт!\n\nСонгоно уу:\n\n`,
+        menu: `1. 🎁 Меню & Үнэ\n2. 💇 Үсний загвар зөвлөгөө\n3. 💬 Захиралд мессеж\n4. 📅 Цаг захиалга\n5. 📍 Хаяг & Холбоо барих\n\nТоо оруулна у|!`,
         logName: '[lang] Mongolian'
       }
     };
     
     // 언어 감지 패턴 (8개국어 + 한국어) - 한국어로 언어명 입력도 지원
+    // 한국어 일반 메시지 감지 (언어 선택 목적이 아닌 일반 대화)
+    const koreanTextPattern = /[가-힣]/; // 한글 포함 여부
+    const isKoreanMessage = koreanTextPattern.test(userMessage);
+    
+    // 한국어 메시지면 언어를 한국어로 강제 설정
+    if (isKoreanMessage && customerLang !== 'ko') {
+      customerLang = 'ko';
+      // KV에도 한국어로 저장
+      if (env.KV) {
+        try { await env.KV.put(`lang:${storeId}:${customerId}`, 'ko', { expirationTtl: 86400 }); }
+        catch (e) { console.warn('[Lang] KV write error:', e); }
+      }
+    }
+    
     const langPatterns: Record<string, RegExp> = {
-      ko: /^(ko|kr|korean|한국어|한글)$/i,
+      ko: /^(ko|kr|korean|한국어|한글|안녕|반가워|처음|감사|네|예|아니)$/i,
       en: /^(en|eng|english|영어|hi|hello|yes|thanks?|ok(ay)?|please|help)/i,
       ja: /^(jp|japanese|日本語|일본어|일어|こんにちは|はい|お願い|ありがとう)|[\u3040-\u309F\u30A0-\u30FF]/,
       zh: /^(cn|chinese|中文|简体|중국어|중문|你好|是的?|好的?|谢谢)/,
@@ -701,14 +725,14 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       
       // 번역 안내 메시지 (해당 언어로)
       const translateGuides: Record<string, string> = {
-        ko: `🇰🇷 한국어로 변경되었습니다!\n\n원하시는 서비스를 선택해주세요:\n\n1. 🎁 50% 할인 메뉴\n2. 💡 피부 분석\n3. 💬 원장님께 메시지\n4. 📅 예약\n5. 📍 위치/연락처`,
-        en: `🇺🇸 Switched to English!\n\nPlease select:\n\n1. 🎁 50% OFF Menu\n2. 💡 Skin Analysis\n3. 💬 Message to Director\n4. 📅 Book Appointment\n5. 📍 Location & Contact`,
-        ja: `🇯🇵 日本語に変更しました!\n\n選択してください:\n\n1. 🎁 50%割引メニュー\n2. 💡 肌診断\n3. 💬 院長へメッセージ\n4. 📅 予約\n5. 📍 住所・連絡先`,
-        zh: `🇨🇳 已切换到中文!\n\n请选择:\n\n1. 🎁 50%折扣菜单\n2. 💡 皮肤分析\n3. 💬 给院长留言\n4. 📅 预约\n5. 📍 地址和联系方式`,
-        tw: `🇹🇼 已切換到繁體中文!\n\n請選擇:\n\n1. 🎁 50%折扣菜單\n2. 💡 皮膚分析\n3. 💬 給院長留言\n4. 📅 預約\n5. 📍 地址和聯繫方式`,
-        th: `🇹🇭 เปลี่ยนเป็นภาษาไทยแล้ว!\n\nกรุณาเลือก:\n\n1. 🎁 เมนูลด 50%\n2. 💡 วิเคราะห์ผิว\n3. 💬 ฝากข้อความ\n4. 📅 จองคิว\n5. 📍 ที่ตั้ง`,
-        vi: `🇻🇳 Đã chuyển sang tiếng Việt!\n\nVui lòng chọn:\n\n1. 🎁 Menu giảm 50%\n2. 💡 Phân tích da\n3. 💬 Nhắn tin\n4. 📅 Đặt lịch\n5. 📍 Địa chỉ`,
-        mn: `🇲🇳 Монгол хэл рүү шилжлээ!\n\nСонгоно уу:\n\n1. 🎁 50% хөнгөлөлт\n2. 💡 Арьс шинжилгээ\n3. 💬 Мессеж\n4. 📅 Захиалга\n5. 📍 Хаяг`
+        ko: `🇰🇷 한국어로 변경되었습니다!\n\n원하시는 서비스를 선택해주세요:\n\n1. 🎁 메뉴/가격 안내\n2. 💇 스타일 상담\n3. 💬 원장님께 상담 요청\n4. 📅 예약하기\n5. 📍 위치/연락처`,
+        en: `🇺🇸 Switched to English!\n\nPlease select:\n\n1. 🎁 Menu & Prices\n2. 💇 Style Consultation\n3. 💬 Message to Director\n4. 📅 Book Appointment\n5. 📍 Location & Contact`,
+        ja: `🇯🇵 日本語に変更しました!\n\n選択してください:\n\n1. 🎁 メニュー・料金\n2. 💇 スタイル相談\n3. 💬 院長へメッセージ\n4. 📅 予約\n5. 📍 住所・連絡先`,
+        zh: `🇨🇳 已切换到中文!\n\n请选择:\n\n1. 🎁 菜单和价格\n2. 💇 发型咨询\n3. 💬 给院长留言\n4. 📅 预约\n5. 📍 地址和联系方式`,
+        tw: `🇹🇼 已切換到繁體中文!\n\n請選擇:\n\n1. 🎁 菜單和價格\n2. 💇 髮型諮詢\n3. 💬 給院長留言\n4. 📅 預約\n5. 📍 地址和聯繫方式`,
+        th: `🇹🇭 เปลี่ยนเป็นภาษาไทยแล้ว!\n\nกรุณาเลือก:\n\n1. 🎁 เมนูและราคา\n2. 💇 ปรึกษาทรงผม\n3. 💬 ฝากข้อความ\n4. 📅 จองคิว\n5. 📍 ที่ตั้ง`,
+        vi: `🇻🇳 Đã chuyển sang tiếng Việt!\n\nVui lòng chọn:\n\n1. 🎁 Menu & Giá\n2. 💇 Tư vấn kiểu tóc\n3. 💬 Nhắn tin\n4. 📅 Đặt lịch\n5. 📍 Địa chỉ`,
+        mn: `🇲🇳 Монгол хэл рүү шилжлээ!\n\nСонгоно у|:\n\n1. 🎁 Меню & Үнэ\n2. 💇 Үсний загвар зөвлөгөө\n3. 💬 Мессеж\n4. 📅 Захиалга\n5. 📍 Хаяг`
       };
       
       // KV에 언어 설정 저장
@@ -767,12 +791,12 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
 
     // ============ [메뉴 번호 선택 처리 - 다국어 지원] ============
     // 환영 인사말의 번호(1~5)는 AI 없이 직접 처리
-    // 중요: 명시적 언어 선택 없이는 무조건 한국어로 응답
+    // KV에서 저장된 언어 사용 (이미 위에서 customerLang에 로드됨)
     const menuNumber = userMessage.trim();
-    const menuLang = hasExplicitLangChoice ? customerLang : 'ko'; // 명시적 선택 없으면 한국어
+    const menuLang = customerLang; // KV에서 로드된 언어 사용
     
     if (menuNumber === '1') {
-      // 1. 🎁 메뉴/가격 (DB에서 매장별 데이터 사용)
+      // 1. 🎁 메뉴/가격 (DB에서 매장별 데이터 사용, 다국어 지원)
       const storeName = storeResult?.store_name || '매장';
       const menuData = storeResult?.menu_data || '';
       const eventsData = storeResult?.events_data || '';
@@ -783,21 +807,84 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         try {
           const events = JSON.parse(eventsData);
           if (Array.isArray(events) && events.length > 0) {
-            eventText = events[0].discount_rate ? `${events[0].discount_rate} 할인` : '이벤트 진행 중';
+            eventText = events[0].discount_rate ? `${events[0].discount_rate}` : '';
           }
         } catch {
           // 이벤트 파싱 실패 시 무시
         }
       }
       
+      // 다국어 메뉴 헤더/푸터
+      const menuTexts: Record<string, { header: string; eventHeader: string; footer: string }> = {
+        ko: { header: `📋 ${storeName} 메뉴\n\n`, eventHeader: `🎁 ${eventText} 할인 메뉴\n\n`, footer: `\n\n━━━━━━━━━━\n예약 도와드릴까요?` },
+        en: { header: `📋 ${storeName} Menu\n\n`, eventHeader: `🎁 ${eventText} OFF Menu\n\n`, footer: `\n\n━━━━━━━━━━\nWould you like to book?` },
+        ja: { header: `📋 ${storeName} メニュー\n\n`, eventHeader: `🎁 ${eventText} 割引メニュー\n\n`, footer: `\n\n━━━━━━━━━━\nご予約しますか?` },
+        zh: { header: `📋 ${storeName} 菜单\n\n`, eventHeader: `🎁 ${eventText} 折扣菜单\n\n`, footer: `\n\n━━━━━━━━━━\n需要预约吗?` },
+        tw: { header: `📋 ${storeName} 菜單\n\n`, eventHeader: `🎁 ${eventText} 折扣菜單\n\n`, footer: `\n\n━━━━━━━━━━\n需要預約嗎?` },
+        th: { header: `📋 ${storeName} เมนู\n\n`, eventHeader: `🎁 ${eventText} ลดราคา\n\n`, footer: `\n\n━━━━━━━━━━\nต้องการจองไหม?` },
+        vi: { header: `📋 ${storeName} Menu\n\n`, eventHeader: `🎁 ${eventText} Giảm giá\n\n`, footer: `\n\n━━━━━━━━━━\nBạn muốn đặt lịch?` },
+        mn: { header: `📋 ${storeName} Меню\n\n`, eventHeader: `🎁 ${eventText} Хөнгөлөлт\n\n`, footer: `\n\n━━━━━━━━━━\nЗахиалга хийх үү?` }
+      };
+      
+      const langText = menuTexts[menuLang] || menuTexts.ko;
+      
       // 메뉴 데이터가 있으면 사용, 없으면 AI에게 맡김
       let priceResponse = '';
       if (menuData && menuData.trim()) {
-        const eventHeader = eventText ? `🎁 ${eventText} 메뉴\n\n` : `📋 ${storeName} 메뉴\n\n`;
-        priceResponse = eventHeader + menuData.trim() + `\n\n━━━━━━━━━━\n예약 도와드릴까요?`;
+        const header = eventText ? langText.eventHeader : langText.header;
+        
+        // 외국어인 경우 AI로 메뉴 번역
+        if (menuLang !== 'ko') {
+          const langNames: Record<string, string> = {
+            en: 'English', ja: '日本語', zh: '中文(简体)', tw: '中文(繁體)',
+            th: 'ภาษาไทย', vi: 'Tiếng Việt', mn: 'Монгол хэл'
+          };
+          const targetLang = langNames[menuLang] || 'English';
+          
+          try {
+            // Gemini로 메뉴 번역
+            const translatePrompt = `Translate this Korean hair salon menu to ${targetLang}. 
+Keep the format exactly the same (line breaks, structure).
+Keep prices in Korean Won (원).
+Only translate, do not add any extra text.
+
+Menu to translate:
+${menuData.trim()}`;
+            
+            const translatedMenu = await getGeminiResponse(
+              env,
+              [{ role: 'user', parts: [{ text: translatePrompt }] }],
+              `You are a professional translator. Translate accurately to ${targetLang}.`,
+              'gemini-2.0-flash'
+            );
+            
+            if (translatedMenu && translatedMenu.trim()) {
+              priceResponse = header + translatedMenu.trim() + langText.footer;
+            } else {
+              // 번역 실패 시 원본 사용
+              priceResponse = header + menuData.trim() + langText.footer;
+            }
+          } catch (e) {
+            console.warn('[Menu] Translation failed, using original:', e);
+            priceResponse = header + menuData.trim() + langText.footer;
+          }
+        } else {
+          // 한국어는 그대로 사용
+          priceResponse = header + menuData.trim() + langText.footer;
+        }
       } else {
-        // 메뉴 데이터가 없으면 AI 응답으로 처리
-        priceResponse = `📋 ${storeName} 메뉴/가격\n\n정확한 메뉴와 가격은 상담 후 안내드립니다.\n\n예약하시면 자세한 상담 받으실 수 있어요!\n\n━━━━━━━━━━\n예약 도와드릴까요?`;
+        // 메뉴 데이터가 없는 경우 다국어 안내
+        const noMenuTexts: Record<string, string> = {
+          ko: `📋 ${storeName} 메뉴/가격\n\n정확한 메뉴와 가격은 상담 후 안내드립니다.\n\n예약하시면 자세한 상담 받으실 수 있어요!`,
+          en: `📋 ${storeName} Menu/Prices\n\nDetailed menu and prices will be provided after consultation.\n\nBook now for detailed consultation!`,
+          ja: `📋 ${storeName} メニュー/料金\n\n詳しいメニューと料金は相談後にご案内します。\n\nご予約いただければ詳しくご相談できます!`,
+          zh: `📋 ${storeName} 菜单/价格\n\n详细菜单和价格将在咨询后提供。\n\n预约后可获得详细咨询!`,
+          tw: `📋 ${storeName} 菜單/價格\n\n詳細菜單和價格將在諮詢後提供。\n\n預約後可獲得詳細諮詢!`,
+          th: `📋 ${storeName} เมนู/ราคา\n\nเมนูและราคาจะแจ้งหลังปรึกษา\n\nจองเพื่อรับคำปรึกษาโดยละเอียด!`,
+          vi: `📋 ${storeName} Menu/Giá\n\nMenu và giá chi tiết sẽ được cung cấp sau khi tư vấn.\n\nĐặt lịch để được tư vấn chi tiết!`,
+          mn: `📋 ${storeName} Меню/Үнэ\n\nДэлгэрэнгүй меню, үнийг зөвлөгөөний дараа мэдэгдэнэ.\n\nЗахиалга хийж дэлгэрэнгүй зөвлөгөө аваарай!`
+        };
+        priceResponse = (noMenuTexts[menuLang] || noMenuTexts.ko) + langText.footer;
       }
       
       await sendTextMessage(env, customerId, priceResponse, storeId);
@@ -807,32 +894,32 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         INSERT INTO xivix_conversation_logs 
         (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
         VALUES (?, ?, 'text', ?, ?, ?, 0)
-      `).bind(storeId, customerId, '1', '[menu-1] 가격 안내', responseTime).run();
+      `).bind(storeId, customerId, '1', `[menu-1] 가격 안내 (${menuLang})`, responseTime).run();
       
-      return c.json({ success: true, store_id: storeId, menu_selected: 1 });
+      return c.json({ success: true, store_id: storeId, menu_selected: 1, language: menuLang });
     }
     
     if (menuNumber === '2') {
-      // 2. 💡 내 피부 상태 체크 (8개국어 지원)
-      const skinTemplates: Record<string, string> = {
-        ko: `💡 피부 상태 체크\n\n정확한 진단을 위해\n\n📸 고민 부위 [사진] 보내주시거나\n\n✍️ [고민]을 텍스트로 알려주세요\n\n━━━━━━━━━━\n20년 데이터 로직으로\n분석해 드릴게요! 😊`,
-        en: `💡 Skin Analysis\n\nFor accurate diagnosis:\n\n📸 Send a [photo] of your concern\n\n✍️ Or describe your [concern] in text\n\n━━━━━━━━━━\nWe'll analyze with 20 years\nof data expertise! 😊`,
-        ja: `💡 肌診断\n\n正確な診断のため:\n\n📸 お悩み部位の[写真]を送信\n\n✍️ または[お悩み]をテキストで\n\n━━━━━━━━━━\n20年のデータロジックで\n分析いたします! 😊`,
-        zh: `💡 皮肤分析\n\n为了准确诊断:\n\n📸 请发送问题部位的[照片]\n\n✍️ 或用文字描述您的[问题]\n\n━━━━━━━━━━\n我们将用20年的数据\n为您分析! 😊`,
-        tw: `💡 皮膚分析\n\n為了準確診斷:\n\n📸 請發送問題部位的[照片]\n\n✍️ 或用文字描述您的[問題]\n\n━━━━━━━━━━\n我們將用20年的數據\n為您分析! 😊`,
-        th: `💡 วิเคราะห์ผิว\n\nเพื่อการวินิจฉัยที่แม่นยำ:\n\n📸 ส่ง[รูปภาพ]บริเวณที่กังวล\n\n✍️ หรืออธิบาย[ปัญหา]เป็นข้อความ\n\n━━━━━━━━━━\nเราจะวิเคราะห์ด้วยประสบการณ์\n20 ปี! 😊`,
-        vi: `💡 Phân tích da\n\nĐể chẩn đoán chính xác:\n\n📸 Gửi [ảnh] vùng da cần tư vấn\n\n✍️ Hoặc mô tả [vấn đề] bằng văn bản\n\n━━━━━━━━━━\nChúng tôi sẽ phân tích với\n20 năm kinh nghiệm! 😊`,
-        mn: `💡 Арьс шинжилгээ\n\nЗөв оношлохын тулд:\n\n📸 Санаа зовж буй хэсгийн [зураг] илгээнэ үү\n\n✍️ Эсвэл [асуудлаа] бичгээр тайлбарлана уу\n\n━━━━━━━━━━\n20 жилийн туршлагаар\nшинжлэх болно! 😊`
+      // 2. 💇 스타일 상담 (8개국어 지원)
+      const styleTemplates: Record<string, string> = {
+        ko: `💇 스타일 상담\n\n정확한 상담을 위해\n\n📸 현재 머리 [사진] 보내주시거나\n\n✍️ 원하시는 [스타일]을 알려주세요\n\n━━━━━━━━━━\n15년 경력 전문가가\n상담해 드릴게요! 😊`,
+        en: `💇 Style Consultation\n\nFor accurate consultation:\n\n📸 Send a [photo] of your current hair\n\n✍️ Or describe your desired [style]\n\n━━━━━━━━━━\nOur expert with 15 years experience\nwill consult you! 😊`,
+        ja: `💇 スタイル相談\n\n正確な相談のため:\n\n📸 現在の髪の[写真]を送信\n\n✍️ または希望の[スタイル]を教えてください\n\n━━━━━━━━━━\n15年の経験を持つ専門家が\nご相談いたします! 😊`,
+        zh: `💇 发型咨询\n\n为了准确咨询:\n\n📸 请发送您目前头发的[照片]\n\n✍️ 或描述您想要的[发型]\n\n━━━━━━━━━━\n15年经验的专家\n为您咨询! 😊`,
+        tw: `💇 髮型諮詢\n\n為了準確諮詢:\n\n📸 請發送您目前頭髮的[照片]\n\n✍️ 或描述您想要的[髮型]\n\n━━━━━━━━━━\n15年經驗的專家\n為您諮詢! 😊`,
+        th: `💇 ปรึกษาทรงผม\n\nเพื่อการปรึกษาที่แม่นยำ:\n\n📸 ส่ง[รูปภาพ]ผมปัจจุบันของคุณ\n\n✍️ หรืออธิบาย[ทรงผม]ที่ต้องการ\n\n━━━━━━━━━━\nผู้เชี่ยวชาญ 15 ปี\nจะให้คำปรึกษา! 😊`,
+        vi: `💇 Tư vấn kiểu tóc\n\nĐể tư vấn chính xác:\n\n📸 Gửi [ảnh] tóc hiện tại của bạn\n\n✍️ Hoặc mô tả [kiểu tóc] bạn muốn\n\n━━━━━━━━━━\nChuyên gia 15 năm kinh nghiệm\nsẽ tư vấn cho bạn! 😊`,
+        mn: `💇 Загвар зөвлөгөө\n\nЗөв зөвлөгөө авахын тулд:\n\n📸 Одоогийн үсний [зураг] илгээнэ үү\n\n✍️ Эсвэл хүссэн [загвараа] тайлбарлана уу\n\n━━━━━━━━━━\n15 жилийн туршлагатай мэргэжилтэн\nзөвлөгөө өгнө! 😊`
       };
-      const skinCheckResponse = skinTemplates[menuLang] || skinTemplates.ko;
-      await sendTextMessage(env, customerId, skinCheckResponse, storeId);
+      const styleResponse = styleTemplates[menuLang] || styleTemplates.ko;
+      await sendTextMessage(env, customerId, styleResponse, storeId);
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
         INSERT INTO xivix_conversation_logs 
         (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
         VALUES (?, ?, 'text', ?, ?, ?, 0)
-      `).bind(storeId, customerId, '2', '[menu-2] 피부 체크 안내', responseTime).run();
+      `).bind(storeId, customerId, '2', '[menu-2] 스타일 상담 안내', responseTime).run();
       
       return c.json({ success: true, store_id: storeId, menu_selected: 2 });
     }
@@ -947,11 +1034,24 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       return c.json({ success: true, store_id: storeId, intent: 'location' });
     }
     
-    // 🎁 이벤트/할인 관련 키워드 (이벤트 먼저 체크)
-    if (/이벤트|할인|50%|오십|50프로|30%|삼십|프로모션|특가|혜택/.test(lowerMessage)) {
+    // 🎁 이벤트/할인 관련 키워드 (이벤트 먼저 체크) - 다국어 지원
+    if (/이벤트|할인|50%|오십|50프로|30%|삼십|프로모션|특가|혜택|event|discount|sale|promotion|offer/i.test(lowerMessage)) {
       const eventsData = storeResult?.events_data || '';
       const menuData = storeResult?.menu_data || '';
       
+      // 다국어 이벤트 텍스트
+      const eventTexts: Record<string, { header: string; footer: string; noEvent: string }> = {
+        ko: { header: `🎁 ${storeName} 이벤트\n\n`, footer: `\n\n━━━━━━━━━━\n관심 있는 이벤트가 있으시면 말씀해주세요!`, noEvent: `현재 진행 중인 이벤트 정보는 매장에 직접 문의해주세요.` },
+        en: { header: `🎁 ${storeName} Events\n\n`, footer: `\n\n━━━━━━━━━━\nLet me know if you're interested in any event!`, noEvent: `Please contact the salon directly for current event information.` },
+        ja: { header: `🎁 ${storeName} イベント\n\n`, footer: `\n\n━━━━━━━━━━\n気になるイベントがあればお知らせください!`, noEvent: `現在のイベント情報はサロンに直接お問い合わせください。` },
+        zh: { header: `🎁 ${storeName} 活动\n\n`, footer: `\n\n━━━━━━━━━━\n如有感兴趣的活动请告诉我!`, noEvent: `请直接联系沙龙了解当前活动信息。` },
+        tw: { header: `🎁 ${storeName} 活動\n\n`, footer: `\n\n━━━━━━━━━━\n如有感興趣的活動請告訴我!`, noEvent: `請直接聯繫沙龍了解當前活動資訊。` },
+        th: { header: `🎁 ${storeName} กิจกรรม\n\n`, footer: `\n\n━━━━━━━━━━\nแจ้งให้ทราบหากสนใจกิจกรรมใด!`, noEvent: `กรุณาติดต่อร้านโดยตรงสำหรับข้อมูลกิจกรรมปัจจุบัน` },
+        vi: { header: `🎁 ${storeName} Sự kiện\n\n`, footer: `\n\n━━━━━━━━━━\nHãy cho tôi biết nếu bạn quan tâm sự kiện nào!`, noEvent: `Vui lòng liên hệ trực tiếp salon để biết thông tin sự kiện hiện tại.` },
+        mn: { header: `🎁 ${storeName} Үйл явдал\n\n`, footer: `\n\n━━━━━━━━━━\nСонирхсон үйл явдал байвал хэлнэ үү!`, noEvent: `Одоогийн арга хэмжээний мэдээллийг салоноос шууд асууна уу.` }
+      };
+      
+      const eventLangText = eventTexts[customerLang] || eventTexts.ko;
       let eventResponse = '';
       
       // events_data가 있으면 이벤트 정보 표시
@@ -966,12 +1066,48 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         } catch {
           // JSON이 아니면 텍스트 그대로 사용
         }
-        eventResponse = `🎁 ${storeName} 이벤트\n\n${eventsText.trim()}\n\n━━━━━━━━━━\n관심 있는 이벤트가 있으시면 말씀해주세요!`;
+        
+        // 외국어인 경우 AI로 번역
+        if (customerLang !== 'ko') {
+          const langNames: Record<string, string> = {
+            en: 'English', ja: '日本語', zh: '中文(简体)', tw: '中文(繁體)',
+            th: 'ภาษาไทย', vi: 'Tiếng Việt', mn: 'Монгол хэл'
+          };
+          const targetLang = langNames[customerLang] || 'English';
+          
+          try {
+            const translatePrompt = `Translate this Korean hair salon event/promotion information to ${targetLang}. 
+Keep the format exactly the same (line breaks, structure).
+Keep prices in Korean Won (원).
+Only translate, do not add any extra text.
+
+Text to translate:
+${eventsText.trim()}`;
+            
+            const translatedEvents = await getGeminiResponse(
+              env,
+              [{ role: 'user', parts: [{ text: translatePrompt }] }],
+              `You are a professional translator. Translate accurately to ${targetLang}.`,
+              'gemini-2.0-flash'
+            );
+            
+            if (translatedEvents && translatedEvents.trim()) {
+              eventResponse = eventLangText.header + translatedEvents.trim() + eventLangText.footer;
+            } else {
+              eventResponse = eventLangText.header + eventsText.trim() + eventLangText.footer;
+            }
+          } catch (e) {
+            console.warn('[Event] Translation failed:', e);
+            eventResponse = eventLangText.header + eventsText.trim() + eventLangText.footer;
+          }
+        } else {
+          eventResponse = eventLangText.header + eventsText.trim() + eventLangText.footer;
+        }
       } else if (menuData && menuData.trim()) {
         // 이벤트 데이터가 없으면 메뉴 데이터 표시
-        eventResponse = `📋 ${storeName} 메뉴\n\n${menuData.trim()}\n\n━━━━━━━━━━\n현재 진행 중인 이벤트 정보는 매장에 문의해주세요!`;
+        eventResponse = `📋 ${storeName} 메뉴\n\n${menuData.trim()}\n\n━━━━━━━━━━\n${eventLangText.noEvent}`;
       } else {
-        eventResponse = `🎁 ${storeName} 이벤트 안내\n\n현재 진행 중인 이벤트 정보는 매장에 직접 문의해주세요.\n\n📞 ${storePhone}\n\n━━━━━━━━━━\n예약 도와드릴까요?`;
+        eventResponse = `🎁 ${storeName}\n\n${eventLangText.noEvent}\n\n📞 ${storePhone}`;
       }
       
       await sendTextMessage(env, customerId, eventResponse, storeId);
@@ -981,33 +1117,15 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         INSERT INTO xivix_conversation_logs 
         (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
         VALUES (?, ?, 'text', ?, ?, ?, 0)
-      `).bind(storeId, customerId, userMessage.slice(0, 100), '[keyword] 이벤트 안내', responseTime).run();
+      `).bind(storeId, customerId, userMessage.slice(0, 100), `[keyword] 이벤트 안내 (${customerLang})`, responseTime).run();
       
-      return c.json({ success: true, store_id: storeId, intent: 'event' });
+      return c.json({ success: true, store_id: storeId, intent: 'event', language: customerLang });
     }
     
-    // 💰 가격/메뉴 관련 키워드
-    if (/가격|얼마|메뉴|요금|비용|프라이스/.test(lowerMessage)) {
-      const menuData = storeResult?.menu_data || '';
-      
-      let priceResponse = '';
-      if (menuData && menuData.trim()) {
-        priceResponse = `📋 ${storeName} 메뉴\n\n${menuData.trim()}\n\n━━━━━━━━━━\n예약 도와드릴까요?`;
-      } else {
-        priceResponse = `📋 ${storeName} 메뉴/가격\n\n정확한 메뉴와 가격은 상담 후 안내드립니다.\n\n예약하시면 자세한 상담 받으실 수 있어요!\n\n━━━━━━━━━━\n예약 도와드릴까요?`;
-      }
-      
-      await sendTextMessage(env, customerId, priceResponse, storeId);
-      
-      const responseTime = Date.now() - startTime;
-      await env.DB.prepare(`
-        INSERT INTO xivix_conversation_logs 
-        (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
-        VALUES (?, ?, 'text', ?, ?, ?, 0)
-      `).bind(storeId, customerId, userMessage.slice(0, 100), '[keyword] 가격 안내', responseTime).run();
-      
-      return c.json({ success: true, store_id: storeId, intent: 'price' });
-    }
+    // 💰 가격/메뉴 관련 키워드 - AI 프롬프트로 처리하도록 변경
+    // 이전: 키워드 감지 시 메뉴판 강제 출력
+    // 변경: AI가 시스템 프롬프트에 따라 스타일 상담 + 원장님 매칭으로 응대
+    // (가격 문의도 AI가 처리하도록 아래 AI 응답 로직으로 넘김)
     
     // 영업시간 관련 키워드
     if (/영업.*시간|몇.*시|언제.*까지|오픈|마감|휴무|쉬는.*날/.test(lowerMessage)) {
@@ -1160,7 +1278,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         ai_tone: storeResult.ai_tone,
         system_prompt: storeResult.system_prompt,
         greeting_message: storeResult.greeting_message
-      } : undefined);
+      } : undefined, customerLang); // 다국어 지원을 위해 언어 전달
       
       // ⭐ 매장 설정 모델로 응답 생성 (GPT-4o, Gemini Pro, Gemini Flash)
       if (selectedModel === 'gpt-4o') {
@@ -1171,6 +1289,19 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
           console.warn('[Webhook] OpenAI API key not set, falling back to Gemini');
           aiResponse = await getGeminiResponse(env, messages, systemInstruction, 'gemini');
         } else {
+          // 다국어 지시 (GPT-4o용)
+          const gptLangInstructions: Record<string, string> = {
+            ko: '',
+            en: '\n\n## 🌐 CRITICAL: RESPOND IN ENGLISH ONLY\nYou MUST respond in English. Translate all Korean content to English. Keep prices in Korean Won (원). Menu names: Korean (English translation).',
+            ja: '\n\n## 🌐 重要: 日本語で回答\n必ず日本語で回答してください。韓国語は日本語に翻訳。価格は원のまま。',
+            zh: '\n\n## 🌐 重要: 用中文回复\n必须用中文回复。翻译韩语内容。价格保持원格式。',
+            tw: '\n\n## 🌐 重要: 用繁體中文回覆\n必須用繁體中文回覆。翻譯韓語內容。價格保持원格式。',
+            th: '\n\n## 🌐 สำคัญ: ตอบเป็นภาษาไทย\nต้องตอบเป็นภาษาไทย แปลเนื้อหาเกาหลี ราคาเก็บเป็น원',
+            vi: '\n\n## 🌐 QUAN TRỌNG: TRẢ LỜI BẰNG TIẾNG VIỆT\nPhải trả lời bằng tiếng Việt. Dịch nội dung tiếng Hàn. Giữ giá bằng 원.',
+            mn: '\n\n## 🌐 ЧУХАЛ: МОНГОЛ ХЭЛЭЭР ХАРИУЛНА УУ\nМонгол хэлээр хариулах ёстой. Солонгос агуулгыг орчуулна уу. Үнийг 원 хэлбэрээр хадгална уу.'
+          };
+          const gptLangInstruction = customerLang !== 'ko' ? (gptLangInstructions[customerLang] || gptLangInstructions.en) : '';
+          
           // storeResult 필드를 buildOpenAISystemPrompt 인터페이스에 맞게 매핑
           const openAISystemPrompt = buildOpenAISystemPrompt({
             persona: storeResult?.ai_persona || '전문 상담 AI',
@@ -1178,7 +1309,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
             storeName: storeResult?.store_name || '매장',
             menuData: storeResult?.menu_data || '',
             operatingHours: storeResult?.operating_hours || '',
-            customPrompt: storeResult?.system_prompt || '',
+            customPrompt: (gptLangInstruction + '\n\n' + (storeResult?.system_prompt || '')).trim(),
             forbiddenKeywords: storeResult?.forbidden_keywords || ''
           });
           // context가 ConversationContext 타입일 경우 messages 배열 추출 (안전하게)
@@ -1196,6 +1327,16 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         // Gemini 모델 사용 (gemini-pro 또는 gemini/gemini-flash)
         aiResponse = await getGeminiResponse(env, messages, systemInstruction, selectedModel);
       }
+      
+      // AI 응답이 null이면 재시도 또는 기본 응답
+      if (!aiResponse) {
+        console.error('[Webhook] AI response is null, retrying...');
+        aiResponse = await getGeminiResponse(env, messages, systemInstruction, 'gemini-2.5-flash');
+        if (!aiResponse) {
+          aiResponse = '죄송합니다. 잠시 후 다시 문의해주세요.';
+        }
+      }
+      
       await sendTextMessage(env, customerId, aiResponse, storeId);
     }
     
@@ -1396,7 +1537,7 @@ webhook.post('/v1/naver/callback', async (c) => {
       ai_tone: storeResult.ai_tone,
       system_prompt: storeResult.system_prompt,
       greeting_message: storeResult.greeting_message
-    } : undefined);
+    } : undefined, 'ko'); // 기본 경로는 한국어
     
     // AI 응답 생성 (스트리밍 또는 일반)
     let aiResponse = '';
@@ -1527,7 +1668,7 @@ webhook.post('/v1/test/chat', async (c) => {
       ai_tone: storeResult.ai_tone,
       system_prompt: storeResult.system_prompt,
       greeting_message: storeResult.greeting_message
-    } : undefined);
+    } : undefined, 'ko'); // API 테스트는 한국어
     
     const aiResponse = await getGeminiResponse(env, messages, systemInstruction);
     

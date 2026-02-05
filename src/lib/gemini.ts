@@ -94,11 +94,65 @@ export function buildSystemInstruction(store?: {
   ai_tone?: string;
   system_prompt?: string;
   greeting_message?: string;
-}): string {
+}, language?: string): string {
+  // 다국어 응답 지시 (언어 코드에 따라)
+  const languageInstructions: Record<string, string> = {
+    ko: '', // 한국어는 기본값이므로 추가 지시 불필요
+    en: `\n\n## 🌐 CRITICAL: RESPOND IN ENGLISH ONLY
+- You MUST respond in English for this customer
+- Translate all Korean content to English
+- Keep prices in Korean Won (원) format
+- Menu names can remain in Korean with English translation in parentheses
+- Example: "커트 (Haircut) - 18,000원"`,
+    ja: `\n\n## 🌐 重要: 日本語で回答してください
+- このお客様には必ず日本語で回答してください
+- 韓国語の内容はすべて日本語に翻訳してください
+- 価格は韓国ウォン(원)のままで大丈夫です
+- メニュー名は韓国語のまま、括弧内に日本語訳を追加
+- 例: "커트 (カット) - 18,000원"`,
+    zh: `\n\n## 🌐 重要: 请用中文回复
+- 您必须用中文回复此客户
+- 将所有韩语内容翻译成中文
+- 价格保持韩元(원)格式
+- 菜单名称可保留韩语，括号内添加中文翻译
+- 例如: "커트 (剪发) - 18,000원"`,
+    tw: `\n\n## 🌐 重要: 請用繁體中文回覆
+- 您必須用繁體中文回覆此客戶
+- 將所有韓語內容翻譯成繁體中文
+- 價格保持韓元(원)格式
+- 菜單名稱可保留韓語，括號內添加中文翻譯
+- 例如: "커트 (剪髮) - 18,000원"`,
+    th: `\n\n## 🌐 สำคัญ: ตอบเป็นภาษาไทย
+- คุณต้องตอบลูกค้าเป็นภาษาไทย
+- แปลเนื้อหาภาษาเกาหลีทั้งหมดเป็นภาษาไทย
+- ราคาเก็บเป็นวอนเกาหลี (원)
+- ชื่อเมนูสามารถเก็บเป็นภาษาเกาหลี พร้อมคำแปลในวงเล็บ
+- ตัวอย่าง: "커트 (ตัดผม) - 18,000원"`,
+    vi: `\n\n## 🌐 QUAN TRỌNG: TRẢ LỜI BẰNG TIẾNG VIỆT
+- Bạn PHẢI trả lời khách hàng bằng tiếng Việt
+- Dịch tất cả nội dung tiếng Hàn sang tiếng Việt
+- Giữ nguyên giá bằng Won Hàn Quốc (원)
+- Tên món có thể giữ tiếng Hàn, thêm bản dịch trong ngoặc
+- Ví dụ: "커트 (Cắt tóc) - 18,000원"`,
+    mn: `\n\n## 🌐 ЧУХАЛ: МОНГОЛ ХЭЛЭЭР ХАРИУЛНА УУ
+- Та энэ үйлчлүүлэгчид заавал монгол хэлээр хариулах ёстой
+- Бүх солонгос агуулгыг монгол хэл рүү орчуулна уу
+- Үнийг Солонгос вон (원) хэлбэрээр хадгална уу
+- Цэсний нэрийг солонгос хэлээр үлдээж, хаалтанд монгол орчуулга нэмнэ
+- Жишээ: "커트 (Үс засалт) - 18,000원"`
+  };
+  
+  const langInstruction = language && language !== 'ko' ? (languageInstructions[language] || languageInstructions.en) : '';
+  
   // ⭐ 매장에 커스텀 system_prompt가 있으면 그것을 최우선 사용!
   // 단, menu_data도 함께 포함하여 할루시네이션 방지
   if (store?.system_prompt) {
     let fullPrompt = store.system_prompt;
+    
+    // 다국어 지시 추가 (맨 앞에!)
+    if (langInstruction) {
+      fullPrompt = langInstruction + '\n\n' + fullPrompt;
+    }
     
     // menu_data가 있으면 기본 가격 정보로 추가 (할루시네이션 방지)
     if (store.menu_data && !store.system_prompt.includes(store.menu_data)) {
@@ -275,7 +329,7 @@ export async function getGeminiResponse(
   messages: GeminiMessage[],
   systemInstruction: string,
   modelOverride?: string  // 매장별 모델 설정 지원
-): Promise<string> {
+): Promise<string | null> {
   const apiKey = env.GEMINI_API_KEY;
   if (!apiKey) {
     return 'API 키가 설정되지 않았습니다.';
@@ -307,12 +361,34 @@ export async function getGeminiResponse(
     });
     
     if (!response.ok) {
-      console.error('Gemini API Error:', await response.text());
+      const errorText = await response.text();
+      console.error('Gemini API Error:', response.status, errorText);
       return '죄송합니다. 잠시 후 다시 시도해주세요.';
     }
     
-    const data = await response.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text || '응답을 생성할 수 없습니다.';
+    const data = await response.json() as { 
+      candidates?: { 
+        content?: { parts?: { text?: string }[] },
+        finishReason?: string,
+        safetyRatings?: any[]
+      }[],
+      promptFeedback?: { blockReason?: string }
+    };
+    
+    // 프롬프트가 차단된 경우
+    if (data?.promptFeedback?.blockReason) {
+      console.error('[Gemini] Prompt blocked:', data.promptFeedback.blockReason);
+      return null;
+    }
+    
+    // 응답이 비어있는 경우
+    const responseText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!responseText) {
+      console.error('[Gemini] Empty response. Data:', JSON.stringify(data).slice(0, 500));
+      return null;
+    }
+    
+    return responseText;
   } catch (error) {
     console.error('Gemini Error:', error);
     return '네트워크 오류가 발생했습니다.';

@@ -140,6 +140,47 @@ export function buildOpenAISystemPrompt(config: {
     forbiddenKeywords
   } = config;
 
+  // ⭐ customPrompt(매장 시스템 프롬프트)가 있으면 최우선 사용
+  // 매장에서 직접 작성한 상세 프롬프트가 있는 경우, 그것이 모든 지침의 기준이 됨
+  if (customPrompt && customPrompt.trim().length > 100) {
+    let systemPrompt = customPrompt;
+    
+    // 메뉴 데이터가 프롬프트에 없으면 추가
+    if (menuData && !systemPrompt.includes(menuData.slice(0, 50))) {
+      systemPrompt += `\n\n## 📋 메뉴/서비스 정보\n${menuData}`;
+    }
+    
+    // 금지 키워드 추가
+    if (forbiddenKeywords) {
+      systemPrompt += `\n\n## ❌ 절대 금지 키워드\n다음 표현은 절대 사용하지 마세요: ${forbiddenKeywords}`;
+    }
+    
+    // 🚨 최우선 강조 규칙 추가 (프롬프트 끝에)
+    systemPrompt += `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚨 반드시 지켜야 할 최우선 규칙 (다시 한번 강조):
+
+1. 원장님 안내 시 반드시 아래 형식 그대로 출력:
+   "1️⃣ 네이버 예약으로 바로 예약하기 → [예약링크]
+   
+   2️⃣ 원장님께 직접 상담 요청하기
+   👨 [우철 대표원장]
+   👩 [유나 원장]
+   👩 [하린 원장]
+   각 원장님들 시그니처 메뉴는 예약창에서 확인 →"
+
+2. 예약 링크는 반드시 포함: https://booking.naver.com/booking/13/bizes/262580
+
+3. 모든 응답 끝에 질문 또는 액션 유도로 마무리
+
+4. 특정 원장 1명만 추천 절대 금지 - 3명 모두 선택지로!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+    
+    return systemPrompt;
+  }
+
+  // customPrompt가 없거나 짧은 경우 기본 지침 사용
   const toneDescriptions: Record<string, string> = {
     friendly: '친근하고 따뜻한 말투로 대화하세요.',
     professional: '전문적이고 신뢰감 있는 말투로 대화하세요.',
