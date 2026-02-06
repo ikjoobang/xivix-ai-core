@@ -66,6 +66,56 @@ app.get('/favicon.ico', (c) => {
   return c.redirect('/favicon.svg', 301);
 });
 
+// ============ Health Check ============
+app.get('/health', async (c) => {
+  const startTime = Date.now();
+  
+  // DB 연결 테스트
+  let dbStatus = 'unknown';
+  let dbLatency = 0;
+  try {
+    const dbStart = Date.now();
+    await c.env.DB.prepare('SELECT 1').run();
+    dbLatency = Date.now() - dbStart;
+    dbStatus = 'healthy';
+  } catch (e) {
+    dbStatus = 'unhealthy';
+  }
+  
+  // KV 연결 테스트
+  let kvStatus = 'unknown';
+  let kvLatency = 0;
+  try {
+    const kvStart = Date.now();
+    await c.env.KV.get('health-check-test');
+    kvLatency = Date.now() - kvStart;
+    kvStatus = 'healthy';
+  } catch (e) {
+    kvStatus = 'unhealthy';
+  }
+  
+  const totalLatency = Date.now() - startTime;
+  const isHealthy = dbStatus === 'healthy' && kvStatus === 'healthy';
+  
+  return c.json({
+    status: isHealthy ? 'healthy' : 'degraded',
+    timestamp: new Date().toISOString(),
+    version: '3.0.0',
+    uptime: process.uptime ? process.uptime() : null,
+    services: {
+      database: {
+        status: dbStatus,
+        latency_ms: dbLatency
+      },
+      kv_store: {
+        status: kvStatus,
+        latency_ms: kvLatency
+      }
+    },
+    response_time_ms: totalLatency
+  }, isHealthy ? 200 : 503);
+});
+
 // ============ Routes ============
 
 // ============ [네이버 톡톡 웹훅] ============
