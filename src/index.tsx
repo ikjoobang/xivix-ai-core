@@ -16,6 +16,8 @@ import { renderStoreSettings } from './views/store-settings';
 import { renderRequestPage } from './views/request';
 import { renderCustomerManagement } from './views/customer-management';
 import { renderUnifiedAdmin } from './views/admin-unified';
+import { renderPaymentPage } from './views/payment';
+import { renderSalesAgentDashboard } from './views/sales-agent';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -23,7 +25,7 @@ const app = new Hono<{ Bindings: Env }>();
 
 // CORS for API routes
 app.use('/api/*', cors({
-  origin: ['https://xivix.kr', 'https://xivix-ai-core.pages.dev'],
+  origin: ['https://xivix.kr', 'https://xivix-ai-core.pages.dev', 'https://studioaibotbot.com', 'https://www.studioaibotbot.com'],
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
   exposeHeaders: ['X-Response-Time'],
@@ -180,6 +182,22 @@ app.get('/request', async (c) => {
 app.get('/admin/:storeId', async (c) => {
   const storeId = parseInt(c.req.param('storeId'), 10);
   return c.html(renderUnifiedAdmin(storeId));
+});
+
+// 결제 페이지
+app.get('/payment/:storeId', (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  return c.html(renderPaymentPage(storeId));
+});
+
+// 결제 닫기 (INIStdPay close callback)
+app.get('/api/payment/close', (c) => {
+  return c.html('<script>window.close();</script>');
+});
+
+// 영업사원 수수료 정산 대시보드 (마스터 전용)
+app.get('/sales', (c) => {
+  return c.html(renderSalesAgentDashboard());
 });
 
 // ============ Root & Landing ============

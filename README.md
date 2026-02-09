@@ -8,151 +8,167 @@
   <img src="https://img.shields.io/badge/AI-GPT--4o%20%2B%20Gemini%202.5-blue?style=for-the-badge" alt="AI">
   <img src="https://img.shields.io/badge/Framework-Hono-orange?style=for-the-badge" alt="Hono">
   <img src="https://img.shields.io/badge/Platform-Cloudflare-yellow?style=for-the-badge" alt="Cloudflare">
-  <img src="https://img.shields.io/badge/Version-3.0.0-green?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/Version-3.0.1-green?style=for-the-badge" alt="Version">
 </p>
 
 ---
 
-## 🌐 서비스 URL (프로덕션)
+## 서비스 URL (프로덕션)
 
 | 서비스 | URL | 설명 |
 |--------|-----|------|
-| **🏠 메인 페이지** | https://xivix-ai-core.pages.dev | 랜딩 페이지 |
-| **🔑 로그인** | https://xivix-ai-core.pages.dev/login | **마스터/사장님 로그인** |
-| **👑 마스터 대시보드** | https://xivix-ai-core.pages.dev/master | **방대표님 전용 관리** |
-| **⚙️ 통합 관리자 UI** | https://xivix-ai-core.pages.dev/admin/{storeId} | **AI/프롬프트/네이버 통합 설정** |
-| **🔗 고객 연동 페이지** | https://xivix-ai-core.pages.dev/connect | **사장님 30초 연동** |
-| **📊 대시보드** | https://xivix-ai-core.pages.dev/dashboard | 매장별 통계 |
-| **🔗 네이버 Webhook** | https://xivix-ai-core.pages.dev/v1/naver/callback/{storeId} | 톡톡 메시지 수신 |
-| **❤️ 헬스체크** | https://xivix-ai-core.pages.dev/api/system/health | 시스템 상태 |
+| **메인 (커스텀 도메인)** | https://studioaibotbot.com | 커스텀 도메인 (SSL) |
+| **메인 (Pages)** | https://xivix-ai-core.pages.dev | Cloudflare Pages |
+| **로그인** | https://studioaibotbot.com/login | 마스터/사장님 로그인 |
+| **마스터 대시보드** | https://studioaibotbot.com/master | 방대표님 전용 관리 |
+| **통합 관리자 UI** | https://studioaibotbot.com/admin/{storeId} | AI/프롬프트/네이버 통합 설정 |
+| **고객 연동 페이지** | https://studioaibotbot.com/connect | 사장님 30초 연동 |
+| **결제 페이지** | https://studioaibotbot.com/payment/{storeId} | KG이니시스 결제 |
+| **영업사원 정산** | https://studioaibotbot.com/sales | 영업사원 수수료 정산 대시보드 |
+| **네이버 Webhook** | https://studioaibotbot.com/v1/naver/callback/{storeId} | 톡톡 메시지 수신 |
+| **헬스체크** | https://studioaibotbot.com/api/health | 시스템 상태 |
 
 ---
 
-## 🆕 V3.0 신규 기능
+## V3.0.1 신규 기능 (2026-02-09)
 
-### ⚙️ 통합 관리자 대시보드 (NEW)
-- **한 화면에서 모든 설정**: AI 프롬프트, 매장 정보, AI 모델, 고급 설정 통합
-- **실시간 DB 반영**: 설정 변경 즉시 네이버 톡톡에 적용
-- **실시간 AI 테스트**: 테스트 메시지로 AI 응답 즉시 확인
-- **빠른 테스트 버튼**: 가격문의, 이벤트, 예약, 영업시간 원클릭 테스트
+### 커스텀 도메인 studioaibotbot.com (NEW)
+- **SSL 인증서 자동 발급**: Cloudflare에서 자동 관리
+- **도메인 매핑**: studioaibotbot.com + www.studioaibotbot.com
+- **결제 콜백 URL 변경**: returnUrl → https://studioaibotbot.com/api/payment/return
 
-### 🎯 12개 업종별 초정밀 프롬프트 (NEW)
+### KG이니시스 실결제 연동 (NEW)
+- **웹표준 결제(INIStdPay)**: SHA-256 서명 + mKey 생성 (Web Crypto API)
+- **결제 준비**: `/api/payment/prepare` → oid, signature, mKey, pg_params 생성
+- **2차 인증**: `/api/payment/return` → authToken 서명 → 이니시스 승인 요청
+- **결제 취소**: `/api/payment/cancel` → 이니시스 환불 API 호출
+- **결제 페이지**: `/payment/{storeId}` → INIStdPay.js 연동 UI
+- **지원 결제 유형**: 셋팅비(기본/프리미엄), 월이용료(미니~프리미엄), SMS 초과분
+- **MID**: MOI9559449 (테스트)
+- **부가세 10% 자동 계산**
+
+### 영업사원 수수료 정산 시스템 (NEW)
+- **영업사원 CRUD**: 등록/목록/상세/수정 (`/api/agents`)
+- **매장 배정**: 영업사원-매장 매핑 (`/api/agents/:id/assign-store`)
+- **월별 수수료 자동 계산**: 매월 1회 실행 (`/api/commissions/calculate`)
+  - 셋팅비 수수료율: 기본 30%
+  - 월이용료 수수료율: 기본 20%
+  - 최소 유지 매장 3개 미만 시 15%로 하향
+  - 중복 계산 방지 (period + store 기준)
+- **수수료 정산 현황**: 기간별 조회 (`/api/commissions`)
+- **개별/일괄 지급**: pending → paid 처리 (`/api/commissions/:id/pay`, `/api/commissions/bulk-pay`)
+- **수익 시뮬레이션**: 영업사원별 월간/연간 예상 수수료 (`/api/agents/:id/simulation`)
+- **전용 대시보드**: `/sales` → 3탭 (영업사원 관리 / 수수료 정산 / 수익 시뮬레이션)
+- **계좌 정보 관리**: 은행/계좌번호/예금주 등록
+
+---
+
+## V3.0 주요 기능
+
+### 통합 관리자 대시보드
+- 한 화면에서 모든 설정: AI 프롬프트, 매장 정보, AI 모델, 고급 설정 통합
+- 실시간 DB 반영: 설정 변경 즉시 네이버 톡톡에 적용
+- 실시간 AI 테스트 + 빠른 테스트 버튼
+
+### 12개 업종별 초정밀 프롬프트
 | 카테고리 | 업종 |
 |----------|------|
-| **beauty** | 💇 1인미용실, 💇‍♀️ 대형미용실, ✨ 피부관리실, 💅 네일아트 |
-| **medical** | 🦷 치과, 👶 산부인과, 🏥 산후조리원 |
-| **finance** | 🛡️ 보험설계사 |
-| **automotive** | 🚗 중고차딜러, 🚙 신차딜러 |
-| **service** | 💼 프리랜서 |
-| **food** | 🍗 치킨집 |
+| **beauty** | 1인미용실, 대형미용실, 피부관리실, 네일아트 |
+| **medical** | 치과, 산부인과, 산후조리원 |
+| **finance** | 보험설계사 |
+| **automotive** | 중고차딜러, 신차딜러 |
+| **service** | 프리랜서 |
+| **food** | 치킨집 |
 
-**각 업종별 50문항 테스트 파일 포함**: `test-questions/` 디렉토리
+### AI 모델 선택 + 프롬프트 파이프라인
+- 기본 모델: GPT-4o / 서브 모델: Gemini 2.5 Pro
+- Stage 1: GPT-4o 비정형→구조화 / Stage 2: Gemini 검증/업그레이드
 
-### 🤖 AI 모델 선택 기능 (NEW)
-- **기본 모델**: GPT-4o (고품질 응답)
-- **서브 모델**: Gemini 2.5 Pro (검증 및 대체)
-- **관리자 모드에서 선택 가능**: 매장별 AI 모델 지정
+### 요금제 & 과금 시스템
+| 요금제 | 월 이용료 | 셋팅비 | AI 한도 | SMS 한도 | SMS 초과 |
+|--------|----------|--------|---------|---------|---------|
+| 미니 | 29,000원 | 100,000원 | 500건 | 50건 | 25원 |
+| 라이트 | 49,000원 | 300,000원 | 1,000건 | 100건 | 25원 |
+| 스탠다드 | 99,000원 | 300,000원 | 5,000건 | 300건 | 20원 |
+| 프리미엄 | 198,000원 | 500,000원 | 20,000건 | 1,000건 | 15원 |
+| 다점포 | 198,000원+ | 500,000원+ | 20,000건+ | 1,000건+ | 15원 |
 
-### 🔄 프롬프트 생성 파이프라인 (NEW)
-1. **Stage 1**: GPT-4o로 비정형 텍스트 → 구조화 데이터 추출
-2. **Stage 2**: Gemini 2.5 Pro로 감정 자극형 프롬프트 검증/업그레이드
-3. **자동 메뉴/이벤트 데이터 분리**: 할루시네이션 방지
+### 수동 메시지 발송
+- 개별 발송: 사장님→고객 톡톡/SMS 직접 발송
+- 단체 발송: CRM 고객 목록 다중 선택 → 일괄 발송
+- 발송 이력 추적
 
-### 📱 네이버톡톡 연동 강화 (NEW)
-- **관리자 설정 즉시 반영**: DB 변경 → 톡톡 응답 즉시 적용
-- **AI 모델 선택**: GPT-4o (기본), Gemini Pro (서브)
-- **Webhook URL**: `https://xivix-ai-core.pages.dev/v1/naver/callback/{storeId}`
-
-### 💳 V3.0 요금제 & 과금 시스템 (NEW)
-- **5개 요금제**: 미니(29K)/라이트(49K)/스탠다드(99K)/프리미엄(149K)/다점포(149K+지점79K)
-- **요금제별 기능 분기**: plan-config.ts에 18개 기능키 매핑 (AI/다국어/CRM/통계 등)
-- **AI 대화 한도 관리**: 미니500건/라이트1000건/스탠다드5000건/프리미엄10000건
-- **SMS 포함건수**: 미니50건/라이트100건/스탠다드300건/프리미엄1000건
-- **초과 과금**: SMS 초과 시 자동 과금 (15~25원/건)
-- **사용량 대시보드**: 실시간 게이지 + 잔여 건수 표시
-
-### 📨 수동 메시지 발송 (NEW)
-- **개별 발송**: 사장님이 고객에게 직접 톡톡/SMS 발송
-- **단체 발송**: CRM 고객 목록에서 다중 선택 → 일괄 발송
-- **발송 이력**: 발송 채널/성공/실패 건수 추적
-
-### 📊 사용량 추적 시스템 (NEW)
-- **월별 자동 초기화**: 매월 1일 카운터 리셋
-- **실시간 카운트**: AI 대화/SMS/LMS/톡톡/이미지분석 별도 추적
-- **마스터 대시보드**: 전체 매장 사용량 한눈에 확인
+### 사용량 추적 시스템
+- 월별 자동 초기화 (매월 1일)
+- AI/SMS/LMS/톡톡/이미지분석 실시간 카운트
+- 마스터 대시보드 전체 매장 사용량 확인
 
 ---
 
-## 📡 V3.0 API 엔드포인트
+## V3.0 API 엔드포인트 전체
 
-### 업종 템플릿 API
-
-```bash
-# 전체 업종 템플릿 목록
-curl https://xivix-ai-core.pages.dev/api/templates/industry
-
-# 특정 업종 템플릿 조회
-curl https://xivix-ai-core.pages.dev/api/templates/industry/BEAUTY_HAIR_SMALL
-
-# 사용 가능한 업종 ID:
-# BEAUTY_HAIR_SMALL, BEAUTY_HAIR_LARGE, BEAUTY_SKIN, BEAUTY_NAIL
-# MEDICAL_DENTAL, MEDICAL_OBGYN, MEDICAL_POSTPARTUM
-# FINANCE_INSURANCE, AUTO_USED, AUTO_NEW
-# SERVICE_FREELANCER, FOOD_CHICKEN
+### 요금제 & 사용량
+```
+GET  /api/plan/:storeId         — 매장 요금제 조회
+PUT  /api/plan/:storeId         — 매장 요금제 변경
+GET  /api/usage/:storeId        — 사용량 조회
+GET  /api/usage/all/summary     — 전체 매장 사용량 (마스터)
+GET  /api/plans/list            — 요금제 목록
 ```
 
-### 프롬프트 생성 파이프라인 API
-
-```bash
-# GPT-4o → Gemini 2.5 Pro 2단계 프롬프트 생성
-curl -X POST https://xivix-ai-core.pages.dev/api/stores/{storeId}/generate-prompt-pipeline \
-  -H "Content-Type: application/json" \
-  -d '{
-    "rawText": "블로그 글 또는 스마트플레이스 정보 붙여넣기",
-    "storeName": "매장명",
-    "businessType": "BEAUTY_HAIR_SMALL"
-  }'
+### 수동 메시지 발송
+```
+POST /api/stores/:id/send-message  — 개별 메시지 발송
+POST /api/stores/:id/send-bulk     — 단체 메시지 발송
+GET  /api/stores/:id/messages      — 발송 이력
 ```
 
-### 매장 설정 API
-
-```bash
-# AI 모델 변경 (GPT-4o, gemini-pro, gemini)
-curl -X PUT https://xivix-ai-core.pages.dev/api/stores/{storeId}/settings \
-  -H "Content-Type: application/json" \
-  -d '{
-    "ai_model": "gpt-4o",
-    "system_prompt": "커스텀 프롬프트...",
-    "menu_data": "메뉴 정보...",
-    "is_active": 1
-  }'
-
-# 네이버톡톡 설정
-curl -X POST https://xivix-ai-core.pages.dev/api/stores/{storeId}/talktalk/config \
-  -H "Content-Type: application/json" \
-  -d '{
-    "partner_id": "파트너 ID",
-    "account_id": "계정 ID",
-    "access_token": "액세스 토큰"
-  }'
+### KG이니시스 결제
+```
+POST /api/payment/prepare       — 결제 준비 (SHA-256 서명 생성)
+POST /api/payment/return        — 결제 완료 콜백 (2차 인증)
+POST /api/payment/cancel        — 결제 취소 (환불)
+GET  /api/payments/:storeId     — 결제 이력
+GET  /payment/:storeId          — 결제 페이지 UI
 ```
 
-### AI 테스트 API
+### 영업사원 수수료 정산
+```
+POST /api/agents                — 영업사원 등록
+GET  /api/agents                — 영업사원 목록
+GET  /api/agents/:agentId       — 영업사원 상세 (매장+수수료 이력)
+PUT  /api/agents/:agentId       — 영업사원 수정
+POST /api/agents/:agentId/assign-store — 매장 배정
+POST /api/commissions/calculate — 월별 수수료 자동 계산
+GET  /api/commissions           — 수수료 정산 현황 (?period=YYYY-MM)
+PUT  /api/commissions/:id/pay   — 수수료 개별 지급
+POST /api/commissions/bulk-pay  — 수수료 일괄 지급
+GET  /api/agents/:agentId/simulation — 수익 시뮬레이션
+```
 
-```bash
-# AI 응답 테스트
-curl -X POST https://xivix-ai-core.pages.dev/api/chat/test \
-  -H "Content-Type: application/json" \
-  -d '{
-    "store_id": 38,
-    "message": "레이어드컷 얼마에요?",
-    "ai_model": "gpt-4o"
-  }'
+### 매장 관리 & AI 키
+```
+PUT  /api/stores/:id/ai-keys    — AI API 키 설정
+GET  /api/stores/:id/ai-keys    — AI API 키 조회 (마스킹)
+```
+
+### 업종 템플릿 & 프롬프트
+```
+GET  /api/templates/industry              — 전체 업종 목록
+GET  /api/templates/industry/:industryId  — 특정 업종 템플릿
+POST /api/stores/:id/generate-prompt-pipeline — 프롬프트 파이프라인
+```
+
+### 매장 설정 & 네이버톡톡
+```
+PUT  /api/stores/:id/settings              — 매장 설정 변경
+POST /api/stores/:id/talktalk/config       — 톡톡 연동 설정
+POST /api/chat/test                        — AI 응답 테스트
 ```
 
 ---
 
-## 📁 프로젝트 구조 (V3.0)
+## 프로젝트 구조 (V3.0.1)
 
 ```
 /home/user/webapp/
@@ -160,27 +176,30 @@ curl -X POST https://xivix-ai-core.pages.dev/api/chat/test \
 │   ├── index.tsx              # 메인 앱 엔트리 (라우팅)
 │   ├── types.ts               # TypeScript 타입 정의
 │   ├── routes/
-│   │   ├── api.ts             # REST API 엔드포인트 (10000+ 줄)
+│   │   ├── api.ts             # REST API 엔드포인트 (11600+ 줄)
 │   │   └── webhook.ts         # 네이버 톡톡 웹훅 핸들러
 │   ├── views/
-│   │   ├── admin-unified.tsx  # ⭐ V3.0 통합 관리자 UI
+│   │   ├── admin-unified.tsx  # 통합 관리자 UI
 │   │   ├── super-master.tsx   # 마스터 대시보드
+│   │   ├── payment.tsx        # KG이니시스 결제 페이지
+│   │   ├── sales-agent.tsx    # 영업사원 수수료 정산 대시보드
 │   │   ├── login.tsx          # 로그인 페이지
 │   │   └── ...
 │   └── lib/
-│       ├── industry-templates.ts # ⭐ 12개 업종 초정밀 템플릿
-│       ├── prompt-pipeline.ts # ⭐ GPT-4o → Gemini 검증 파이프라인
+│       ├── plan-config.ts     # 5개 요금제 기능 분기
+│       ├── usage-tracker.ts   # AI/SMS 사용량 추적
+│       ├── industry-templates.ts # 12개 업종 초정밀 템플릿
+│       ├── prompt-pipeline.ts # GPT-4o → Gemini 검증 파이프라인
 │       ├── ai-router.ts       # AI 모델 라우터
 │       ├── openai.ts          # OpenAI GPT-4o 연동
 │       ├── gemini.ts          # Gemini AI 연동
 │       ├── naver-talktalk.ts  # 톡톡 API 클라이언트
 │       └── ...
-├── test-questions/            # ⭐ V3.0 업종별 50문항 테스트
-│   ├── 01-beauty-hair-small.txt
-│   ├── 02-beauty-hair-large.txt
-│   ├── ...
-│   └── 12-food-chicken.txt
 ├── migrations/
+│   ├── 0001~0013             # 기존 마이그레이션
+│   ├── 0014_plan_and_usage.sql    # 요금제 + 사용량 테이블
+│   └── 0015_sales_commission.sql  # 영업사원 + 수수료 테이블
+├── test-questions/            # 업종별 50문항 테스트
 ├── wrangler.jsonc
 ├── package.json
 └── ecosystem.config.cjs
@@ -188,52 +207,55 @@ curl -X POST https://xivix-ai-core.pages.dev/api/chat/test \
 
 ---
 
-## 🎯 이벤트 데이터 예시 (다듬다헤어)
+## 데이터 아키텍처
 
-### 하린원장님 이벤트 메뉴
-| 시술 | 정가 | 이벤트가 |
-|------|------|----------|
-| 레이어드컷(여성) | 20,000원 | 15,000원 |
-| 레이어드펌 | 80,000원 | 65,000원 |
-| S컬펌 | 70,000원 | 55,000원 |
+### 핵심 테이블
+| 테이블 | 설명 |
+|--------|------|
+| `xivix_users` | 사용자 (마스터/관리자) |
+| `xivix_stores` | 매장 정보 + 요금제 + AI 설정 |
+| `xivix_conversation_logs` | AI 대화 로그 |
+| `xivix_usage_counters` | 월별 AI/SMS 사용량 |
+| `xivix_manual_messages` | 수동 메시지 발송 이력 |
+| `xivix_payments` | KG이니시스 결제 이력 |
+| `xivix_subscriptions` | 구독 관리 |
+| `xivix_agents` | 영업사원 정보 + 수수료율 |
+| `xivix_agent_stores` | 영업사원-매장 매핑 |
+| `xivix_commissions` | 수수료 정산 이력 |
 
-### 유나원장님 이벤트 메뉴
-| 시술 | 정가 | 이벤트가 |
-|------|------|----------|
-| 매직셋팅펌 | 120,000원 | 99,000원 |
-| 디지털펌 | 100,000원 | 85,000원 |
-| 염색 | 60,000원 | 50,000원 |
-
-**영업시간**: 화~일 10:00-20:00, 월요일 휴무
-
----
-
-## ✅ V3.0 구현 완료 기능
-
-### V3.0 (2026-02-04)
-- [x] **통합 관리자 대시보드** (한 화면 통합 관리)
-- [x] **12개 업종별 초정밀 프롬프트** (각 50문항 테스트)
-- [x] **GPT-4o → Gemini 2.5 Pro 검증 파이프라인**
-- [x] **관리자 모드 AI 모델 선택** (GPT-4o/Gemini)
-- [x] **실시간 DB 반영** (설정 즉시 적용)
-- [x] **네이버톡톡 통합 연동**
-
-### V2.0 (2026-02-02)
-- [x] 마스터/사장님 로그인 인증 시스템
-- [x] 네이버 톡톡 메시지 발송 API
-- [x] 예약 알림 자동 발송 (리마인더)
-- [x] 월간 수익 리포트 생성
-- [x] 네이버 예약 API 연동
-- [x] 20개 업종 템플릿
-
-### V1.0 (기존)
-- [x] Zero-Touch Onboarding
-- [x] Gemini 2.5 Flash AI 상담
-- [x] 할루시네이션 가드
+### 스토리지 서비스
+- **D1 Database**: 모든 관계형 데이터 (15개 마이그레이션)
+- **KV Storage**: 대화 컨텍스트 캐시
+- **R2 Storage**: 이미지/파일 저장
 
 ---
 
-## 🔧 기술 스택
+## 구현 현황
+
+### 완료 (V3.0.1 기준)
+- [x] 통합 관리자 대시보드
+- [x] 12개 업종별 초정밀 프롬프트
+- [x] GPT-4o → Gemini 2.5 Pro 파이프라인
+- [x] AI 모델 선택 (GPT-4o/Gemini)
+- [x] 요금제별 기능 분기 (5개 플랜 × 18개 기능키)
+- [x] AI/SMS 사용량 추적 (월별 카운터)
+- [x] 수동 메시지 발송 (개별/단체)
+- [x] KG이니시스 결제 연동 (서명/결제/콜백/취소)
+- [x] 영업사원 수수료 정산 시스템 (CRUD/계산/지급/시뮬레이션)
+- [x] 커스텀 도메인 studioaibotbot.com (SSL)
+- [x] 프로덕션 D1 마이그레이션 15개 전체 적용
+
+### 미구현/추후
+- [ ] 다점포 통합 대시보드
+- [ ] 다점포 과금 체계
+- [ ] 전담매니저 시스템
+- [ ] KG이니시스 실서비스 MID 전환 (테스트→상용)
+- [ ] 자동 결제 (정기 구독)
+- [ ] 매출/예약 통계 대시보드
+
+---
+
+## 기술 스택
 
 | 구분 | 기술 |
 |------|------|
@@ -243,24 +265,27 @@ curl -X POST https://xivix-ai-core.pages.dev/api/chat/test \
 | **Database** | Cloudflare D1 (SQLite) |
 | **Cache** | Cloudflare KV |
 | **Storage** | Cloudflare R2 |
+| **Payment** | KG이니시스 (INIStdPay 웹표준) |
 | **Notification** | Solapi (KakaoTalk/SMS) |
 | **Frontend** | TailwindCSS CDN + Vanilla JS |
+| **Domain** | studioaibotbot.com (Cloudflare DNS + SSL) |
 
 ---
 
-## 🔐 보안 주의사항
+## 보안 주의사항
 
-- **토큰/키는 비공개 저장**: 환경변수 또는 Cloudflare Secrets 사용
-- **민감 정보 노출 금지**: 코드/로그에 API 키 직접 기재 금지
-- **접근 관리**: 마스터 계정만 전체 관리 가능
-
----
-
-## 📝 라이선스
-
-© 2026 XIVIX. All rights reserved.
+- 토큰/키는 비공개 저장: 환경변수 또는 Cloudflare Secrets 사용
+- 민감 정보 노출 금지: 코드/로그에 API 키 직접 기재 금지
+- 접근 관리: 마스터 계정만 전체 관리 가능
+- 결제 MID/SignKey는 Cloudflare Secrets로 관리 권장
 
 ---
 
-**Last Updated**: 2026-02-04  
-**Version**: 3.0.0 (Unified Admin + 12 Industries + AI Model Selection + Prompt Pipeline)
+## 라이선스
+
+(c) 2026 XIVIX. All rights reserved.
+
+---
+
+**Last Updated**: 2026-02-09  
+**Version**: 3.0.1 (커스텀 도메인 + KG이니시스 결제 + 영업사원 수수료 정산)

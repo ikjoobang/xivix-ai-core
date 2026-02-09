@@ -10982,13 +10982,16 @@ api.get('/stores/:storeId/messages', async (c) => {
 // [V3.0] KG이니시스 결제 API
 // ============================================================================
 
-// [V3.0-9] 결제 요청 준비 (PC/Mobile 공통)
+// [V3.0-9] 결제 요청 준비 (PC/Mobile 공통) — KG이니시스 웹표준 결제
 api.post('/payment/prepare', async (c) => {
-  const { store_id, payment_type, amount, description } = await c.req.json() as {
+  const { store_id, payment_type, amount, description, buyer_name, buyer_email, buyer_tel } = await c.req.json() as {
     store_id: number;
     payment_type: 'setup' | 'monthly' | 'sms_extra';
     amount: number;
     description?: string;
+    buyer_name?: string;
+    buyer_email?: string;
+    buyer_tel?: string;
   };
   
   if (!store_id || !payment_type || !amount) {
@@ -11006,40 +11009,61 @@ api.post('/payment/prepare', async (c) => {
   const vatAmount = Math.round(amount * 0.1);
   const totalAmount = amount + vatAmount;
   const oid = `XIVIX_${store_id}_${payment_type}_${Date.now()}`;
+  const mid = 'MOI9559449';
+  const goodname = description || `XIVIX AI ${getPlanConfig((store.plan || 'light') as PlanType).name}`;
   
   // 결제 요청 레코드 생성
   const result = await c.env.DB.prepare(`
     INSERT INTO xivix_payments (store_id, payment_type, amount, vat_amount, total_amount, pg_provider, pg_mid, description, status)
-    VALUES (?, ?, ?, ?, ?, 'kginicis', 'MOI9559449', ?, 'pending')
-  `).bind(store_id, payment_type, amount, vatAmount, totalAmount, description || `XIVIX ${store.store_name} ${payment_type}`).run();
+    VALUES (?, ?, ?, ?, ?, 'kginicis', ?, ?, 'pending')
+  `).bind(store_id, payment_type, amount, vatAmount, totalAmount, mid, goodname).run();
   
   const paymentId = result.meta.last_row_id;
   
-  // KG이니시스 결제 파라미터 생성
-  const timestamp = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+  // KG이니시스 서명 생성 (Web Crypto API — Cloudflare Workers 호환)
+  const timestamp = String(Date.now());
+  
+  // mKey = SHA-256(signKey) — 테스트 signKey: "SU5JTElURV9UUklQTEVERVNfS0VZU1RS"
+  const SIGN_KEY = 'SU5JTElURV9UUklQTEVERVNfS0VZU1RS'; // 테스트용 signKey
+  const mKeyData = new TextEncoder().encode(SIGN_KEY);
+  const mKeyHash = await crypto.subtle.digest('SHA-256', mKeyData);
+  const mKey = Array.from(new Uint8Array(mKeyHash)).map(b => b.toString(16).padStart(2, '0')).join('');
+  
+  // signature = SHA-256("oid={oid}&price={price}&timestamp={timestamp}")
+  const signSource = `oid=${oid}&price=${totalAmount}&timestamp=${timestamp}`;
+  const signData = new TextEncoder().encode(signSource);
+  const signHash = await crypto.subtle.digest('SHA-256', signData);
+  const signature = Array.from(new Uint8Array(signHash)).map(b => b.toString(16).padStart(2, '0')).join('');
+  
+  // DB에 oid 저장
+  await c.env.DB.prepare(
+    'UPDATE xivix_payments SET description = ? WHERE id = ?'
+  ).bind(oid, paymentId).run();
+
+  const baseUrl = 'https://studioaibotbot.com';
   
   return c.json<ApiResponse>({
     success: true,
     data: {
       payment_id: paymentId,
       oid,
-      mid: 'MOI9559449',
-      goodname: description || `XIVIX AI ${getPlanConfig((store.plan || 'light') as PlanType).name}`,
+      mid,
+      goodname,
       price: totalAmount,
-      buyername: store.store_name,
+      buyername: buyer_name || store.store_name,
       timestamp,
-      // 프론트엔드에서 INIStd.pay() 호출 시 사용
+      signature,
+      mKey,
       pg_params: {
         gopaymethod: 'Card',
-        mid: 'MOI9559449',
+        mid,
         oid,
         price: totalAmount,
-        goodname: description || `XIVIX AI 솔루션`,
+        goodname,
         currency: 'WON',
-        acceptmethod: 'below1000',
-        returnUrl: `https://studioaibotbot.com/api/payment/return`,
-        closeUrl: `https://studioaibotbot.com/api/payment/close`,
-        popupUrl: `https://studioaibotbot.com/api/payment/popup`,
+        acceptmethod: 'below1000:centerCd(Y)',
+        returnUrl: `${baseUrl}/api/payment/return`,
+        closeUrl: `${baseUrl}/api/payment/close`,
       }
     },
     timestamp: Date.now()
@@ -11064,6 +11088,14 @@ api.post('/payment/return', async (c) => {
     }
     
     // KG이니시스 승인 요청 (서버에서 2차 인증)
+    const authTimestamp = String(Date.now());
+    
+    // 승인 서명: SHA-256("authToken={authToken}&timestamp={timestamp}")
+    const authSignSource = `authToken=${authToken}&timestamp=${authTimestamp}`;
+    const authSignData = new TextEncoder().encode(authSignSource);
+    const authSignHash = await crypto.subtle.digest('SHA-256', authSignData);
+    const authSignature = Array.from(new Uint8Array(authSignHash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    
     const authResponse = await fetch(authUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -11071,8 +11103,8 @@ api.post('/payment/return', async (c) => {
         mid,
         authToken,
         price: TotPrice,
-        timestamp: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14),
-        signature: '', // INIAPI Key로 서명 필요
+        timestamp: authTimestamp,
+        signature: authSignature,
         charset: 'UTF-8',
         format: 'JSON',
       }).toString()
@@ -11240,6 +11272,360 @@ api.get('/stores/:id/ai-keys', async (c) => {
       gemini_key: maskKey(store.store_gemini_key),
       openai_set: !!store.store_openai_key,
       gemini_set: !!store.store_gemini_key,
+    },
+    timestamp: Date.now()
+  });
+});
+
+// ============================================================================
+// [V3.0] 영업사원/대리점 수수료 정산 API
+// ============================================================================
+
+// [V3.0-15] 영업사원 등록
+api.post('/agents', async (c) => {
+  const { name, phone, email, bank_name, bank_account, bank_holder, commission_rate_setup, commission_rate_monthly, notes } = await c.req.json() as {
+    name: string; phone: string; email?: string;
+    bank_name?: string; bank_account?: string; bank_holder?: string;
+    commission_rate_setup?: number; commission_rate_monthly?: number; notes?: string;
+  };
+  
+  if (!name || !phone) {
+    return c.json<ApiResponse>({ success: false, error: '이름과 연락처는 필수입니다', timestamp: Date.now() }, 400);
+  }
+  
+  const result = await c.env.DB.prepare(`
+    INSERT INTO xivix_agents (name, phone, email, bank_name, bank_account, bank_holder, commission_rate_setup, commission_rate_monthly, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    name, phone, email || null, bank_name || null, bank_account || null, bank_holder || null,
+    commission_rate_setup ?? 0.30, commission_rate_monthly ?? 0.20, notes || null
+  ).run();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { id: result.meta.last_row_id, message: `영업사원 ${name} 등록 완료` },
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-16] 영업사원 목록 조회
+api.get('/agents', async (c) => {
+  const agents = await c.env.DB.prepare(`
+    SELECT a.*, 
+      (SELECT COUNT(*) FROM xivix_agent_stores WHERE agent_id = a.id AND is_active = 1) as active_stores,
+      (SELECT COALESCE(SUM(commission_amount), 0) FROM xivix_commissions WHERE agent_id = a.id AND status = 'paid') as total_paid,
+      (SELECT COALESCE(SUM(commission_amount), 0) FROM xivix_commissions WHERE agent_id = a.id AND status = 'pending') as pending_amount
+    FROM xivix_agents a
+    ORDER BY a.created_at DESC
+  `).all();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: agents.results,
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-17] 영업사원 상세 (매장 목록 + 수수료 이력)
+api.get('/agents/:agentId', async (c) => {
+  const agentId = parseInt(c.req.param('agentId'), 10);
+  
+  const agent = await c.env.DB.prepare('SELECT * FROM xivix_agents WHERE id = ?').bind(agentId).first();
+  if (!agent) {
+    return c.json<ApiResponse>({ success: false, error: '영업사원을 찾을 수 없습니다', timestamp: Date.now() }, 404);
+  }
+  
+  // 담당 매장 목록
+  const stores = await c.env.DB.prepare(`
+    SELECT s.id, s.store_name, s.plan, s.monthly_fee, s.payment_status, ags.assigned_at, ags.is_active
+    FROM xivix_agent_stores ags
+    JOIN xivix_stores s ON ags.store_id = s.id
+    WHERE ags.agent_id = ?
+    ORDER BY ags.is_active DESC, ags.assigned_at DESC
+  `).bind(agentId).all();
+  
+  // 최근 수수료 이력
+  const commissions = await c.env.DB.prepare(`
+    SELECT co.*, s.store_name
+    FROM xivix_commissions co
+    JOIN xivix_stores s ON co.store_id = s.id
+    WHERE co.agent_id = ?
+    ORDER BY co.period DESC, co.created_at DESC
+    LIMIT 50
+  `).bind(agentId).all();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { agent, stores: stores.results, commissions: commissions.results },
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-18] 영업사원 수정
+api.put('/agents/:agentId', async (c) => {
+  const agentId = parseInt(c.req.param('agentId'), 10);
+  const body = await c.req.json() as any;
+  
+  const fields: string[] = [];
+  const values: any[] = [];
+  
+  const allowedFields = ['name', 'phone', 'email', 'bank_name', 'bank_account', 'bank_holder', 
+    'commission_rate_setup', 'commission_rate_monthly', 'status', 'notes'];
+  
+  for (const field of allowedFields) {
+    if (body[field] !== undefined) {
+      fields.push(`${field} = ?`);
+      values.push(body[field]);
+    }
+  }
+  
+  if (fields.length === 0) {
+    return c.json<ApiResponse>({ success: false, error: '변경할 항목이 없습니다', timestamp: Date.now() }, 400);
+  }
+  
+  fields.push('updated_at = CURRENT_TIMESTAMP');
+  values.push(agentId);
+  
+  await c.env.DB.prepare(`UPDATE xivix_agents SET ${fields.join(', ')} WHERE id = ?`).bind(...values).run();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { message: '영업사원 정보가 수정되었습니다' },
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-19] 매장-영업사원 배정
+api.post('/agents/:agentId/assign-store', async (c) => {
+  const agentId = parseInt(c.req.param('agentId'), 10);
+  const { store_id } = await c.req.json() as { store_id: number };
+  
+  if (!store_id) {
+    return c.json<ApiResponse>({ success: false, error: '매장 ID가 필요합니다', timestamp: Date.now() }, 400);
+  }
+  
+  await c.env.DB.prepare(`
+    INSERT OR REPLACE INTO xivix_agent_stores (agent_id, store_id, is_active, assigned_at)
+    VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+  `).bind(agentId, store_id).run();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { message: '매장이 배정되었습니다' },
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-20] 월별 수수료 자동 계산 (마스터 실행)
+api.post('/commissions/calculate', async (c) => {
+  const { period } = await c.req.json() as { period?: string };
+  const targetPeriod = period || new Date().toISOString().slice(0, 7); // YYYY-MM
+  
+  // 모든 활성 영업사원의 활성 매장 조회
+  const agentStores = await c.env.DB.prepare(`
+    SELECT ags.agent_id, ags.store_id, a.commission_rate_setup, a.commission_rate_monthly,
+           a.name as agent_name, s.store_name, s.plan, s.monthly_fee, s.setup_type,
+           (SELECT COUNT(*) FROM xivix_agent_stores WHERE agent_id = a.id AND is_active = 1) as active_store_count
+    FROM xivix_agent_stores ags
+    JOIN xivix_agents a ON ags.agent_id = a.id
+    JOIN xivix_stores s ON ags.store_id = s.id
+    WHERE ags.is_active = 1 AND a.status = 'active'
+  `).all<{
+    agent_id: number; store_id: number; 
+    commission_rate_setup: number; commission_rate_monthly: number;
+    agent_name: string; store_name: string; plan: string; monthly_fee: number; setup_type: string;
+    active_store_count: number;
+  }>();
+  
+  let totalCalculated = 0;
+  const results: any[] = [];
+  
+  for (const as of (agentStores.results || [])) {
+    // 최소 유지 매장 미달 시 수수료율 하향 (3개 미만 → 15%)
+    let monthlyRate = as.commission_rate_monthly;
+    if (as.active_store_count < 3) {
+      monthlyRate = 0.15;
+    }
+    
+    const monthlyFee = as.monthly_fee || 99000;
+    const commissionAmount = Math.round(monthlyFee * monthlyRate);
+    
+    // 이미 해당 기간에 정산된 내역 있는지 확인
+    const existing = await c.env.DB.prepare(`
+      SELECT id FROM xivix_commissions 
+      WHERE agent_id = ? AND store_id = ? AND period = ? AND commission_type = 'monthly'
+    `).bind(as.agent_id, as.store_id, targetPeriod).first();
+    
+    if (!existing) {
+      await c.env.DB.prepare(`
+        INSERT INTO xivix_commissions (agent_id, store_id, period, commission_type, base_amount, commission_rate, commission_amount, status)
+        VALUES (?, ?, ?, 'monthly', ?, ?, ?, 'pending')
+      `).bind(as.agent_id, as.store_id, targetPeriod, monthlyFee, monthlyRate, commissionAmount).run();
+      
+      totalCalculated++;
+      results.push({
+        agent: as.agent_name,
+        store: as.store_name,
+        base: monthlyFee,
+        rate: monthlyRate,
+        commission: commissionAmount,
+      });
+    }
+  }
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: {
+      period: targetPeriod,
+      calculated: totalCalculated,
+      details: results,
+      message: `${targetPeriod} 수수료 ${totalCalculated}건 계산 완료`
+    },
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-21] 수수료 정산 현황 조회 (마스터용)
+api.get('/commissions', async (c) => {
+  const period = c.req.query('period') || new Date().toISOString().slice(0, 7);
+  const status = c.req.query('status') || 'all';
+  
+  let query = `
+    SELECT co.*, a.name as agent_name, a.phone as agent_phone, a.bank_name, a.bank_account, a.bank_holder,
+           s.store_name, s.plan
+    FROM xivix_commissions co
+    JOIN xivix_agents a ON co.agent_id = a.id
+    JOIN xivix_stores s ON co.store_id = s.id
+    WHERE co.period = ?
+  `;
+  const binds: any[] = [period];
+  
+  if (status !== 'all') {
+    query += ' AND co.status = ?';
+    binds.push(status);
+  }
+  
+  query += ' ORDER BY a.name, s.store_name';
+  
+  const stmt = binds.length === 1 
+    ? c.env.DB.prepare(query).bind(binds[0])
+    : c.env.DB.prepare(query).bind(binds[0], binds[1]);
+  
+  const commissions = await stmt.all();
+  
+  // 요약 통계
+  const summary = await c.env.DB.prepare(`
+    SELECT 
+      COUNT(*) as total_count,
+      COALESCE(SUM(commission_amount), 0) as total_amount,
+      COALESCE(SUM(CASE WHEN status = 'pending' THEN commission_amount ELSE 0 END), 0) as pending_amount,
+      COALESCE(SUM(CASE WHEN status = 'paid' THEN commission_amount ELSE 0 END), 0) as paid_amount,
+      COUNT(DISTINCT agent_id) as agent_count
+    FROM xivix_commissions WHERE period = ?
+  `).bind(period).first();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { period, summary, commissions: commissions.results },
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-22] 수수료 지급 처리 (마스터용)
+api.put('/commissions/:id/pay', async (c) => {
+  const commissionId = parseInt(c.req.param('id'), 10);
+  const { payment_method, payment_ref, notes } = await c.req.json() as {
+    payment_method?: string; payment_ref?: string; notes?: string;
+  };
+  
+  await c.env.DB.prepare(`
+    UPDATE xivix_commissions SET 
+      status = 'paid', 
+      payment_date = CURRENT_TIMESTAMP,
+      payment_method = ?,
+      payment_ref = ?,
+      notes = ?,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND status = 'pending'
+  `).bind(payment_method || '계좌이체', payment_ref || null, notes || null, commissionId).run();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { message: '수수료가 지급 처리되었습니다' },
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-23] 일괄 지급 처리 (마스터용)
+api.post('/commissions/bulk-pay', async (c) => {
+  const { commission_ids, payment_method } = await c.req.json() as {
+    commission_ids: number[]; payment_method?: string;
+  };
+  
+  if (!commission_ids || commission_ids.length === 0) {
+    return c.json<ApiResponse>({ success: false, error: '지급할 수수료를 선택해주세요', timestamp: Date.now() }, 400);
+  }
+  
+  const placeholders = commission_ids.map(() => '?').join(',');
+  await c.env.DB.prepare(`
+    UPDATE xivix_commissions SET 
+      status = 'paid', payment_date = CURRENT_TIMESTAMP, payment_method = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id IN (${placeholders}) AND status = 'pending'
+  `).bind(payment_method || '계좌이체', ...commission_ids).run();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { message: `${commission_ids.length}건 일괄 지급 처리 완료` },
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-24] 영업사원별 수익 시뮬레이션
+api.get('/agents/:agentId/simulation', async (c) => {
+  const agentId = parseInt(c.req.param('agentId'), 10);
+  
+  const agent = await c.env.DB.prepare('SELECT * FROM xivix_agents WHERE id = ?').bind(agentId).first<any>();
+  if (!agent) {
+    return c.json<ApiResponse>({ success: false, error: '영업사원을 찾을 수 없습니다', timestamp: Date.now() }, 404);
+  }
+  
+  // 활성 매장 조회
+  const stores = await c.env.DB.prepare(`
+    SELECT s.id, s.store_name, s.plan, s.monthly_fee, s.setup_type
+    FROM xivix_agent_stores ags
+    JOIN xivix_stores s ON ags.store_id = s.id
+    WHERE ags.agent_id = ? AND ags.is_active = 1
+  `).bind(agentId).all<any>();
+  
+  const storeList = stores.results || [];
+  const activeCount = storeList.length;
+  const monthlyRate = activeCount >= 3 ? agent.commission_rate_monthly : 0.15;
+  
+  let totalMonthlyBase = 0;
+  let totalMonthlyCommission = 0;
+  
+  for (const s of storeList) {
+    const fee = s.monthly_fee || 99000;
+    totalMonthlyBase += fee;
+    totalMonthlyCommission += Math.round(fee * monthlyRate);
+  }
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: {
+      agent_name: agent.name,
+      active_stores: activeCount,
+      monthly_rate: monthlyRate,
+      monthly_base: totalMonthlyBase,
+      monthly_commission: totalMonthlyCommission,
+      annual_commission: totalMonthlyCommission * 12,
+      stores: storeList.map((s: any) => ({
+        name: s.store_name,
+        plan: s.plan,
+        fee: s.monthly_fee || 99000,
+        commission: Math.round((s.monthly_fee || 99000) * monthlyRate)
+      })),
+      note: activeCount < 3 ? '⚠️ 최소 유지 매장 3개 미만 → 수수료율 15% 적용' : null
     },
     timestamp: Date.now()
   });
