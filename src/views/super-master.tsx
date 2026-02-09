@@ -431,6 +431,104 @@ export function renderSuperMasterDashboard(): string {
 
   </main>
 
+  <!-- 업종 선택 모달 (원클릭 셋팅 전) -->
+  <div id="industry-modal" class="fixed inset-0 bg-black/80 z-50 hidden items-center justify-center">
+    <div class="glass rounded-2xl w-full max-w-lg mx-4 p-6">
+      <div class="flex items-center justify-between mb-6">
+        <h3 class="text-xl font-bold">
+          <i class="fas fa-store gold mr-2"></i>
+          업종을 선택해주세요
+        </h3>
+        <button onclick="closeIndustryModal()" class="w-8 h-8 rounded-full glass flex items-center justify-center hover:bg-white/10">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      
+      <p class="text-white/60 text-sm mb-4">선택한 업종에 맞는 AI 템플릿이 자동 적용됩니다.</p>
+      
+      <div class="grid grid-cols-2 gap-3" id="industry-grid">
+        <button onclick="selectIndustry('BEAUTY_HAIR')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-pink-500/20 flex items-center justify-center">
+              <i class="fas fa-cut text-pink-400"></i>
+            </div>
+            <div>
+              <p class="font-semibold">미용실/헤어샵</p>
+              <p class="text-xs text-white/50">커트, 펌, 염색</p>
+            </div>
+          </div>
+        </button>
+        
+        <button onclick="selectIndustry('BEAUTY_SKIN')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
+              <i class="fas fa-spa text-purple-400"></i>
+            </div>
+            <div>
+              <p class="font-semibold">피부관리/에스테틱</p>
+              <p class="text-xs text-white/50">피부케어, 관리</p>
+            </div>
+          </div>
+        </button>
+        
+        <button onclick="selectIndustry('BEAUTY_NAIL')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
+              <i class="fas fa-hand-sparkles text-red-400"></i>
+            </div>
+            <div>
+              <p class="font-semibold">네일샵</p>
+              <p class="text-xs text-white/50">네일아트, 속눈썹</p>
+            </div>
+          </div>
+        </button>
+        
+        <button onclick="selectIndustry('MEDICAL')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
+              <i class="fas fa-hospital text-blue-400"></i>
+            </div>
+            <div>
+              <p class="font-semibold">병원/의원</p>
+              <p class="text-xs text-white/50">진료, 치과, 한의원</p>
+            </div>
+          </div>
+        </button>
+        
+        <button onclick="selectIndustry('INSURANCE')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
+              <i class="fas fa-shield-alt text-green-400"></i>
+            </div>
+            <div>
+              <p class="font-semibold">보험설계사</p>
+              <p class="text-xs text-white/50">보장분석, 상담</p>
+            </div>
+          </div>
+        </button>
+        
+        <button onclick="selectIndustry('CUSTOM_SECTOR')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gray-500/20 flex items-center justify-center">
+              <i class="fas fa-cog text-gray-400"></i>
+            </div>
+            <div>
+              <p class="font-semibold">기타 서비스업</p>
+              <p class="text-xs text-white/50">직접 설정</p>
+            </div>
+          </div>
+        </button>
+      </div>
+      
+      <div class="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
+        <p class="text-xs text-yellow-400">
+          <i class="fas fa-lightbulb mr-1"></i>
+          업종 선택 후 상세 설정에서 프롬프트를 수정할 수 있습니다.
+        </p>
+      </div>
+    </div>
+  </div>
+
   <!-- 봇 기간 설정 모달 -->
   <div id="bot-modal" class="fixed inset-0 bg-black/80 z-50 hidden items-center justify-center">
     <div class="glass rounded-2xl w-full max-w-md mx-4 p-6">
@@ -683,28 +781,68 @@ export function renderSuperMasterDashboard(): string {
     }
     
     // ========== [1] 원클릭 AI 셋팅 ==========
-    async function quickSetup(storeId) {
-      const btn = event.currentTarget;
-      const originalHtml = btn.innerHTML;
+    let pendingSetupStoreId = null;
+    
+    // 업종 선택 모달 열기
+    function quickSetup(storeId) {
+      pendingSetupStoreId = storeId;
+      document.getElementById('industry-modal').classList.remove('hidden');
+      document.getElementById('industry-modal').classList.add('flex');
+    }
+    
+    // 업종 선택 모달 닫기
+    function closeIndustryModal() {
+      document.getElementById('industry-modal').classList.add('hidden');
+      document.getElementById('industry-modal').classList.remove('flex');
+      pendingSetupStoreId = null;
+    }
+    
+    // 업종 선택 후 셋팅 실행
+    async function selectIndustry(industryType) {
+      if (!pendingSetupStoreId) return;
       
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI 셋팅 중...';
-      btn.disabled = true;
+      // 선택된 업종 표시
+      document.querySelectorAll('.industry-option').forEach(btn => {
+        btn.classList.remove('border-yellow-500', 'bg-yellow-500/10');
+      });
+      event.currentTarget.classList.add('border-yellow-500', 'bg-yellow-500/10');
+      
+      // 잠시 후 셋팅 진행
+      setTimeout(async () => {
+        closeIndustryModal();
+        await executeQuickSetup(pendingSetupStoreId, industryType);
+      }, 300);
+    }
+    
+    // 실제 셋팅 실행
+    async function executeQuickSetup(storeId, industryType) {
+      // 해당 카드의 버튼 찾기
+      const card = document.querySelector(\`[data-store-id="\${storeId}"][data-list-type="pending"]\`);
+      const btn = card?.querySelector('.btn-action.gold-bg');
+      
+      if (btn) {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI 셋팅 중...';
+        btn.disabled = true;
+      }
       
       try {
-        // 1. 원클릭 셋팅 API 호출
+        // 업종 포함하여 API 호출
         const res = await fetch('/api/master/quick-setup/' + storeId, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ business_type: industryType })
         });
         
         const data = await res.json();
         
         if (data.success) {
-          btn.innerHTML = '<i class="fas fa-check"></i> 완료!';
-          btn.classList.remove('gold-bg', 'text-black');
-          btn.classList.add('bg-green-500', 'text-white');
+          if (btn) {
+            btn.innerHTML = '<i class="fas fa-check"></i> 완료!';
+            btn.classList.remove('gold-bg', 'text-black');
+            btn.classList.add('bg-green-500', 'text-white');
+          }
           
-          // 2초 후 새로고침
+          // 1.5초 후 새로고침
           setTimeout(() => {
             loadPendingStores();
             loadBotStores();
@@ -712,14 +850,18 @@ export function renderSuperMasterDashboard(): string {
           }, 1500);
         } else {
           alert('셋팅 실패: ' + (data.error || '알 수 없는 오류'));
-          btn.innerHTML = originalHtml;
-          btn.disabled = false;
+          if (btn) {
+            btn.innerHTML = '<i class="fas fa-magic"></i> 원클릭 AI 셋팅';
+            btn.disabled = false;
+          }
         }
       } catch (e) {
         console.error('Quick setup error:', e);
         alert('네트워크 오류: ' + e.message);
-        btn.innerHTML = originalHtml;
-        btn.disabled = false;
+        if (btn) {
+          btn.innerHTML = '<i class="fas fa-magic"></i> 원클릭 AI 셋팅';
+          btn.disabled = false;
+        }
       }
     }
     

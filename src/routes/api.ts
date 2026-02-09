@@ -72,7 +72,14 @@ import {
   getIndustryTemplate,
   getIndustriesByCategory,
   buildStoreSystemPrompt,
-  INDUSTRY_TEMPLATES
+  INDUSTRY_TEMPLATES,
+  getHairSalonPromptTypes,
+  getHairSalonPromptType,
+  applyStoreToPromptType,
+  parseMenuData,
+  getInsurancePromptTypes,
+  getInsurancePromptType,
+  applyStoreToInsurancePrompt
 } from '../lib/industry-templates';
 import { runPromptPipeline, type PromptPipelineInput } from '../lib/prompt-pipeline';
 import { saveTalkTalkConfig, getTalkTalkConfig } from '../lib/naver-talktalk';
@@ -4484,6 +4491,9 @@ api.post('/master/quick-setup/:id', async (c) => {
   const storeId = parseInt(c.req.param('id'), 10);
   
   try {
+    // 요청 body에서 업종 가져오기 (선택 모달에서 전달)
+    const body = await c.req.json().catch(() => ({})) as { business_type?: string };
+    
     // 1. 매장 정보 조회
     const store = await c.env.DB.prepare(
       'SELECT * FROM xivix_stores WHERE id = ?'
@@ -4498,7 +4508,8 @@ api.post('/master/quick-setup/:id', async (c) => {
     }
     
     // 2. 업종 기반 AI 프롬프트 자동 생성
-    const businessType = store.business_type || 'OTHER';
+    // 우선순위: body에서 선택한 업종 > DB 저장 업종 > 기본값
+    const businessType = body.business_type || store.business_type || 'CUSTOM_SECTOR';
     const storeName = store.store_name || '매장';
     
     // 업종별 기본 설정
@@ -4583,11 +4594,24 @@ api.post('/master/quick-setup/:id', async (c) => {
       }
     }
     
-    // 4. DB 업데이트 - 원클릭으로 활성화
+    // 4. DB 업데이트 - 원클릭으로 활성화 + 업종 저장
     const today = new Date().toISOString().split('T')[0];
+    
+    // 업종별 한글 이름 매핑
+    const businessTypeNames: { [key: string]: string } = {
+      'BEAUTY_HAIR': '미용실/헤어샵',
+      'BEAUTY_SKIN': '피부관리/에스테틱',
+      'BEAUTY_NAIL': '네일샵',
+      'MEDICAL': '병원/의원',
+      'INSURANCE': '보험설계사',
+      'CUSTOM_SECTOR': '기타 서비스업'
+    };
+    const businessTypeName = businessTypeNames[businessType] || '기타';
     
     await c.env.DB.prepare(`
       UPDATE xivix_stores SET
+        business_type = ?,
+        business_type_name = ?,
         ai_persona = ?,
         ai_tone = ?,
         ai_features = ?,
@@ -4601,6 +4625,8 @@ api.post('/master/quick-setup/:id', async (c) => {
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).bind(
+      businessType,
+      businessTypeName,
       config.persona,
       config.tone,
       config.features,
@@ -5371,6 +5397,11 @@ api.put('/stores/:id/settings', async (c) => {
       auto_greeting?: boolean;           // 자동 환영 메시지
       auto_reservation?: boolean;        // 예약 유도 메시지
       auto_followup?: boolean;           // 재방문 메시지
+      // 🔗 개인 SNS/홈페이지 링크 (보험설계사용)
+      personal_website?: string;
+      personal_instagram?: string;
+      personal_blog?: string;
+      personal_youtube?: string;
     };
 
     // 빈 문자열을 null로 변환하는 헬퍼 함수 (COALESCE가 기존 값 유지하도록)
@@ -5404,6 +5435,10 @@ api.put('/stores/:id/settings', async (c) => {
         auto_greeting = COALESCE(?, auto_greeting),
         auto_reservation = COALESCE(?, auto_reservation),
         auto_followup = COALESCE(?, auto_followup),
+        personal_website = COALESCE(?, personal_website),
+        personal_instagram = COALESCE(?, personal_instagram),
+        personal_blog = COALESCE(?, personal_blog),
+        personal_youtube = COALESCE(?, personal_youtube),
         updated_at = datetime('now')
       WHERE id = ?
     `).bind(
@@ -5428,6 +5463,10 @@ api.put('/stores/:id/settings', async (c) => {
       settings.auto_greeting !== undefined ? (settings.auto_greeting ? 1 : 0) : null,
       settings.auto_reservation !== undefined ? (settings.auto_reservation ? 1 : 0) : null,
       settings.auto_followup !== undefined ? (settings.auto_followup ? 1 : 0) : null,
+      nullIfEmpty(settings.personal_website),
+      nullIfEmpty(settings.personal_instagram),
+      nullIfEmpty(settings.personal_blog),
+      nullIfEmpty(settings.personal_youtube),
       id
     ).run();
 
@@ -7956,6 +7995,160 @@ api.get('/industries/category/:category', async (c) => {
     return c.json<ApiResponse>({
       success: false,
       error: error.message || '카테고리별 업종 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// ============ 미용실 프롬프트 타입 API ============
+
+// 미용실 프롬프트 타입 목록
+api.get('/prompt-types/hair-salon', async (c) => {
+  try {
+    const types = getHairSalonPromptTypes();
+    return c.json<ApiResponse>({
+      success: true,
+      data: types,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '프롬프트 타입 목록 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 특정 프롬프트 타입 조회 (매장명 및 가격 자동 적용)
+api.get('/prompt-types/hair-salon/:typeId', async (c) => {
+  const { env } = c;
+  const typeId = c.req.param('typeId');
+  const storeName = c.req.query('storeName') || '{{STORE_NAME}}';
+  const storeId = c.req.query('storeId'); // 매장 ID로 메뉴 데이터 조회
+  
+  try {
+    const type = getHairSalonPromptType(typeId);
+    
+    if (!type) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '해당 프롬프트 타입을 찾을 수 없습니다.',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    // 매장 메뉴 데이터 조회 (storeId가 있는 경우)
+    let menuData: string | null = null;
+    if (storeId) {
+      const store = await env.DB.prepare(
+        'SELECT menu_data FROM xivix_stores WHERE id = ?'
+      ).bind(storeId).first();
+      if (store) {
+        menuData = store.menu_data as string | null;
+      }
+    }
+    
+    // 매장명 + 가격 치환
+    const appliedType = applyStoreToPromptType(type, storeName, menuData);
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: appliedType,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '프롬프트 타입 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// ============================================================
+// 보험설계사/보험대리점 프롬프트 API
+// ============================================================
+
+// 보험 프롬프트 타입 목록 조회
+api.get('/prompt-types/insurance', async (c) => {
+  const category = c.req.query('category') as 'consulting' | 'recruiting' | undefined;
+  
+  try {
+    const types = getInsurancePromptTypes(category);
+    return c.json<ApiResponse>({
+      success: true,
+      data: types,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '보험 프롬프트 타입 목록 조회 실패',
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// 특정 보험 프롬프트 타입 조회 (매장명/경력/SNS 링크 적용)
+api.get('/prompt-types/insurance/:typeId', async (c) => {
+  const { env } = c;
+  const typeId = c.req.param('typeId');
+  const storeName = c.req.query('storeName') || '{{STORE_NAME}}';
+  const storeId = c.req.query('storeId');
+  const careerYears = c.req.query('careerYears');
+  
+  // 개인 SNS/홈페이지 링크
+  const personalLinks = {
+    website: c.req.query('website') || '',
+    instagram: c.req.query('instagram') || '',
+    blog: c.req.query('blog') || '',
+    youtube: c.req.query('youtube') || ''
+  };
+  
+  try {
+    const type = getInsurancePromptType(typeId);
+    
+    if (!type) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '해당 프롬프트 타입을 찾을 수 없습니다.',
+        timestamp: Date.now()
+      }, 404);
+    }
+    
+    // 매장 정보 조회 (storeId가 있는 경우)
+    let dbCareerYears: string | undefined = careerYears || undefined;
+    let dbPersonalLinks = { ...personalLinks };
+    
+    if (storeId) {
+      const store = await env.DB.prepare(
+        'SELECT career_years, personal_website, personal_instagram, personal_blog, personal_youtube FROM xivix_stores WHERE id = ?'
+      ).bind(storeId).first();
+      if (store) {
+        if (store.career_years && !careerYears) {
+          dbCareerYears = store.career_years as string;
+        }
+        // DB에 저장된 링크가 있고 쿼리로 안 넘어온 경우 사용
+        if (store.personal_website && !personalLinks.website) dbPersonalLinks.website = store.personal_website as string;
+        if (store.personal_instagram && !personalLinks.instagram) dbPersonalLinks.instagram = store.personal_instagram as string;
+        if (store.personal_blog && !personalLinks.blog) dbPersonalLinks.blog = store.personal_blog as string;
+        if (store.personal_youtube && !personalLinks.youtube) dbPersonalLinks.youtube = store.personal_youtube as string;
+      }
+    }
+    
+    // 매장명 + 경력 + SNS 링크 치환
+    const appliedType = applyStoreToInsurancePrompt(type, storeName, dbCareerYears, dbPersonalLinks);
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: appliedType,
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: error.message || '보험 프롬프트 타입 조회 실패',
       timestamp: Date.now()
     }, 500);
   }

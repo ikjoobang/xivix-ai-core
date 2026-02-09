@@ -900,26 +900,48 @@ ${menuData.trim()}`;
     }
     
     if (menuNumber === '2') {
-      // 2. 💇 스타일 상담 (8개국어 지원)
-      const styleTemplates: Record<string, string> = {
-        ko: `💇 스타일 상담\n\n정확한 상담을 위해\n\n📸 현재 머리 [사진] 보내주시거나\n\n✍️ 원하시는 [스타일]을 알려주세요\n\n━━━━━━━━━━\n15년 경력 전문가가\n상담해 드릴게요! 😊`,
-        en: `💇 Style Consultation\n\nFor accurate consultation:\n\n📸 Send a [photo] of your current hair\n\n✍️ Or describe your desired [style]\n\n━━━━━━━━━━\nOur expert with 15 years experience\nwill consult you! 😊`,
-        ja: `💇 スタイル相談\n\n正確な相談のため:\n\n📸 現在の髪の[写真]を送信\n\n✍️ または希望の[スタイル]を教えてください\n\n━━━━━━━━━━\n15年の経験を持つ専門家が\nご相談いたします! 😊`,
-        zh: `💇 发型咨询\n\n为了准确咨询:\n\n📸 请发送您目前头发的[照片]\n\n✍️ 或描述您想要的[发型]\n\n━━━━━━━━━━\n15年经验的专家\n为您咨询! 😊`,
-        tw: `💇 髮型諮詢\n\n為了準確諮詢:\n\n📸 請發送您目前頭髮的[照片]\n\n✍️ 或描述您想要的[髮型]\n\n━━━━━━━━━━\n15年經驗的專家\n為您諮詢! 😊`,
-        th: `💇 ปรึกษาทรงผม\n\nเพื่อการปรึกษาที่แม่นยำ:\n\n📸 ส่ง[รูปภาพ]ผมปัจจุบันของคุณ\n\n✍️ หรืออธิบาย[ทรงผม]ที่ต้องการ\n\n━━━━━━━━━━\nผู้เชี่ยวชาญ 15 ปี\nจะให้คำปรึกษา! 😊`,
-        vi: `💇 Tư vấn kiểu tóc\n\nĐể tư vấn chính xác:\n\n📸 Gửi [ảnh] tóc hiện tại của bạn\n\n✍️ Hoặc mô tả [kiểu tóc] bạn muốn\n\n━━━━━━━━━━\nChuyên gia 15 năm kinh nghiệm\nsẽ tư vấn cho bạn! 😊`,
-        mn: `💇 Загвар зөвлөгөө\n\nЗөв зөвлөгөө авахын тулд:\n\n📸 Одоогийн үсний [зураг] илгээнэ үү\n\n✍️ Эсвэл хүссэн [загвараа] тайлбарлана уу\n\n━━━━━━━━━━\n15 жилийн туршлагатай мэргэжилтэн\nзөвлөгөө өгнө! 😊`
-      };
-      const styleResponse = styleTemplates[menuLang] || styleTemplates.ko;
+      // 2. 상담 안내 (업종별 분기 - 8개국어 지원)
+      const businessType = storeResult?.business_type || 'BEAUTY_HAIR';
+      
+      let styleResponse = '';
+      
+      if (businessType === 'BEAUTY_SKIN') {
+        // 피부관리샵용 템플릿
+        const skinTemplates: Record<string, string> = {
+          ko: `✨ 피부 상담\n\n정확한 상담을 위해\n\n📸 현재 피부 [사진] 보내주시거나\n\n✍️ 피부 [고민]을 알려주세요\n\n━━━━━━━━━━\n20년 경력 피부 전문가가\n맞춤 상담해 드릴게요! 😊`,
+          en: `✨ Skin Consultation\n\nFor accurate consultation:\n\n📸 Send a [photo] of your skin\n\n✍️ Or describe your skin [concerns]\n\n━━━━━━━━━━\nOur expert with 20 years experience\nwill consult you! 😊`,
+          ja: `✨ 肌相談\n\n正確な相談のため:\n\n📸 現在の肌の[写真]を送信\n\n✍️ または肌の[悩み]を教えてください\n\n━━━━━━━━━━\n20年の経験を持つ専門家が\nご相談いたします! 😊`,
+          zh: `✨ 皮肤咨询\n\n为了准确咨询:\n\n📸 请发送您皮肤的[照片]\n\n✍️ 或描述您的皮肤[问题]\n\n━━━━━━━━━━\n20年经验的专家\n为您咨询! 😊`,
+          tw: `✨ 皮膚諮詢\n\n為了準確諮詢:\n\n📸 請發送您皮膚的[照片]\n\n✍️ 或描述您的皮膚[問題]\n\n━━━━━━━━━━\n20年經驗的專家\n為您諮詢! 😊`,
+          th: `✨ ปรึกษาผิวพรรณ\n\nเพื่อการปรึกษาที่แม่นยำ:\n\n📸 ส่ง[รูปภาพ]ผิวของคุณ\n\n✍️ หรืออธิบาย[ปัญหาผิว]ของคุณ\n\n━━━━━━━━━━\nผู้เชี่ยวชาญ 20 ปี\nจะให้คำปรึกษา! 😊`,
+          vi: `✨ Tư vấn da\n\nĐể tư vấn chính xác:\n\n📸 Gửi [ảnh] da của bạn\n\n✍️ Hoặc mô tả [vấn đề da] của bạn\n\n━━━━━━━━━━\nChuyên gia 20 năm kinh nghiệm\nsẽ tư vấn cho bạn! 😊`,
+          mn: `✨ Арьсны зөвлөгөө\n\nЗөв зөвлөгөө авахын тулд:\n\n📸 Арьсны [зураг] илгээнэ үү\n\n✍️ Эсвэл арьсны [асуудлаа] тайлбарлана уу\n\n━━━━━━━━━━\n20 жилийн туршлагатай мэргэжилтэн\nзөвлөгөө өгнө! 😊`
+        };
+        styleResponse = skinTemplates[menuLang] || skinTemplates.ko;
+      } else {
+        // 헤어샵용 템플릿 (기본)
+        const hairTemplates: Record<string, string> = {
+          ko: `💇 스타일 상담\n\n정확한 상담을 위해\n\n📸 현재 머리 [사진] 보내주시거나\n\n✍️ 원하시는 [스타일]을 알려주세요\n\n━━━━━━━━━━\n15년 경력 전문가가\n상담해 드릴게요! 😊`,
+          en: `💇 Style Consultation\n\nFor accurate consultation:\n\n📸 Send a [photo] of your current hair\n\n✍️ Or describe your desired [style]\n\n━━━━━━━━━━\nOur expert with 15 years experience\nwill consult you! 😊`,
+          ja: `💇 スタイル相談\n\n正確な相談のため:\n\n📸 現在の髪の[写真]を送信\n\n✍️ または希望の[スタイル]を教えてください\n\n━━━━━━━━━━\n15年の経験を持つ専門家が\nご相談いたします! 😊`,
+          zh: `💇 发型咨询\n\n为了准确咨询:\n\n📸 请发送您目前头发的[照片]\n\n✍️ 或描述您想要的[发型]\n\n━━━━━━━━━━\n15年经验的专家\n为您咨询! 😊`,
+          tw: `💇 髮型諮詢\n\n為了準確諮詢:\n\n📸 請發送您目前頭髮的[照片]\n\n✍️ 或描述您想要的[髮型]\n\n━━━━━━━━━━\n15年經驗的專家\n為您諮詢! 😊`,
+          th: `💇 ปรึกษาทรงผม\n\nเพื่อการปรึกษาที่แม่นยำ:\n\n📸 ส่ง[รูปภาพ]ผมปัจจุบันของคุณ\n\n✍️ หรืออธิบาย[ทรงผม]ที่ต้องการ\n\n━━━━━━━━━━\nผู้เชี่ยวชาญ 15 ปี\nจะให้คำปรึกษา! 😊`,
+          vi: `💇 Tư vấn kiểu tóc\n\nĐể tư vấn chính xác:\n\n📸 Gửi [ảnh] tóc hiện tại của bạn\n\n✍️ Hoặc mô tả [kiểu tóc] bạn muốn\n\n━━━━━━━━━━\nChuyên gia 15 năm kinh nghiệm\nsẽ tư vấn cho bạn! 😊`,
+          mn: `💇 Загвар зөвлөгөө\n\nЗөв зөвлөгөө авахын тулд:\n\n📸 Одоогийн үсний [зураг] илгээнэ үү\n\n✍️ Эсвэл хүссэн [загвараа] тайлбарлана уу\n\n━━━━━━━━━━\n15 жилийн туршлагатай мэргэжилтэн\nзөвлөгөө өгнө! 😊`
+        };
+        styleResponse = hairTemplates[menuLang] || hairTemplates.ko;
+      }
+      
       await sendTextMessage(env, customerId, styleResponse, storeId);
       
       const responseTime = Date.now() - startTime;
+      const logMessage = businessType === 'BEAUTY_SKIN' ? '[menu-2] 피부 상담 안내' : '[menu-2] 스타일 상담 안내';
       await env.DB.prepare(`
         INSERT INTO xivix_conversation_logs 
         (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
         VALUES (?, ?, 'text', ?, ?, ?, 0)
-      `).bind(storeId, customerId, '2', '[menu-2] 스타일 상담 안내', responseTime).run();
+      `).bind(storeId, customerId, '2', logMessage, responseTime).run();
       
       return c.json({ success: true, store_id: storeId, menu_selected: 2 });
     }

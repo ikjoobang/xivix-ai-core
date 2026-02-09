@@ -1,4 +1,4 @@
-// XIVIX AI Core V1.0 - Main Application Entry
+// XIVIX AI Core V3.0 - Main Application Entry
 // Hono Framework with Cloudflare Pages
 
 import { Hono } from 'hono';
@@ -101,7 +101,6 @@ app.get('/health', async (c) => {
     status: isHealthy ? 'healthy' : 'degraded',
     timestamp: new Date().toISOString(),
     version: '3.0.0',
-    uptime: process.uptime ? process.uptime() : null,
     services: {
       database: {
         status: dbStatus,
@@ -192,7 +191,7 @@ app.get('/', (c) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>XIVIX AI Core V1.0</title>
+  <title>XIVIX AI Core V3.0</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -252,12 +251,12 @@ app.get('/', (c) => {
       </h1>
       
       <p class="text-xl md:text-2xl text-white/50 font-light tracking-wide mb-2">
-        CORE V2.0
+        CORE V3.0
       </p>
       
       <p class="text-lg text-white/40 max-w-xl mx-auto mb-12 leading-relaxed">
-        GPT-4o + Gemini 2.5 Pro 검증 시스템<br>
-        <span class="text-[#007AFF]">전문 상담 AI 자동화 엔진</span>
+        GPT-4o + Gemini 2.5 Pro 듀얼 AI 엔진<br>
+        <span class="text-[#007AFF]">12개 업종 특화 · 초정밀 상담 자동화</span>
       </p>
       
       <!-- Action Buttons -->

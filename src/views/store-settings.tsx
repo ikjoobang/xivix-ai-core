@@ -186,6 +186,204 @@ export function renderStoreSettings(storeId: number): string {
             </button>
           </div>
           
+          <!-- 💇 미용실 프롬프트 타입 선택 (미용실 업종일 때만 표시) -->
+          <div id="prompt-type-section" class="mb-6 hidden">
+            <label class="block text-sm text-white/60 mb-3">
+              <i class="fas fa-magic mr-1"></i>프롬프트 템플릿 선택
+            </label>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="prompt-type-buttons">
+              <button onclick="loadPromptType('TYPE_A')" class="prompt-type-btn p-3 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" data-type="TYPE_A">
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-heart text-pink-400"></i>
+                  <div class="text-sm">
+                    <p class="font-semibold">A타입</p>
+                    <p class="text-xs text-white/50">친근한 동네샵</p>
+                  </div>
+                </div>
+              </button>
+              <button onclick="loadPromptType('TYPE_B')" class="prompt-type-btn p-3 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" data-type="TYPE_B">
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-star text-yellow-400"></i>
+                  <div class="text-sm">
+                    <p class="font-semibold">B타입</p>
+                    <p class="text-xs text-white/50">전문 스타일리스트</p>
+                  </div>
+                </div>
+              </button>
+              <button onclick="loadPromptType('TYPE_C')" class="prompt-type-btn p-3 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" data-type="TYPE_C">
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-crown text-purple-400"></i>
+                  <div class="text-sm">
+                    <p class="font-semibold">C타입</p>
+                    <p class="text-xs text-white/50">프리미엄 살롱</p>
+                  </div>
+                </div>
+              </button>
+              <button onclick="loadPromptType('TYPE_D')" class="prompt-type-btn p-3 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" data-type="TYPE_D">
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-bolt text-blue-400"></i>
+                  <div class="text-sm">
+                    <p class="font-semibold">D타입</p>
+                    <p class="text-xs text-white/50">빠른 응대</p>
+                  </div>
+                </div>
+              </button>
+              <button onclick="loadPromptType('CUSTOM')" class="prompt-type-btn p-3 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" data-type="CUSTOM">
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-edit text-gray-400"></i>
+                  <div class="text-sm">
+                    <p class="font-semibold">커스텀</p>
+                    <p class="text-xs text-white/50">직접 설정</p>
+                  </div>
+                </div>
+              </button>
+            </div>
+            <p class="text-xs text-white/40 mt-2">
+              <i class="fas fa-info-circle mr-1"></i>
+              템플릿 선택 시 아래 필드가 자동으로 채워집니다. 이후 자유롭게 수정 가능합니다.
+            </p>
+          </div>
+          
+          <!-- 🛡️ 보험설계사 프롬프트 타입 선택 (보험 업종일 때만 표시) -->
+          <div id="insurance-prompt-type-section" class="mb-6 hidden">
+            <label class="block text-sm text-white/60 mb-3">
+              <i class="fas fa-shield-alt mr-1"></i>프롬프트 템플릿 선택
+            </label>
+            
+            <!-- 용도 선택 탭 -->
+            <div class="flex gap-2 mb-4">
+              <button onclick="switchInsuranceMode('consulting')" id="ins-tab-consulting" class="ins-mode-tab flex-1 py-2 px-4 rounded-lg font-medium bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/50">
+                <i class="fas fa-comments mr-1"></i>고객 상담용
+              </button>
+              <button onclick="switchInsuranceMode('recruiting')" id="ins-tab-recruiting" class="ins-mode-tab flex-1 py-2 px-4 rounded-lg font-medium bg-white/5 text-white/60 border border-white/10 hover:bg-white/10">
+                <i class="fas fa-user-plus mr-1"></i>설계사 리크루팅용
+              </button>
+            </div>
+            
+            <!-- 고객 상담용 타입 버튼 -->
+            <div id="insurance-consult-buttons" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button onclick="loadInsurancePromptType('CONSULT_A')" class="insurance-prompt-btn p-3 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" data-type="CONSULT_A">
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-heart text-pink-400"></i>
+                  <div class="text-sm">
+                    <p class="font-semibold">A타입</p>
+                    <p class="text-xs text-white/50">친근한 상담사</p>
+                  </div>
+                </div>
+              </button>
+              <button onclick="loadInsurancePromptType('CONSULT_B')" class="insurance-prompt-btn p-3 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" data-type="CONSULT_B">
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-briefcase text-blue-400"></i>
+                  <div class="text-sm">
+                    <p class="font-semibold">B타입</p>
+                    <p class="text-xs text-white/50">전문 컨설턴트</p>
+                  </div>
+                </div>
+              </button>
+              <button onclick="loadInsurancePromptType('CONSULT_C')" class="insurance-prompt-btn p-3 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" data-type="CONSULT_C">
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-bolt text-yellow-400"></i>
+                  <div class="text-sm">
+                    <p class="font-semibold">C타입</p>
+                    <p class="text-xs text-white/50">빠른 응대</p>
+                  </div>
+                </div>
+              </button>
+              <button onclick="loadInsurancePromptType('CUSTOM_CONSULT')" class="insurance-prompt-btn p-3 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" data-type="CUSTOM_CONSULT">
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-edit text-gray-400"></i>
+                  <div class="text-sm">
+                    <p class="font-semibold">커스텀</p>
+                    <p class="text-xs text-white/50">직접 설정</p>
+                  </div>
+                </div>
+              </button>
+            </div>
+            
+            <!-- 리크루팅용 타입 버튼 (숨김) -->
+            <div id="insurance-recruit-buttons" class="grid grid-cols-2 sm:grid-cols-4 gap-2 hidden">
+              <button onclick="loadInsurancePromptType('RECRUIT_A')" class="insurance-prompt-btn p-3 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" data-type="RECRUIT_A">
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-heart text-pink-400"></i>
+                  <div class="text-sm">
+                    <p class="font-semibold">A타입</p>
+                    <p class="text-xs text-white/50">친근한 리크루터</p>
+                  </div>
+                </div>
+              </button>
+              <button onclick="loadInsurancePromptType('RECRUIT_B')" class="insurance-prompt-btn p-3 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" data-type="RECRUIT_B">
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-briefcase text-blue-400"></i>
+                  <div class="text-sm">
+                    <p class="font-semibold">B타입</p>
+                    <p class="text-xs text-white/50">전문 리크루터</p>
+                  </div>
+                </div>
+              </button>
+              <button onclick="loadInsurancePromptType('RECRUIT_C')" class="insurance-prompt-btn p-3 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" data-type="RECRUIT_C">
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-bolt text-yellow-400"></i>
+                  <div class="text-sm">
+                    <p class="font-semibold">C타입</p>
+                    <p class="text-xs text-white/50">빠른 응대</p>
+                  </div>
+                </div>
+              </button>
+              <button onclick="loadInsurancePromptType('CUSTOM_RECRUIT')" class="insurance-prompt-btn p-3 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" data-type="CUSTOM_RECRUIT">
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-edit text-gray-400"></i>
+                  <div class="text-sm">
+                    <p class="font-semibold">커스텀</p>
+                    <p class="text-xs text-white/50">직접 설정</p>
+                  </div>
+                </div>
+              </button>
+            </div>
+            
+            <p class="text-xs text-white/40 mt-3">
+              <i class="fas fa-info-circle mr-1"></i>
+              <strong>고객상담용:</strong> 보험 상담/가입/청구 문의 응대 (50문항) | 
+              <strong>리크루팅용:</strong> 설계사 입사/채용 문의 응대 (50문항)
+            </p>
+            
+            <!-- 개인 정보 입력 (홈페이지/SNS) -->
+            <div class="mt-4 p-4 bg-white/5 rounded-xl border border-white/10">
+              <label class="block text-sm text-white/60 mb-3">
+                <i class="fas fa-link mr-1"></i>개인 홈페이지 / SNS 링크 (선택)
+              </label>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs text-white/40 mb-1">개인 홈페이지</label>
+                  <input type="text" id="personal-website" 
+                    class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
+                    placeholder="https://mywebsite.com">
+                </div>
+                <div>
+                  <label class="block text-xs text-white/40 mb-1">인스타그램</label>
+                  <input type="text" id="personal-instagram" 
+                    class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
+                    placeholder="@insurance_pro">
+                </div>
+                <div>
+                  <label class="block text-xs text-white/40 mb-1">블로그</label>
+                  <input type="text" id="personal-blog" 
+                    class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
+                    placeholder="https://blog.naver.com/myid">
+                </div>
+                <div>
+                  <label class="block text-xs text-white/40 mb-1">유튜브</label>
+                  <input type="text" id="personal-youtube" 
+                    class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
+                    placeholder="https://youtube.com/@mychannel">
+                </div>
+              </div>
+              <p class="text-xs text-white/30 mt-2">
+                <i class="fas fa-lightbulb mr-1 text-yellow-400"></i>
+                입력된 링크는 AI 응답에 자동으로 포함됩니다. (예: "자세한 내용은 제 블로그를 참고해주세요!")
+              </p>
+            </div>
+          </div>
+          
           <!-- 페르소나 -->
           <div class="mb-4">
             <label class="block text-sm text-white/60 mb-2">AI 페르소나 (역할)</label>
@@ -309,7 +507,8 @@ export function renderStoreSettings(storeId: number): string {
                 <option value="RESTAURANT" class="bg-[#1a1a1a] text-white">일반 식당/카페</option>
                 <option value="FITNESS" class="bg-[#1a1a1a] text-white">피트니스/요가/PT</option>
                 <option value="MEDICAL" class="bg-[#1a1a1a] text-white">병원/의원/치과</option>
-                <option value="PROFESSIONAL_LEGAL" class="bg-[#1a1a1a] text-white">법률/세무/보험</option>
+                <option value="PROFESSIONAL_LEGAL" class="bg-[#1a1a1a] text-white">법률/세무</option>
+                <option value="FINANCE_INSURANCE" class="bg-[#1a1a1a] text-white">보험설계사/보험대리점</option>
                 <option value="EDUCATION" class="bg-[#1a1a1a] text-white">학원/교육/과외</option>
                 <option value="PET_SERVICE" class="bg-[#1a1a1a] text-white">애견/반려동물</option>
                 <option value="OTHER" class="bg-[#1a1a1a] text-white">기타</option>
@@ -832,6 +1031,12 @@ export function renderStoreSettings(storeId: number): string {
     document.addEventListener('DOMContentLoaded', () => {
       loadStoreData();
       initModelSelection();
+      
+      // 업종 변경 시 프롬프트 타입 섹션 업데이트
+      const businessTypeSelect = document.getElementById('business-type');
+      if (businessTypeSelect) {
+        businessTypeSelect.addEventListener('change', updatePromptTypeSection);
+      }
     });
     
     // 매장 데이터 로드
@@ -849,6 +1054,180 @@ export function renderStoreSettings(storeId: number): string {
       }
     }
     
+    // ============ 프롬프트 타입 선택 기능 ============
+    let currentPromptType = null;
+    let currentInsuranceMode = 'consulting'; // 'consulting' or 'recruiting'
+    
+    // 프롬프트 타입 섹션 표시/숨김 (업종에 따라)
+    function updatePromptTypeSection() {
+      const businessType = document.getElementById('business-type')?.value || '';
+      const hairSection = document.getElementById('prompt-type-section');
+      const insuranceSection = document.getElementById('insurance-prompt-type-section');
+      
+      // 모든 섹션 숨기기
+      if (hairSection) hairSection.classList.add('hidden');
+      if (insuranceSection) insuranceSection.classList.add('hidden');
+      
+      // 미용실 관련 업종일 때
+      if (businessType.includes('BEAUTY_HAIR') || businessType === 'BEAUTY_HAIR_SMALL' || businessType === 'BEAUTY_HAIR_LARGE') {
+        if (hairSection) hairSection.classList.remove('hidden');
+      }
+      // 보험 업종일 때
+      else if (businessType === 'FINANCE_INSURANCE') {
+        if (insuranceSection) insuranceSection.classList.remove('hidden');
+      }
+    }
+    
+    // 보험 프롬프트 모드 전환 (상담용/리크루팅용)
+    function switchInsuranceMode(mode) {
+      currentInsuranceMode = mode;
+      
+      const consultTab = document.getElementById('ins-tab-consulting');
+      const recruitTab = document.getElementById('ins-tab-recruiting');
+      const consultBtns = document.getElementById('insurance-consult-buttons');
+      const recruitBtns = document.getElementById('insurance-recruit-buttons');
+      
+      if (mode === 'consulting') {
+        consultTab.classList.add('bg-[#D4AF37]/20', 'text-[#D4AF37]', 'border-[#D4AF37]/50');
+        consultTab.classList.remove('bg-white/5', 'text-white/60', 'border-white/10');
+        recruitTab.classList.remove('bg-[#D4AF37]/20', 'text-[#D4AF37]', 'border-[#D4AF37]/50');
+        recruitTab.classList.add('bg-white/5', 'text-white/60', 'border-white/10');
+        consultBtns.classList.remove('hidden');
+        recruitBtns.classList.add('hidden');
+      } else {
+        recruitTab.classList.add('bg-[#D4AF37]/20', 'text-[#D4AF37]', 'border-[#D4AF37]/50');
+        recruitTab.classList.remove('bg-white/5', 'text-white/60', 'border-white/10');
+        consultTab.classList.remove('bg-[#D4AF37]/20', 'text-[#D4AF37]', 'border-[#D4AF37]/50');
+        consultTab.classList.add('bg-white/5', 'text-white/60', 'border-white/10');
+        recruitBtns.classList.remove('hidden');
+        consultBtns.classList.add('hidden');
+      }
+      
+      // 버튼 하이라이트 초기화
+      document.querySelectorAll('.insurance-prompt-btn').forEach(btn => {
+        btn.classList.remove('border-yellow-500', 'bg-yellow-500/10');
+      });
+    }
+    
+    // 보험 프롬프트 타입 로드
+    async function loadInsurancePromptType(typeId) {
+      try {
+        const storeName = document.getElementById('store-name-input')?.value || storeData?.store_name || '매장';
+        
+        // 개인 SNS/홈페이지 정보 수집
+        const personalLinks = {
+          website: document.getElementById('personal-website')?.value || '',
+          instagram: document.getElementById('personal-instagram')?.value || '',
+          blog: document.getElementById('personal-blog')?.value || '',
+          youtube: document.getElementById('personal-youtube')?.value || ''
+        };
+        
+        const params = new URLSearchParams({
+          storeName: storeName,
+          storeId: STORE_ID.toString()
+        });
+        
+        // SNS 링크가 있으면 추가
+        if (personalLinks.website) params.append('website', personalLinks.website);
+        if (personalLinks.instagram) params.append('instagram', personalLinks.instagram);
+        if (personalLinks.blog) params.append('blog', personalLinks.blog);
+        if (personalLinks.youtube) params.append('youtube', personalLinks.youtube);
+        
+        const res = await fetch('/api/prompt-types/insurance/' + typeId + '?' + params.toString());
+        const data = await res.json();
+        
+        if (data.success && data.data) {
+          const type = data.data;
+          
+          // 커스텀 타입은 필드를 비우지 않음
+          if (typeId.includes('CUSTOM')) {
+            showToast('커스텀 모드: 직접 입력해주세요', 'info');
+            highlightInsuranceSelectedType(typeId);
+            return;
+          }
+          
+          // 필드에 데이터 채우기
+          document.getElementById('ai-persona').value = type.persona || '';
+          document.getElementById('ai-tone').value = type.tone?.includes('전문') ? 'professional' : 
+                                                     type.tone?.includes('격식') ? 'formal' :
+                                                     type.tone?.includes('캐주얼') ? 'casual' : 'friendly';
+          document.getElementById('greeting-message').value = type.greeting || '';
+          document.getElementById('system-prompt').value = type.systemPrompt || '';
+          document.getElementById('forbidden-keywords').value = (type.prohibitedKeywords || []).join(', ');
+          
+          currentPromptType = typeId;
+          highlightInsuranceSelectedType(typeId);
+          
+          showToast(type.name + ' 템플릿이 적용되었습니다!', 'success');
+        } else {
+          showToast('템플릿을 불러오는데 실패했습니다', 'error');
+        }
+      } catch (err) {
+        console.error('Failed to load insurance prompt type:', err);
+        showToast('템플릿 로드 중 오류가 발생했습니다', 'error');
+      }
+    }
+    
+    // 보험 선택된 타입 버튼 하이라이트
+    function highlightInsuranceSelectedType(typeId) {
+      document.querySelectorAll('.insurance-prompt-btn').forEach(btn => {
+        btn.classList.remove('border-yellow-500', 'bg-yellow-500/10');
+        if (btn.dataset.type === typeId) {
+          btn.classList.add('border-yellow-500', 'bg-yellow-500/10');
+        }
+      });
+    }
+    
+    // 미용실 프롬프트 타입 로드
+    async function loadPromptType(typeId) {
+      try {
+        const storeName = document.getElementById('store-name-input')?.value || storeData?.store_name || '매장';
+        const storeId = STORE_ID;  // 매장 ID 추가
+        const res = await fetch('/api/prompt-types/hair-salon/' + typeId + '?storeName=' + encodeURIComponent(storeName) + '&storeId=' + storeId);
+        const data = await res.json();
+        
+        if (data.success && data.data) {
+          const type = data.data;
+          
+          // 커스텀 타입은 필드를 비우지 않음
+          if (typeId === 'CUSTOM') {
+            showToast('커스텀 모드: 직접 입력해주세요', 'info');
+            highlightSelectedType(typeId);
+            return;
+          }
+          
+          // 필드에 데이터 채우기
+          document.getElementById('ai-persona').value = type.persona || '';
+          document.getElementById('ai-tone').value = type.tone?.includes('전문') ? 'professional' : 
+                                                     type.tone?.includes('격식') ? 'formal' :
+                                                     type.tone?.includes('캐주얼') ? 'casual' : 'friendly';
+          document.getElementById('greeting-message').value = type.greeting || '';
+          document.getElementById('system-prompt').value = type.systemPrompt || '';
+          document.getElementById('forbidden-keywords').value = type.prohibitedKeywords || '';
+          
+          currentPromptType = typeId;
+          highlightSelectedType(typeId);
+          
+          showToast(type.name + ' 템플릿이 적용되었습니다!', 'success');
+        } else {
+          showToast('템플릿을 불러오는데 실패했습니다', 'error');
+        }
+      } catch (err) {
+        console.error('Failed to load prompt type:', err);
+        showToast('템플릿 로드 중 오류가 발생했습니다', 'error');
+      }
+    }
+    
+    // 미용실 선택된 타입 버튼 하이라이트
+    function highlightSelectedType(typeId) {
+      document.querySelectorAll('.prompt-type-btn').forEach(btn => {
+        btn.classList.remove('border-yellow-500', 'bg-yellow-500/10');
+        if (btn.dataset.type === typeId) {
+          btn.classList.add('border-yellow-500', 'bg-yellow-500/10');
+        }
+      });
+    }
+    
     // 폼에 데이터 채우기
     function populateForm(store) {
       console.log('[populateForm] 데이터 로드:', store);
@@ -857,6 +1236,9 @@ export function renderStoreSettings(storeId: number): string {
       document.getElementById('store-name').textContent = store.store_name || '매장 설정';
       document.getElementById('store-name-input').value = store.store_name || '';
       document.getElementById('business-type').value = store.business_type || 'OTHER';
+      
+      // 미용실 업종일 경우 프롬프트 타입 섹션 표시
+      updatePromptTypeSection();
       
       // 매장 정보 (주소, 전화번호)
       const addressEl = document.getElementById('store-address');
@@ -975,6 +1357,19 @@ export function renderStoreSettings(storeId: number): string {
         temperatureEl.value = store.ai_temperature;
         document.getElementById('temp-value').textContent = store.ai_temperature;
       }
+      
+      // 🔗 개인 SNS/홈페이지 링크 (보험설계사용)
+      const personalWebsiteEl = document.getElementById('personal-website');
+      if (personalWebsiteEl) personalWebsiteEl.value = store.personal_website || '';
+      
+      const personalInstagramEl = document.getElementById('personal-instagram');
+      if (personalInstagramEl) personalInstagramEl.value = store.personal_instagram || '';
+      
+      const personalBlogEl = document.getElementById('personal-blog');
+      if (personalBlogEl) personalBlogEl.value = store.personal_blog || '';
+      
+      const personalYoutubeEl = document.getElementById('personal-youtube');
+      if (personalYoutubeEl) personalYoutubeEl.value = store.personal_youtube || '';
       
       console.log('[populateForm] 고급 설정 로드 완료');
     }
@@ -1274,7 +1669,13 @@ export function renderStoreSettings(storeId: number): string {
         
         // SMS 알림 연락처
         owner_phone: document.getElementById('owner-phone')?.value || '',
-        additional_contacts: additionalContacts.length > 0 ? JSON.stringify(additionalContacts) : ''
+        additional_contacts: additionalContacts.length > 0 ? JSON.stringify(additionalContacts) : '',
+        
+        // 🔗 개인 SNS/홈페이지 링크 (보험설계사용)
+        personal_website: document.getElementById('personal-website')?.value || '',
+        personal_instagram: document.getElementById('personal-instagram')?.value || '',
+        personal_blog: document.getElementById('personal-blog')?.value || '',
+        personal_youtube: document.getElementById('personal-youtube')?.value || ''
       };
       
       console.log('[saveAllSettings] 저장 데이터:', settings);
