@@ -16,6 +16,10 @@ export function renderPaymentPage(storeId: number): string {
     * { font-family: 'Pretendard', -apple-system, sans-serif; }
     body { background: #050505; color: #fff; }
     .glass { background: rgba(255,255,255,0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.06); }
+    select, select option { background: #1a1a1a; color: #ffffff; }
+    select option:checked { background: #2563eb; color: #ffffff; }
+    input { color: #ffffff; }
+    input::placeholder { color: rgba(255,255,255,0.35); }
   </style>
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
@@ -33,7 +37,7 @@ export function renderPaymentPage(storeId: number): string {
       <!-- 결제 유형 선택 -->
       <div class="space-y-3 mb-6">
         <label class="text-sm text-white/60">결제 유형</label>
-        <select id="payment-type" onchange="updatePaymentInfo()" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500">
+        <select id="payment-type" onchange="updatePaymentInfo()" class="w-full bg-[#1a1a1a] text-white border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500">
           <option value="setup_basic">기본 셋팅비 (300,000원)</option>
           <option value="setup_premium">프리미엄 셋팅비 (500,000원)</option>
           <option value="monthly_mini">월 이용료 - 미니 (29,000원)</option>

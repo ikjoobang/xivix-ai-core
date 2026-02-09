@@ -33,6 +33,10 @@ export function renderSalesAgentDashboard(): string {
     .badge-confirmed { background: rgba(0,122,255,0.15); color: #007AFF; }
     .badge-cancelled { background: rgba(255,69,58,0.15); color: #FF453A; }
     input:focus, select:focus { outline: none; border-color: #007AFF; }
+    select, select option { background: #1a1a1a; color: #ffffff; }
+    select option:checked { background: #007AFF; color: #ffffff; }
+    input { color: #ffffff; }
+    input::placeholder { color: rgba(255,255,255,0.35); }
   </style>
 </head>
 <body class="min-h-screen">
