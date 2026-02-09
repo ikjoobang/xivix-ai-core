@@ -16,9 +16,11 @@ export function renderPaymentPage(storeId: number): string {
     * { font-family: 'Pretendard', -apple-system, sans-serif; }
     body { background: #050505; color: #fff; }
     .glass { background: rgba(255,255,255,0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.06); }
-    select, select option { background: #1a1a1a; color: #ffffff; }
-    select option:checked { background: #2563eb; color: #ffffff; }
-    input { color: #ffffff; }
+    /* 드롭다운 - 다크 배경 + 밝은 글씨 강제 적용 */
+    select { background-color: #1a1a1a !important; color: #ffffff !important; -webkit-appearance: none; -moz-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23999' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
+    select option { background-color: #1a1a1a !important; color: #ffffff !important; padding: 8px 12px; }
+    select option:hover, select option:focus, select option:checked { background-color: #2563eb !important; color: #ffffff !important; }
+    input { color: #ffffff !important; background-color: rgba(255,255,255,0.05) !important; }
     input::placeholder { color: rgba(255,255,255,0.35); }
   </style>
 </head>
@@ -37,7 +39,7 @@ export function renderPaymentPage(storeId: number): string {
       <!-- 결제 유형 선택 -->
       <div class="space-y-3 mb-6">
         <label class="text-sm text-white/60">결제 유형</label>
-        <select id="payment-type" onchange="updatePaymentInfo()" class="w-full bg-[#1a1a1a] text-white border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500">
+        <select id="payment-type" onchange="updatePaymentInfo()" class="w-full border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500" style="background-color:#1a1a1a;color:#fff;">
           <option value="setup_basic">기본 셋팅비 (300,000원)</option>
           <option value="setup_premium">프리미엄 셋팅비 (500,000원)</option>
           <option value="monthly_mini">월 이용료 - 미니 (29,000원)</option>
