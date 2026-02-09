@@ -42,6 +42,8 @@ import {
   BookingConversationState
 } from '../lib/naver-booking';
 import { sendSMS } from '../lib/notification';
+import { canUseFeature, parsePlan, getPlanConfig, getAILimitMessage, type PlanType } from '../lib/plan-config';
+import { incrementAIUsage, incrementTalkTalkUsage, incrementImageAnalysisUsage } from '../lib/usage-tracker';
 
 // ============ [XIVIX WATCHDOG] 이벤트 타입 정의 ============
 type NaverTalkTalkEventType = 'open' | 'leave' | 'friend' | 'send' | 'echo' | 'profile';
@@ -165,8 +167,10 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       const welcomeResult = await sendTextMessage(env, customerId, welcomeMsg, storeId);
       console.log(`[Webhook] Welcome message result:`, JSON.stringify(welcomeResult));
       
-      // 8개국어 안내 메시지 (환영 인사 바로 다음 - 무조건 표시)
-      const languageMsg = `🌐 다른 언어가 필요하신가요?\n` +
+      // 8개국어 안내 메시지 (환영 인사 바로 다음 - 요금제에 따라 표시)
+      const openPlan = (storeResult?.plan || 'light') as PlanType;
+      if (canUseFeature(openPlan, 'multiLanguage')) {
+        const languageMsg = `🌐 다른 언어가 필요하신가요?\n` +
         `Need another language?\n\n` +
         `🇺🇸 English → "EN"\n` +
         `🇯🇵 日本語 → "JP"\n` +
@@ -177,6 +181,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         `🇲🇳 Монгол → "MN"`;
       const langResult = await sendTextMessage(env, customerId, languageMsg, storeId);
       console.log(`[Webhook] Language message result:`, JSON.stringify(langResult));
+      } // end multiLanguage check
       
       // [WATCHDOG] 입장 로그 기록
       await env.DB.prepare(`
@@ -280,7 +285,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     
     const businessType = storeResult?.business_type || 'OTHER';
     const hasImage = !!(imageBase64 && imageMimeType);
-    const consultationType = classifyConsultation(userMessage, businessType, hasImage);
+    let consultationType = classifyConsultation(userMessage, businessType, hasImage);
     
     console.log(`[Webhook] Consultation type: ${consultationType}, Business: ${businessType}`);
     
@@ -1258,6 +1263,40 @@ ${eventsText.trim()}`;
     let aiResponse = '';
     let aiModel = '';
     let verified = false;
+    
+    // [V3.0] 요금제 기반 AI 사용량 체크
+    const storePlan = parsePlan(storeResult?.plan);
+    
+    // AI 대화 건수 한도 체크
+    try {
+      const usageCheck = await incrementAIUsage(env, storeId, storePlan);
+      if (!usageCheck.allowed) {
+        // 한도 초과 — 안내 메시지 발송
+        const limitMsg = getAILimitMessage(storePlan, usageCheck.current, usageCheck.limit);
+        await sendTextMessage(env, customerId, limitMsg, storeId);
+        console.log(`[Webhook] AI limit exceeded for store ${storeId} (plan: ${storePlan}, used: ${usageCheck.current}/${usageCheck.limit})`);
+        return c.json({ success: true, store_id: storeId, action: 'ai_limit_exceeded' });
+      }
+    } catch (usageError) {
+      // 사용량 추적 실패 시 AI 응답은 계속 진행 (서비스 중단 방지)
+      console.error('[Webhook] Usage tracking error (continuing):', usageError);
+    }
+    
+    // [V3.0] 전문상담AI/검증AI/이미지분석 요금제 체크
+    if (consultationType === 'expert' && !canUseFeature(storePlan, 'expertAI')) {
+      // 전문상담AI 미지원 요금제 → 일반 Gemini로 폴백
+      consultationType = 'simple' as any;
+      console.log(`[Webhook] Expert AI not available for plan ${storePlan}, falling back to simple`);
+    }
+    
+    if (consultationType === 'image' && !canUseFeature(storePlan, 'imageAnalysis')) {
+      // 이미지 분석 미지원 요금제 → 안내 메시지
+      await sendTextMessage(env, customerId, '이미지 분석 기능은 프리미엄 요금제에서 이용 가능합니다.\n\n업그레이드 문의: 010-4845-3065', storeId);
+      return c.json({ success: true, store_id: storeId, action: 'feature_disabled' });
+    }
+    
+    // 톡톡 발송 카운트 (통계용)
+    try { await incrementTalkTalkUsage(env, storeId); } catch {}
     
     // 전문 상담 또는 이미지 분석: AI Router 사용
     if (consultationType === 'expert' || consultationType === 'image') {

@@ -130,6 +130,14 @@ export function renderDashboard(storeId: number, version: string = '1.0.0'): str
           <i class="fas fa-calendar-alt w-5"></i>
           예약 관리
         </div>
+        <div class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-white/60" data-section="messages">
+          <i class="fas fa-paper-plane w-5"></i>
+          메시지 발송
+        </div>
+        <div class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-white/60" data-section="usage">
+          <i class="fas fa-chart-pie w-5"></i>
+          사용량
+        </div>
         <div class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-white/60" data-section="settings">
           <i class="fas fa-store w-5"></i>
           매장 설정
@@ -356,6 +364,90 @@ export function renderDashboard(storeId: number, version: string = '1.0.0'): str
           </div>
         </div>
         
+        <!-- Messages Section -->
+        <div id="section-messages" class="hidden">
+          <div class="glass rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-white/5 flex items-center justify-between">
+              <h3 class="font-semibold">메시지 발송</h3>
+              <div class="flex gap-2">
+                <button onclick="showMessageTab('individual')" id="tab-individual" class="px-3 py-1 text-xs rounded-lg accent-bg text-white">개별 발송</button>
+                <button onclick="showMessageTab('bulk')" id="tab-bulk" class="px-3 py-1 text-xs rounded-lg bg-white/10 text-white/60">단체 발송</button>
+                <button onclick="showMessageTab('history')" id="tab-history" class="px-3 py-1 text-xs rounded-lg bg-white/10 text-white/60">발송 이력</button>
+              </div>
+            </div>
+            <div class="p-6">
+              <!-- Individual Message -->
+              <div id="msg-individual">
+                <div class="space-y-4">
+                  <div>
+                    <label class="text-sm text-white/60 mb-1 block">수신자</label>
+                    <input type="text" id="msg-recipient-name" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500" placeholder="고객명 또는 전화번호">
+                  </div>
+                  <div>
+                    <label class="text-sm text-white/60 mb-1 block">전화번호</label>
+                    <input type="text" id="msg-recipient-phone" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500" placeholder="010-1234-5678">
+                  </div>
+                  <div>
+                    <label class="text-sm text-white/60 mb-1 block">채널</label>
+                    <select id="msg-channel" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500">
+                      <option value="talktalk">네이버 톡톡</option>
+                      <option value="sms">SMS</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-sm text-white/60 mb-1 block">메시지 내용</label>
+                    <textarea id="msg-content" rows="4" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 resize-none" placeholder="발송할 메시지를 입력하세요"></textarea>
+                    <div class="text-right mt-1"><span class="text-xs text-white/40" id="msg-char-count">0 / 90자 (SMS) · 2000자 (LMS)</span></div>
+                  </div>
+                  <button onclick="sendIndividualMessage()" class="w-full py-3 rounded-xl accent-bg text-white font-medium hover:opacity-90 transition">
+                    <i class="fas fa-paper-plane mr-2"></i>발송하기
+                  </button>
+                </div>
+              </div>
+              <!-- Bulk Message -->
+              <div id="msg-bulk" class="hidden">
+                <div class="space-y-4">
+                  <div class="glass rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-3">
+                      <label class="text-sm font-medium">수신 고객 선택</label>
+                      <button onclick="selectAllCustomers()" class="text-xs accent cursor-pointer">전체 선택</button>
+                    </div>
+                    <div id="bulk-customer-list" class="max-h-48 overflow-y-auto space-y-2">
+                      <div class="text-center text-white/30 py-4">고객 목록 로딩 중...</div>
+                    </div>
+                    <div class="mt-2 text-xs text-white/40">선택된 고객: <span id="bulk-selected-count">0</span>명</div>
+                  </div>
+                  <div>
+                    <label class="text-sm text-white/60 mb-1 block">메시지 내용</label>
+                    <textarea id="bulk-msg-content" rows="4" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 resize-none" placeholder="단체 발송할 메시지를 입력하세요"></textarea>
+                  </div>
+                  <button onclick="sendBulkMessage()" class="w-full py-3 rounded-xl accent-bg text-white font-medium hover:opacity-90 transition">
+                    <i class="fas fa-users mr-2"></i>단체 발송하기
+                  </button>
+                </div>
+              </div>
+              <!-- Message History -->
+              <div id="msg-history" class="hidden">
+                <div id="msg-history-list" class="space-y-3">
+                  <div class="text-center text-white/30 py-8"><i class="fas fa-spinner fa-spin text-xl mb-3 block"></i>로딩 중...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Usage Section -->
+        <div id="section-usage" class="hidden">
+          <div class="glass rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-white/5">
+              <h3 class="font-semibold">이번 달 사용량</h3>
+            </div>
+            <div class="p-6 space-y-6" id="usage-container">
+              <div class="text-center text-white/30 py-8"><i class="fas fa-spinner fa-spin text-xl mb-3 block"></i>로딩 중...</div>
+            </div>
+          </div>
+        </div>
+        
         <!-- Settings Section -->
         <div id="section-settings" class="hidden">
           <div class="glass rounded-2xl overflow-hidden">
@@ -408,6 +500,8 @@ export function renderDashboard(storeId: number, version: string = '1.0.0'): str
         'chat-test': 'AI 테스트',
         'logs': '상담 이력',
         'reservations': '예약 관리',
+        'messages': '메시지 발송',
+        'usage': '사용량',
         'settings': '매장 설정'
       };
       document.getElementById('page-title').textContent = titles[section] || section;
@@ -417,6 +511,8 @@ export function renderDashboard(storeId: number, version: string = '1.0.0'): str
       // Load data for section
       if (section === 'logs') fetchLogs();
       if (section === 'reservations') fetchReservations();
+      if (section === 'messages') fetchCustomersForBulk();
+      if (section === 'usage') fetchUsage();
       if (section === 'settings') fetchSettings();
     }
     
@@ -735,6 +831,277 @@ export function renderDashboard(storeId: number, version: string = '1.0.0'): str
       initCharts();
       setInterval(fetchStats, 30000);
     });
+    
+    // ============ 메시지 발송 기능 ============
+    function showMessageTab(tab) {
+      ['individual', 'bulk', 'history'].forEach(t => {
+        document.getElementById('msg-' + t).classList.add('hidden');
+        document.getElementById('tab-' + t).classList.remove('accent-bg');
+        document.getElementById('tab-' + t).classList.add('bg-white/10', 'text-white/60');
+      });
+      document.getElementById('msg-' + tab).classList.remove('hidden');
+      document.getElementById('tab-' + tab).classList.add('accent-bg');
+      document.getElementById('tab-' + tab).classList.remove('bg-white/10', 'text-white/60');
+      document.getElementById('tab-' + tab).classList.add('text-white');
+      
+      if (tab === 'bulk') fetchCustomersForBulk();
+      if (tab === 'history') fetchMessageHistory();
+    }
+    
+    // 글자수 카운터
+    document.getElementById('msg-content')?.addEventListener('input', function() {
+      const len = this.value.length;
+      const type = len <= 90 ? 'SMS' : 'LMS';
+      document.getElementById('msg-char-count').textContent = len + ' / 90자 (SMS) · 2000자 (LMS)' + (len > 90 ? ' → LMS 적용' : '');
+    });
+    
+    // 개별 메시지 발송
+    async function sendIndividualMessage() {
+      const phone = document.getElementById('msg-recipient-phone').value.trim();
+      const message = document.getElementById('msg-content').value.trim();
+      const channel = document.getElementById('msg-channel').value;
+      const name = document.getElementById('msg-recipient-name').value.trim();
+      
+      if (!message) { alert('메시지 내용을 입력해주세요'); return; }
+      if (channel === 'sms' && !phone) { alert('SMS 발송 시 전화번호가 필요합니다'); return; }
+      
+      try {
+        const res = await fetch('/api/stores/' + STORE_ID + '/send-message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customer_name: name, customer_phone: phone, message, channel })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          alert('메시지가 발송되었습니다!');
+          document.getElementById('msg-content').value = '';
+          document.getElementById('msg-recipient-phone').value = '';
+          document.getElementById('msg-recipient-name').value = '';
+        } else {
+          alert('발송 실패: ' + (data.error || '알 수 없는 오류'));
+        }
+      } catch (err) {
+        alert('네트워크 오류가 발생했습니다');
+      }
+    }
+    
+    // 단체 발송용 고객 목록 로드
+    let bulkCustomers = [];
+    let selectedCustomerIds = new Set();
+    
+    async function fetchCustomersForBulk() {
+      try {
+        const res = await fetch('/api/store/' + STORE_ID + '/customers?limit=100');
+        const data = await res.json();
+        bulkCustomers = data.success ? (data.data || []) : [];
+        renderBulkCustomerList();
+      } catch { bulkCustomers = []; renderBulkCustomerList(); }
+    }
+    
+    function renderBulkCustomerList() {
+      const container = document.getElementById('bulk-customer-list');
+      if (bulkCustomers.length === 0) {
+        container.innerHTML = '<div class="text-center text-white/30 py-4">등록된 고객이 없습니다</div>';
+        return;
+      }
+      container.innerHTML = bulkCustomers.map(c => \`
+        <label class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 cursor-pointer">
+          <input type="checkbox" class="bulk-check rounded" value="\${c.id}" onchange="updateBulkCount()" \${selectedCustomerIds.has(c.id) ? 'checked' : ''}>
+          <span class="text-sm">\${c.customer_name || '고객'}</span>
+          <span class="text-xs text-white/40 ml-auto">\${c.phone || c.naver_user_id || '-'}</span>
+        </label>
+      \`).join('');
+    }
+    
+    function updateBulkCount() {
+      selectedCustomerIds = new Set(
+        [...document.querySelectorAll('.bulk-check:checked')].map(el => parseInt(el.value))
+      );
+      document.getElementById('bulk-selected-count').textContent = selectedCustomerIds.size;
+    }
+    
+    function selectAllCustomers() {
+      const checkboxes = document.querySelectorAll('.bulk-check');
+      const allChecked = [...checkboxes].every(cb => cb.checked);
+      checkboxes.forEach(cb => cb.checked = !allChecked);
+      updateBulkCount();
+    }
+    
+    // 단체 메시지 발송
+    async function sendBulkMessage() {
+      const message = document.getElementById('bulk-msg-content').value.trim();
+      if (!message) { alert('메시지 내용을 입력해주세요'); return; }
+      if (selectedCustomerIds.size === 0) { alert('수신 고객을 선택해주세요'); return; }
+      
+      if (!confirm(\`\${selectedCustomerIds.size}명에게 발송하시겠습니까?\`)) return;
+      
+      try {
+        const res = await fetch('/api/stores/' + STORE_ID + '/send-bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customer_ids: [...selectedCustomerIds], message, channel: 'talktalk' })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          alert(\`발송 완료: \${data.data.successCount}/\${selectedCustomerIds.size}건 성공\`);
+          document.getElementById('bulk-msg-content').value = '';
+          selectedCustomerIds.clear();
+          updateBulkCount();
+        } else {
+          alert('발송 실패: ' + (data.error || '알 수 없는 오류'));
+        }
+      } catch (err) {
+        alert('네트워크 오류가 발생했습니다');
+      }
+    }
+    
+    // 발송 이력 조회
+    async function fetchMessageHistory() {
+      try {
+        const res = await fetch('/api/stores/' + STORE_ID + '/messages?limit=20');
+        const data = await res.json();
+        const list = data.success ? (data.data || []) : [];
+        
+        const container = document.getElementById('msg-history-list');
+        if (list.length === 0) {
+          container.innerHTML = '<div class="text-center text-white/30 py-8"><i class="fas fa-inbox text-3xl mb-3 block"></i>발송 이력이 없습니다</div>';
+          return;
+        }
+        
+        container.innerHTML = list.map(m => \`
+          <div class="glass rounded-xl p-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs px-2 py-1 rounded \${m.message_type === 'bulk' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}">
+                \${m.message_type === 'bulk' ? '단체' : '개별'} · \${m.channel}
+              </span>
+              <span class="text-xs text-white/40">\${new Date(m.sent_at || m.created_at).toLocaleString('ko-KR')}</span>
+            </div>
+            <p class="text-sm text-white/80 truncate">\${m.message_content}</p>
+            <div class="flex items-center gap-3 mt-2 text-xs text-white/40">
+              <span><i class="fas fa-users mr-1"></i>\${m.recipient_count}명</span>
+              <span class="text-emerald-400"><i class="fas fa-check mr-1"></i>\${m.success_count}건 성공</span>
+              \${m.fail_count > 0 ? '<span class="text-red-400"><i class="fas fa-times mr-1"></i>' + m.fail_count + '건 실패</span>' : ''}
+              <span class="\${m.status === 'sent' ? 'text-emerald-400' : m.status === 'failed' ? 'text-red-400' : 'text-yellow-400'}">\${m.status}</span>
+            </div>
+          </div>
+        \`).join('');
+      } catch {
+        document.getElementById('msg-history-list').innerHTML = '<div class="text-center text-red-400 py-4">이력 조회 실패</div>';
+      }
+    }
+    
+    // ============ 사용량 기능 ============
+    async function fetchUsage() {
+      try {
+        const [usageRes, planRes] = await Promise.all([
+          fetch('/api/usage/' + STORE_ID),
+          fetch('/api/plan/' + STORE_ID)
+        ]);
+        const usageData = await usageRes.json();
+        const planData = await planRes.json();
+        
+        if (!usageData.success) return;
+        
+        const u = usageData.data;
+        const plan = planData.data || {};
+        const config = plan.planConfig || {};
+        
+        const container = document.getElementById('usage-container');
+        container.innerHTML = \`
+          <!-- 요금제 정보 -->
+          <div class="glass rounded-xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <h4 class="text-lg font-semibold">\${config.name || '라이트'} <span class="text-sm text-white/40">(\${config.nameEn || 'Light'})</span></h4>
+                <p class="text-sm text-white/50 mt-1">월 \${(config.monthlyFee || 49000).toLocaleString()}원 · \${u.month}</p>
+              </div>
+              <span class="px-3 py-1 rounded-full text-xs \${plan.payment_status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-yellow-500/20 text-yellow-400'}">
+                \${plan.payment_status === 'active' ? '정상' : plan.payment_status || '대기'}
+              </span>
+            </div>
+          </div>
+          
+          <!-- AI 대화 사용량 -->
+          <div class="glass rounded-xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <i class="fas fa-robot accent"></i>
+                <span class="font-medium">AI 대화</span>
+              </div>
+              <span class="text-sm">\${u.ai.used.toLocaleString()} / \${u.ai.limit.toLocaleString()}건</span>
+            </div>
+            <div class="w-full bg-white/5 rounded-full h-3 overflow-hidden">
+              <div class="h-full rounded-full transition-all duration-500 \${u.ai.percentage > 90 ? 'bg-red-500' : u.ai.percentage > 70 ? 'bg-yellow-500' : 'bg-blue-500'}" 
+                   style="width: \${Math.min(100, u.ai.percentage)}%"></div>
+            </div>
+            <div class="flex justify-between mt-2 text-xs text-white/40">
+              <span>\${u.ai.percentage}% 사용</span>
+              <span>\${(u.ai.limit - u.ai.used).toLocaleString()}건 남음</span>
+            </div>
+          </div>
+          
+          <!-- SMS 사용량 -->
+          <div class="glass rounded-xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <i class="fas fa-sms accent"></i>
+                <span class="font-medium">SMS</span>
+              </div>
+              <span class="text-sm">\${u.sms.used.toLocaleString()} / \${u.sms.limit.toLocaleString()}건</span>
+            </div>
+            <div class="w-full bg-white/5 rounded-full h-3 overflow-hidden">
+              <div class="h-full rounded-full transition-all duration-500 \${u.sms.percentage > 100 ? 'bg-red-500' : u.sms.percentage > 80 ? 'bg-yellow-500' : 'bg-emerald-500'}" 
+                   style="width: \${Math.min(100, u.sms.percentage)}%"></div>
+            </div>
+            <div class="flex justify-between mt-2 text-xs text-white/40">
+              <span>\${u.sms.percentage}% 사용</span>
+              \${u.sms.extraCount > 0 ? '<span class="text-yellow-400">초과 ' + u.sms.extraCount + '건 (' + u.sms.extraCost.toLocaleString() + '원)</span>' : '<span>' + Math.max(0, u.sms.limit - u.sms.used) + '건 남음</span>'}
+            </div>
+          </div>
+          
+          <!-- 기타 사용량 -->
+          <div class="grid grid-cols-3 gap-3">
+            <div class="glass rounded-xl p-4 text-center">
+              <i class="fas fa-comment-dots text-lg mb-2 text-blue-400 block"></i>
+              <div class="text-xl font-bold">\${u.talktalk.toLocaleString()}</div>
+              <div class="text-xs text-white/40 mt-1">톡톡 발송</div>
+            </div>
+            <div class="glass rounded-xl p-4 text-center">
+              <i class="fas fa-envelope text-lg mb-2 text-purple-400 block"></i>
+              <div class="text-xl font-bold">\${u.lms}</div>
+              <div class="text-xs text-white/40 mt-1">LMS 발송</div>
+            </div>
+            <div class="glass rounded-xl p-4 text-center">
+              <i class="fas fa-image text-lg mb-2 text-emerald-400 block"></i>
+              <div class="text-xl font-bold">\${u.imageAnalyses}</div>
+              <div class="text-xs text-white/40 mt-1">이미지 분석</div>
+            </div>
+          </div>
+          
+          <!-- 활성 기능 목록 -->
+          <div class="glass rounded-xl p-5">
+            <h4 class="font-medium mb-3"><i class="fas fa-check-circle accent mr-2"></i>활성 기능</h4>
+            <div class="flex flex-wrap gap-2">
+              \${(config.features || []).map(f => {
+                const names = {
+                  aiAutoResponse: 'AI 자동응답', multiLanguage: '다국어', reservationReminder: '예약 리마인더',
+                  menuPriceGuide: '메뉴 안내', locationHoursGuide: '위치 안내', customerDataMgmt: 'CRM',
+                  visitCycleAlert: '방문주기 알림', revenueStats: '매출 통계', manualMessageIndiv: '개별 발송',
+                  manualMessageBulk: '단체 발송', expertAI: '전문 상담 AI', verificationAI: '검증 AI',
+                  imageAnalysis: '이미지 분석', multiStore: '멀티매장', dedicatedManager: '전담 매니저',
+                  noshowPrevention: '노쇼 방지', monthlyReport: '월간 리포트', callbackRequest: '콜백 요청'
+                };
+                return '<span class="px-3 py-1 text-xs rounded-full bg-white/5 text-white/70">' + (names[f] || f) + '</span>';
+              }).join('')}
+            </div>
+          </div>
+        \`;
+      } catch (err) {
+        document.getElementById('usage-container').innerHTML = '<div class="text-center text-red-400 py-4">사용량 조회 실패</div>';
+      }
+    }
   </script>
 </body>
 </html>

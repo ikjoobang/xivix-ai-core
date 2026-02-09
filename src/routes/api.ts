@@ -10656,4 +10656,593 @@ api.get('/templates/industry/:id', async (c) => {
   });
 });
 
+// ============================================================================
+// [V3.0] 요금제 & 사용량 관리 API
+// ============================================================================
+
+import { getPlanConfig, PLAN_CONFIGS, canUseFeature, parsePlan, type PlanType } from '../lib/plan-config';
+import { getUsageSummary, getAllStoresUsage } from '../lib/usage-tracker';
+
+// [V3.0-1] 매장 요금제 조회
+api.get('/plan/:storeId', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  
+  const store = await c.env.DB.prepare(
+    'SELECT id, store_name, plan, setup_type, monthly_fee, payment_status, store_role, parent_store_id FROM xivix_stores WHERE id = ?'
+  ).bind(storeId).first<{
+    id: number; store_name: string; plan: string; setup_type: string;
+    monthly_fee: number; payment_status: string; store_role: string; parent_store_id: number;
+  }>();
+  
+  if (!store) {
+    return c.json<ApiResponse>({ success: false, error: '매장을 찾을 수 없습니다', timestamp: Date.now() }, 404);
+  }
+  
+  const plan = (store.plan || 'light') as PlanType;
+  const config = getPlanConfig(plan);
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: {
+      store_id: store.id,
+      store_name: store.store_name,
+      plan,
+      planConfig: config,
+      setup_type: store.setup_type || 'basic',
+      monthly_fee: store.monthly_fee || config.monthlyFee,
+      payment_status: store.payment_status || 'pending',
+      store_role: store.store_role || 'single',
+      parent_store_id: store.parent_store_id,
+    },
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-2] 매장 요금제 변경 (마스터 전용)
+api.put('/plan/:storeId', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  const { plan, monthly_fee } = await c.req.json() as { plan: PlanType; monthly_fee?: number };
+  
+  if (!plan || !PLAN_CONFIGS[plan]) {
+    return c.json<ApiResponse>({ success: false, error: '유효하지 않은 요금제입니다', timestamp: Date.now() }, 400);
+  }
+  
+  const config = getPlanConfig(plan);
+  const fee = monthly_fee || config.monthlyFee;
+  
+  await c.env.DB.prepare(`
+    UPDATE xivix_stores SET plan = ?, monthly_fee = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+  `).bind(plan, fee, storeId).run();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { message: `요금제가 ${config.name}(${fee.toLocaleString()}원/월)로 변경되었습니다` },
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-3] 사용량 조회
+api.get('/usage/:storeId', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  
+  const store = await c.env.DB.prepare(
+    'SELECT plan FROM xivix_stores WHERE id = ?'
+  ).bind(storeId).first<{ plan: string }>();
+  
+  const plan = (store?.plan || 'light') as PlanType;
+  const summary = await getUsageSummary(c.env, storeId, plan);
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: summary,
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-4] 전체 매장 사용량 요약 (마스터용)
+api.get('/usage/all/summary', async (c) => {
+  const summary = await getAllStoresUsage(c.env);
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: summary,
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-5] 요금제 목록 조회 (프론트엔드용)
+api.get('/plans/list', async (c) => {
+  return c.json<ApiResponse>({
+    success: true,
+    data: Object.entries(PLAN_CONFIGS).map(([key, p]) => ({
+      id: key,
+      name: p.name,
+      nameEn: p.nameEn,
+      monthlyFee: p.monthlyFee,
+      setupFee: p.setupFee,
+      aiLimit: p.aiLimit,
+      smsLimit: p.smsLimit,
+      smsExtraPrice: p.smsExtraPrice,
+      features: p.features,
+    })),
+    timestamp: Date.now()
+  });
+});
+
+// ============================================================================
+// [V3.0] 수동 메시지 발송 API
+// ============================================================================
+
+// [V3.0-6] 개별 메시지 발송 (사장님 → 고객)
+api.post('/stores/:storeId/send-message', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  const { customer_id, customer_name, customer_phone, message, channel } = await c.req.json() as {
+    customer_id?: number;
+    customer_name?: string;
+    customer_phone?: string;
+    message: string;
+    channel?: 'talktalk' | 'sms';
+  };
+  
+  if (!message || message.trim().length === 0) {
+    return c.json<ApiResponse>({ success: false, error: '메시지 내용을 입력해주세요', timestamp: Date.now() }, 400);
+  }
+  
+  // 요금제 체크
+  const store = await c.env.DB.prepare(
+    'SELECT id, store_name, plan, naver_talktalk_id FROM xivix_stores WHERE id = ?'
+  ).bind(storeId).first<{ id: number; store_name: string; plan: string; naver_talktalk_id: string }>();
+  
+  if (!store) {
+    return c.json<ApiResponse>({ success: false, error: '매장을 찾을 수 없습니다', timestamp: Date.now() }, 404);
+  }
+  
+  const storePlan = (store.plan || 'light') as PlanType;
+  if (!canUseFeature(storePlan, 'manualMessageIndiv')) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: `수동 메시지 발송 기능은 스탠다드 이상 요금제에서 이용 가능합니다. (현재: ${getPlanConfig(storePlan).name})`,
+      timestamp: Date.now()
+    }, 403);
+  }
+  
+  try {
+    let sendResult: any = null;
+    let usedChannel = channel || 'talktalk';
+    
+    // 톡톡으로 발송 시도 (customer_id가 있는 경우)
+    if (usedChannel === 'talktalk' && customer_id) {
+      // 네이버 톡톡으로 직접 발송
+      const { sendTextMessage } = await import('../lib/naver-talktalk');
+      sendResult = await sendTextMessage(c.env, String(customer_id), message, storeId);
+    } else if (customer_phone) {
+      // SMS로 발송
+      usedChannel = 'sms';
+      sendResult = await sendSMS(c.env, customer_phone, `[${store.store_name}] ${message}`);
+    } else {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '발송 대상(고객 ID 또는 전화번호)이 필요합니다',
+        timestamp: Date.now()
+      }, 400);
+    }
+    
+    // 발송 이력 저장
+    await c.env.DB.prepare(`
+      INSERT INTO xivix_manual_messages (store_id, sender_type, message_type, channel, recipient_count, recipients, message_content, status, success_count, sent_at)
+      VALUES (?, 'owner', 'individual', ?, 1, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).bind(
+      storeId,
+      usedChannel,
+      JSON.stringify([{ customer_id, customer_name, customer_phone }]),
+      message,
+      sendResult?.success ? 'sent' : 'failed',
+      sendResult?.success ? 1 : 0
+    ).run();
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        message: '메시지가 발송되었습니다',
+        channel: usedChannel,
+        result: sendResult
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '메시지 발송 실패: ' + error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// [V3.0-7] 단체 메시지 발송 (프리미엄 전용)
+api.post('/stores/:storeId/send-bulk', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  const { customer_ids, message, channel } = await c.req.json() as {
+    customer_ids: number[];
+    message: string;
+    channel?: 'talktalk' | 'sms';
+  };
+  
+  if (!message || !customer_ids || customer_ids.length === 0) {
+    return c.json<ApiResponse>({ success: false, error: '메시지와 수신 고객을 선택해주세요', timestamp: Date.now() }, 400);
+  }
+  
+  // 요금제 체크
+  const store = await c.env.DB.prepare(
+    'SELECT id, store_name, plan FROM xivix_stores WHERE id = ?'
+  ).bind(storeId).first<{ id: number; store_name: string; plan: string }>();
+  
+  if (!store) {
+    return c.json<ApiResponse>({ success: false, error: '매장을 찾을 수 없습니다', timestamp: Date.now() }, 404);
+  }
+  
+  const storePlan = (store.plan || 'light') as PlanType;
+  if (!canUseFeature(storePlan, 'manualMessageBulk')) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: `단체 메시지 발송 기능은 프리미엄 이상 요금제에서 이용 가능합니다. (현재: ${getPlanConfig(storePlan).name})`,
+      timestamp: Date.now()
+    }, 403);
+  }
+  
+  try {
+    // 고객 정보 조회
+    const placeholders = customer_ids.map(() => '?').join(',');
+    const customers = await c.env.DB.prepare(
+      `SELECT id, customer_name, phone, naver_user_id FROM xivix_customers WHERE id IN (${placeholders}) AND store_id = ?`
+    ).bind(...customer_ids, storeId).all<{
+      id: number; customer_name: string; phone: string; naver_user_id: string;
+    }>();
+    
+    let successCount = 0;
+    let failCount = 0;
+    const results: any[] = [];
+    
+    for (const customer of (customers.results || [])) {
+      try {
+        const usedChannel = channel || 'talktalk';
+        let sendResult: any;
+        
+        if (usedChannel === 'talktalk' && customer.naver_user_id) {
+          const { sendTextMessage } = await import('../lib/naver-talktalk');
+          sendResult = await sendTextMessage(c.env, customer.naver_user_id, message, storeId);
+        } else if (customer.phone) {
+          sendResult = await sendSMS(c.env, customer.phone, `[${store.store_name}] ${message}`);
+        }
+        
+        if (sendResult?.success) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+        results.push({ customer_id: customer.id, success: sendResult?.success });
+        
+        // 50ms 딜레이 (API 부하 방지)
+        await new Promise(resolve => setTimeout(resolve, 50));
+      } catch {
+        failCount++;
+        results.push({ customer_id: customer.id, success: false });
+      }
+    }
+    
+    // 발송 이력 저장
+    await c.env.DB.prepare(`
+      INSERT INTO xivix_manual_messages (store_id, sender_type, message_type, channel, recipient_count, message_content, status, success_count, fail_count, sent_at)
+      VALUES (?, 'owner', 'bulk', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).bind(
+      storeId,
+      channel || 'talktalk',
+      customer_ids.length,
+      message,
+      failCount === 0 ? 'sent' : (successCount === 0 ? 'failed' : 'partial'),
+      successCount,
+      failCount
+    ).run();
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        message: `${successCount}/${customer_ids.length}건 발송 완료`,
+        successCount,
+        failCount,
+        results
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '단체 발송 실패: ' + error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// [V3.0-8] 발송 이력 조회
+api.get('/stores/:storeId/messages', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  const limit = parseInt(c.req.query('limit') || '20', 10);
+  
+  const results = await c.env.DB.prepare(`
+    SELECT * FROM xivix_manual_messages WHERE store_id = ? ORDER BY created_at DESC LIMIT ?
+  `).bind(storeId, limit).all();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: results.results,
+    timestamp: Date.now()
+  });
+});
+
+// ============================================================================
+// [V3.0] KG이니시스 결제 API
+// ============================================================================
+
+// [V3.0-9] 결제 요청 준비 (PC/Mobile 공통)
+api.post('/payment/prepare', async (c) => {
+  const { store_id, payment_type, amount, description } = await c.req.json() as {
+    store_id: number;
+    payment_type: 'setup' | 'monthly' | 'sms_extra';
+    amount: number;
+    description?: string;
+  };
+  
+  if (!store_id || !payment_type || !amount) {
+    return c.json<ApiResponse>({ success: false, error: '필수 정보를 입력해주세요', timestamp: Date.now() }, 400);
+  }
+  
+  const store = await c.env.DB.prepare(
+    'SELECT id, store_name, plan FROM xivix_stores WHERE id = ?'
+  ).bind(store_id).first<{ id: number; store_name: string; plan: string }>();
+  
+  if (!store) {
+    return c.json<ApiResponse>({ success: false, error: '매장을 찾을 수 없습니다', timestamp: Date.now() }, 404);
+  }
+  
+  const vatAmount = Math.round(amount * 0.1);
+  const totalAmount = amount + vatAmount;
+  const oid = `XIVIX_${store_id}_${payment_type}_${Date.now()}`;
+  
+  // 결제 요청 레코드 생성
+  const result = await c.env.DB.prepare(`
+    INSERT INTO xivix_payments (store_id, payment_type, amount, vat_amount, total_amount, pg_provider, pg_mid, description, status)
+    VALUES (?, ?, ?, ?, ?, 'kginicis', 'MOI9559449', ?, 'pending')
+  `).bind(store_id, payment_type, amount, vatAmount, totalAmount, description || `XIVIX ${store.store_name} ${payment_type}`).run();
+  
+  const paymentId = result.meta.last_row_id;
+  
+  // KG이니시스 결제 파라미터 생성
+  const timestamp = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: {
+      payment_id: paymentId,
+      oid,
+      mid: 'MOI9559449',
+      goodname: description || `XIVIX AI ${getPlanConfig((store.plan || 'light') as PlanType).name}`,
+      price: totalAmount,
+      buyername: store.store_name,
+      timestamp,
+      // 프론트엔드에서 INIStd.pay() 호출 시 사용
+      pg_params: {
+        gopaymethod: 'Card',
+        mid: 'MOI9559449',
+        oid,
+        price: totalAmount,
+        goodname: description || `XIVIX AI 솔루션`,
+        currency: 'WON',
+        acceptmethod: 'below1000',
+        returnUrl: `https://studioaibotbot.com/api/payment/return`,
+        closeUrl: `https://studioaibotbot.com/api/payment/close`,
+        popupUrl: `https://studioaibotbot.com/api/payment/popup`,
+      }
+    },
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-10] 결제 완료 콜백 (KG이니시스 → 서버)
+api.post('/payment/return', async (c) => {
+  try {
+    const formData = await c.req.formData();
+    const resultCode = formData.get('resultCode') as string;
+    const resultMsg = formData.get('resultMsg') as string;
+    const mid = formData.get('mid') as string;
+    const orderNumber = formData.get('orderNumber') as string;
+    const authToken = formData.get('authToken') as string;
+    const authUrl = formData.get('authUrl') as string;
+    const TotPrice = formData.get('TotPrice') as string;
+    
+    if (resultCode !== '0000') {
+      // 결제 실패
+      return c.html(`<script>alert('결제가 실패했습니다: ${resultMsg}'); window.close();</script>`);
+    }
+    
+    // KG이니시스 승인 요청 (서버에서 2차 인증)
+    const authResponse = await fetch(authUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        mid,
+        authToken,
+        price: TotPrice,
+        timestamp: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14),
+        signature: '', // INIAPI Key로 서명 필요
+        charset: 'UTF-8',
+        format: 'JSON',
+      }).toString()
+    });
+    
+    const authResult = await authResponse.json() as any;
+    
+    if (authResult.resultCode === '0000') {
+      // 결제 성공 — DB 업데이트
+      await c.env.DB.prepare(`
+        UPDATE xivix_payments SET 
+          status = 'paid',
+          pg_tid = ?,
+          card_name = ?,
+          card_number = ?,
+          approval_number = ?,
+          paid_at = CURRENT_TIMESTAMP,
+          raw_response = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE pg_mid = ? AND status = 'pending'
+        ORDER BY created_at DESC LIMIT 1
+      `).bind(
+        authResult.tid || '',
+        authResult.cardName || '',
+        authResult.cardNum || '',
+        authResult.applNum || '',
+        JSON.stringify(authResult),
+        mid
+      ).run();
+      
+      return c.html(`<script>
+        alert('결제가 완료되었습니다!');
+        if (window.opener) {
+          window.opener.postMessage({ type: 'PAYMENT_SUCCESS', tid: '${authResult.tid || ''}' }, '*');
+        }
+        window.close();
+      </script>`);
+    } else {
+      return c.html(`<script>alert('승인 실패: ${authResult.resultMsg || '알 수 없는 오류'}'); window.close();</script>`);
+    }
+  } catch (error: any) {
+    console.error('[Payment] Return callback error:', error);
+    return c.html(`<script>alert('결제 처리 중 오류가 발생했습니다.'); window.close();</script>`);
+  }
+});
+
+// [V3.0-11] 결제 취소/환불
+api.post('/payment/cancel', async (c) => {
+  const { payment_id, reason } = await c.req.json() as { payment_id: number; reason?: string };
+  
+  const payment = await c.env.DB.prepare(
+    'SELECT * FROM xivix_payments WHERE id = ? AND status = ?'
+  ).bind(payment_id, 'paid').first<any>();
+  
+  if (!payment) {
+    return c.json<ApiResponse>({ success: false, error: '취소할 수 있는 결제를 찾을 수 없습니다', timestamp: Date.now() }, 404);
+  }
+  
+  // KG이니시스 취소 API 호출
+  try {
+    const cancelResponse = await fetch('https://iniapi.inicis.com/api/v1/refund', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        type: 'Refund',
+        paymethod: 'Card',
+        timestamp: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14),
+        clientIp: '127.0.0.1',
+        mid: 'MOI9559449',
+        tid: payment.pg_tid,
+        msg: reason || '관리자 취소',
+        price: String(payment.total_amount),
+        confirmPrice: String(payment.total_amount),
+      }).toString()
+    });
+    
+    const cancelResult = await cancelResponse.json() as any;
+    
+    if (cancelResult.resultCode === '00') {
+      await c.env.DB.prepare(`
+        UPDATE xivix_payments SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, refund_amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+      `).bind(payment.total_amount, payment_id).run();
+      
+      return c.json<ApiResponse>({
+        success: true,
+        data: { message: '결제가 취소되었습니다', refund_amount: payment.total_amount },
+        timestamp: Date.now()
+      });
+    } else {
+      return c.json<ApiResponse>({
+        success: false,
+        error: `취소 실패: ${cancelResult.resultMsg || '알 수 없는 오류'}`,
+        timestamp: Date.now()
+      }, 400);
+    }
+  } catch (error: any) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: '취소 처리 중 오류: ' + error.message,
+      timestamp: Date.now()
+    }, 500);
+  }
+});
+
+// [V3.0-12] 결제 이력 조회
+api.get('/payments/:storeId', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  
+  const results = await c.env.DB.prepare(`
+    SELECT * FROM xivix_payments WHERE store_id = ? ORDER BY created_at DESC LIMIT 50
+  `).bind(storeId).all();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: results.results,
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-13] 매장별 AI API 키 설정
+api.put('/stores/:id/ai-keys', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  const { openai_key, gemini_key } = await c.req.json() as {
+    openai_key?: string;
+    gemini_key?: string;
+  };
+  
+  await c.env.DB.prepare(`
+    UPDATE xivix_stores SET 
+      store_openai_key = COALESCE(?, store_openai_key),
+      store_gemini_key = COALESCE(?, store_gemini_key),
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).bind(openai_key || null, gemini_key || null, storeId).run();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { message: 'AI API 키가 업데이트되었습니다' },
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-14] 매장별 AI API 키 조회 (마스킹)
+api.get('/stores/:id/ai-keys', async (c) => {
+  const storeId = parseInt(c.req.param('id'), 10);
+  
+  const store = await c.env.DB.prepare(
+    'SELECT store_openai_key, store_gemini_key FROM xivix_stores WHERE id = ?'
+  ).bind(storeId).first<{ store_openai_key: string; store_gemini_key: string }>();
+  
+  if (!store) {
+    return c.json<ApiResponse>({ success: false, error: '매장을 찾을 수 없습니다', timestamp: Date.now() }, 404);
+  }
+  
+  // 키 마스킹 (앞 4자 + ****)
+  const maskKey = (key: string | null) => {
+    if (!key) return null;
+    return key.slice(0, 8) + '****' + key.slice(-4);
+  };
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: {
+      openai_key: maskKey(store.store_openai_key),
+      gemini_key: maskKey(store.store_gemini_key),
+      openai_set: !!store.store_openai_key,
+      gemini_set: !!store.store_gemini_key,
+    },
+    timestamp: Date.now()
+  });
+});
+
 export default api;

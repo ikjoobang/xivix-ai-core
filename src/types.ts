@@ -61,6 +61,16 @@ export interface Store {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  // V3.0 요금제 관련
+  plan?: 'mini' | 'light' | 'standard' | 'premium' | 'enterprise';
+  setup_type?: 'soho' | 'basic' | 'premium' | 'enterprise';
+  monthly_fee?: number;
+  payment_status?: 'pending' | 'active' | 'overdue' | 'cancelled' | 'trial';
+  parent_store_id?: number;          // 다점포 지점일 경우 본점 ID
+  store_role?: 'single' | 'main' | 'branch';
+  manager_id?: number;
+  store_openai_key?: string;         // 매장별 OpenAI 키
+  store_gemini_key?: string;         // 매장별 Gemini 키
 }
 
 export interface ConversationLog {
