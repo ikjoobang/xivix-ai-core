@@ -12138,18 +12138,20 @@ api.post('/steppay/change-plan/:storeId', async (c) => {
 api.post('/steppay/webhook', async (c) => {
   try {
     const payload = await c.req.json() as any;
-    const eventType = payload.eventType || payload.type || 'unknown';
+    const eventType = payload.event || payload.eventType || payload.type || 'unknown';
+    const eventData = payload.data || payload;
+    const orderCode_ = eventData.code || eventData.orderCode || payload.orderCode || '';
     
-    console.log(`[Steppay Webhook] Event: ${eventType}`, JSON.stringify(payload).slice(0, 500));
+    console.log(`[Steppay Webhook] Event: ${eventType}, OrderCode: ${orderCode_}`, JSON.stringify(payload).slice(0, 500));
     
     // 웹훅 로그 저장
     await c.env.DB.prepare(`
       INSERT INTO xivix_steppay_webhook_logs (event_type, event_id, order_code, raw_payload)
       VALUES (?, ?, ?, ?)
-    `).bind(eventType, payload.eventId || '', payload.orderCode || payload.data?.orderCode || '', JSON.stringify(payload)).run();
+    `).bind(eventType, payload.idempotentKey || payload.eventId || '', orderCode_, JSON.stringify(payload)).run();
     
     const data = payload.data || payload;
-    const orderCode = data.orderCode || data.order_code || '';
+    const orderCode = data.code || data.orderCode || data.order_code || '';
     
     // 주문 코드로 매장 찾기
     let subscription: any = null;
@@ -12269,6 +12271,44 @@ api.post('/steppay/webhook', async (c) => {
             UPDATE xivix_subscriptions SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
             WHERE store_id = ?
           `).bind(subscription.store_id).run();
+        }
+        break;
+      }
+      
+      case 'order.updated': {
+        // order.updated에서 결제 완료 여부 확인 (items[0].status === 'PAID')
+        const items = data.items || [];
+        const isPaid = items.some((item: any) => item.status === 'PAID');
+        if (isPaid && subscription) {
+          const subscriptionId = data.subscriptionId || data.subscription?.id ||
+            items.find((item: any) => item.subscriptionId)?.subscriptionId;
+          
+          await c.env.DB.prepare(`
+            UPDATE xivix_subscriptions SET 
+              status = 'active', 
+              steppay_subscription_id = ?,
+              started_at = CURRENT_TIMESTAMP,
+              next_billing_at = datetime('now', '+1 month'),
+              auto_renew = 1,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE store_id = ?
+          `).bind(subscriptionId || null, subscription.store_id).run();
+          
+          await c.env.DB.prepare(
+            "UPDATE xivix_stores SET is_active = 1, plan = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+          ).bind(subscription.plan, subscription.store_id).run();
+          
+          await c.env.DB.prepare(`
+            UPDATE xivix_payments SET status = 'paid', paid_at = CURRENT_TIMESTAMP, 
+              raw_response = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE store_id = ? AND status = 'pending' AND pg_provider = 'steppay'
+            ORDER BY created_at DESC LIMIT 1
+          `).bind(JSON.stringify(data), subscription.store_id).run();
+          
+          await c.env.DB.prepare(`
+            UPDATE xivix_steppay_webhook_logs SET store_id = ?, processed = 1
+            WHERE order_code = ? AND event_type = ? ORDER BY created_at DESC LIMIT 1
+          `).bind(subscription.store_id, orderCode, eventType).run();
         }
         break;
       }
