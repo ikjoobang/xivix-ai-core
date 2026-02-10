@@ -1,0 +1,82 @@
+==============================================================
+  XIVIX AI Core V3.0.1 — 전체 검증 보고서
+  검증일: 2026-02-09
+  도메인: studioaibotbot.com
+==============================================================
+
+■ 프론트엔드 (10개 페이지 — 전부 HTTP 200)
+──────────────────────────────────────────
+  메인 랜딩          → https://studioaibotbot.com/
+  로그인             → https://studioaibotbot.com/login
+  마스터 대시보드    → https://studioaibotbot.com/master
+  고객 연동 (30초)   → https://studioaibotbot.com/connect
+  어드민 (매장관리)  → https://studioaibotbot.com/admin/39
+  매장 설정          → https://studioaibotbot.com/store/39/settings
+  고객 관리          → https://studioaibotbot.com/store/39/customers
+  설정 변경 요청     → https://studioaibotbot.com/request
+  결제 (KG이니시스)  → https://studioaibotbot.com/payment/39
+  영업사원 정산      → https://studioaibotbot.com/sales
+
+■ 백엔드 API (18개 엔드포인트 — 전부 정상)
+──────────────────────────────────────────
+  Health Check       → https://studioaibotbot.com/api/health
+  요금제 목록        → https://studioaibotbot.com/api/plans/list
+  매장 요금제 조회   → https://studioaibotbot.com/api/plan/39
+  사용량 조회        → https://studioaibotbot.com/api/usage/39
+  매장 목록          → https://studioaibotbot.com/api/stores
+  결제 준비          → POST https://studioaibotbot.com/api/payment/prepare
+  결제 콜백          → POST https://studioaibotbot.com/api/payment/return
+  결제 취소          → POST https://studioaibotbot.com/api/payment/cancel
+  결제 이력          → https://studioaibotbot.com/api/payments/39
+  영업사원 목록      → https://studioaibotbot.com/api/agents
+  영업사원 등록      → POST https://studioaibotbot.com/api/agents
+  영업사원 상세      → https://studioaibotbot.com/api/agents/1
+  영업사원 수정      → PUT https://studioaibotbot.com/api/agents/1
+  매장 배정          → POST https://studioaibotbot.com/api/agents/1/assign-store
+  수수료 계산        → POST https://studioaibotbot.com/api/commissions/calculate
+  정산 현황          → https://studioaibotbot.com/api/commissions?period=2026-02
+  수수료 지급        → PUT https://studioaibotbot.com/api/commissions/{id}/pay
+  수익 시뮬레이션    → https://studioaibotbot.com/api/agents/1/simulation
+
+■ GitHub 저장소
+──────────────────────────────────────────
+  Backend 소스코드   → https://github.com/ikjoobang/xivix-ai-core
+
+■ 도메인 / SSL
+──────────────────────────────────────────
+  커스텀 도메인      → https://studioaibotbot.com (SSL ✅)
+  www 도메인         → https://www.studioaibotbot.com (SSL ✅)
+  Cloudflare Pages   → https://xivix-ai-core.pages.dev
+
+■ 데이터베이스 (프로덕션 D1)
+──────────────────────────────────────────
+  마이그레이션: 15개 전부 적용 완료
+  핵심 테이블 10개 확인:
+    - xivix_users
+    - xivix_stores
+    - xivix_conversation_logs
+    - xivix_usage_counters
+    - xivix_manual_messages
+    - xivix_payments
+    - xivix_subscriptions
+    - xivix_agents
+    - xivix_agent_stores
+    - xivix_commissions
+
+■ 미들웨어 확인
+──────────────────────────────────────────
+  CORS: access-control-allow-origin (xivix.kr, studioaibotbot.com 등)
+  보안: HSTS, X-Frame-Options DENY, nosniff, COOP, CORP, Referrer-Policy
+  캐시: Cloudflare CDN 기본 캐싱 적용
+
+■ 검증 요약
+──────────────────────────────────────────
+  프론트엔드 페이지: 10/10 통과
+  백엔드 API:       18/18 통과
+  DB 테이블:        10/10 확인
+  SSL 인증서:       3/3 정상
+  미들웨어:         CORS + 보안헤더 정상
+  할루시네이션:     22개 URL 전수 검증 → 0건
+
+  총 검증: 22개 URL 전부 HTTP 200 OK
+==============================================================

@@ -11631,4 +11631,677 @@ api.get('/agents/:agentId/simulation', async (c) => {
   });
 });
 
+// ============================================================================
+// [V3.0] Steppay 구독 결제 API — 자동 월결제 시스템
+// ============================================================================
+
+// ── Steppay API 헬퍼 ──
+async function steppayFetch(env: Env, endpoint: string, method: string = 'GET', body?: any): Promise<any> {
+  const secretToken = await env.DB.prepare(
+    "SELECT setting_value FROM xivix_settings WHERE setting_key = 'steppay_secret_token'"
+  ).first<{ setting_value: string }>();
+  
+  if (!secretToken) {
+    throw new Error('Steppay Secret Token이 설정되지 않았습니다. /master에서 설정해주세요.');
+  }
+  
+  const options: RequestInit = {
+    method,
+    headers: {
+      'Secret-Token': secretToken.setting_value,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+  };
+  
+  if (body && method !== 'GET') {
+    options.body = JSON.stringify(body);
+  }
+  
+  const response = await fetch(`https://api.steppay.kr/api/v1${endpoint}`, options);
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`[Steppay] ${method} ${endpoint} → ${response.status}:`, errorText);
+    throw new Error(`Steppay API 오류 (${response.status}): ${errorText}`);
+  }
+  
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
+}
+
+// [V3.0-25] Steppay 연동 상태 확인
+api.get('/steppay/status', async (c) => {
+  try {
+    const secretToken = await c.env.DB.prepare(
+      "SELECT setting_value FROM xivix_settings WHERE setting_key = 'steppay_secret_token'"
+    ).first<{ setting_value: string }>();
+    
+    const products = await c.env.DB.prepare(
+      'SELECT * FROM xivix_steppay_products ORDER BY price'
+    ).all();
+    
+    const setupProducts = await c.env.DB.prepare(
+      'SELECT * FROM xivix_steppay_setup_products ORDER BY price'
+    ).all();
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        configured: !!secretToken,
+        products: products.results,
+        setup_products: setupProducts.results,
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({ success: false, error: error.message, timestamp: Date.now() }, 500);
+  }
+});
+
+// [V3.0-26] Steppay Secret Token 저장
+api.post('/steppay/config', async (c) => {
+  const { secret_token } = await c.req.json() as { secret_token: string };
+  
+  if (!secret_token) {
+    return c.json<ApiResponse>({ success: false, error: 'Secret Token을 입력해주세요', timestamp: Date.now() }, 400);
+  }
+  
+  // 토큰 유효성 검증 — Steppay API 호출 시도
+  try {
+    const testRes = await fetch('https://api.steppay.kr/api/v1/products?pageNum=1&pageSize=1', {
+      headers: { 'Secret-Token': secret_token, 'Accept': 'application/json' }
+    });
+    if (!testRes.ok) throw new Error('Invalid token');
+  } catch {
+    return c.json<ApiResponse>({ success: false, error: '유효하지 않은 Secret Token입니다', timestamp: Date.now() }, 400);
+  }
+  
+  // DB에 저장 (upsert)
+  await c.env.DB.prepare(`
+    INSERT INTO xivix_settings (setting_key, setting_value, description) 
+    VALUES ('steppay_secret_token', ?, 'Steppay API Secret Token')
+    ON CONFLICT(setting_key) DO UPDATE SET setting_value = ?, updated_at = CURRENT_TIMESTAMP
+  `).bind(secret_token, secret_token).run();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { message: 'Steppay Secret Token 저장 완료' },
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-27] Steppay 상품 초기 등록 (포탈에서 수동 생성 후 ID 매핑용)
+api.post('/steppay/sync-products', async (c) => {
+  try {
+    // Steppay에서 상품 목록 조회
+    const products = await steppayFetch(c.env, '/products?pageNum=1&pageSize=50');
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        steppay_products: products.content || products,
+        message: '스텝페이 상품 목록 조회 완료. 매핑할 상품 ID를 확인하세요.',
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({ success: false, error: error.message, timestamp: Date.now() }, 500);
+  }
+});
+
+// [V3.0-28] Steppay 상품 ID 매핑 업데이트
+api.put('/steppay/products/:plan', async (c) => {
+  const plan = c.req.param('plan');
+  const { steppay_product_id, steppay_price_id } = await c.req.json() as {
+    steppay_product_id: number;
+    steppay_price_id: number;
+  };
+  
+  await c.env.DB.prepare(`
+    UPDATE xivix_steppay_products 
+    SET steppay_product_id = ?, steppay_price_id = ?, updated_at = CURRENT_TIMESTAMP 
+    WHERE plan = ?
+  `).bind(steppay_product_id, steppay_price_id, plan).run();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { message: `${plan} 요금제 Steppay 상품 매핑 완료` },
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-29] 구독 결제 시작 (고객 생성 → 주문 생성 → 결제 링크 반환)
+api.post('/steppay/subscribe', async (c) => {
+  const { store_id, plan, buyer_name, buyer_email, buyer_phone, setup_type } = await c.req.json() as {
+    store_id: number;
+    plan: string;
+    buyer_name: string;
+    buyer_email: string;
+    buyer_phone?: string;
+    setup_type?: 'basic' | 'premium'; // 셋팅비 포함 여부
+  };
+  
+  if (!store_id || !plan || !buyer_name || !buyer_email) {
+    return c.json<ApiResponse>({ 
+      success: false, 
+      error: '필수 정보를 입력해주세요 (store_id, plan, buyer_name, buyer_email)', 
+      timestamp: Date.now() 
+    }, 400);
+  }
+  
+  try {
+    // 1. 매장 확인
+    const store = await c.env.DB.prepare(
+      'SELECT id, store_name, plan FROM xivix_stores WHERE id = ?'
+    ).bind(store_id).first<any>();
+    
+    if (!store) {
+      return c.json<ApiResponse>({ success: false, error: '매장을 찾을 수 없습니다', timestamp: Date.now() }, 404);
+    }
+    
+    // 2. Steppay 요금제 확인
+    const planProduct = await c.env.DB.prepare(
+      'SELECT * FROM xivix_steppay_products WHERE plan = ? AND is_active = 1'
+    ).bind(plan).first<any>();
+    
+    if (!planProduct) {
+      return c.json<ApiResponse>({ success: false, error: `${plan} 요금제를 찾을 수 없습니다`, timestamp: Date.now() }, 404);
+    }
+    
+    // 3. Steppay 고객 생성 (또는 기존 고객 확인)
+    const existingSub = await c.env.DB.prepare(
+      'SELECT steppay_customer_id, steppay_customer_code FROM xivix_subscriptions WHERE store_id = ?'
+    ).bind(store_id).first<any>();
+    
+    let customerCode: string;
+    let customerId: number;
+    
+    if (existingSub?.steppay_customer_id) {
+      customerCode = existingSub.steppay_customer_code;
+      customerId = existingSub.steppay_customer_id;
+    } else {
+      // 새 고객 생성
+      const customerCode_ = `XIVIX_STORE_${store_id}`;
+      const customerResult = await steppayFetch(c.env, '/customers', 'POST', {
+        name: buyer_name,
+        email: buyer_email,
+        phone: buyer_phone || '',
+        code: customerCode_,
+      });
+      customerCode = customerCode_;
+      customerId = customerResult.id || customerResult.customerId;
+    }
+    
+    // 4. 주문 아이템 구성
+    const orderItems: any[] = [];
+    
+    // 월 구독 상품
+    if (planProduct.steppay_price_id) {
+      orderItems.push({
+        priceId: planProduct.steppay_price_id,
+        quantity: 1,
+      });
+    } else {
+      // steppay_price_id 미설정 시 직접 가격 지정
+      orderItems.push({
+        productId: planProduct.steppay_product_id || undefined,
+        name: planProduct.product_name,
+        price: planProduct.price,
+        quantity: 1,
+        recurring: {
+          intervalUnit: 'MONTH',
+          intervalCount: 1,
+        },
+      });
+    }
+    
+    // 셋팅비 (일회성 추가)
+    if (setup_type) {
+      const setupProduct = await c.env.DB.prepare(
+        'SELECT * FROM xivix_steppay_setup_products WHERE setup_type = ? AND is_active = 1'
+      ).bind(setup_type).first<any>();
+      
+      if (setupProduct) {
+        if (setupProduct.steppay_price_id) {
+          orderItems.push({ priceId: setupProduct.steppay_price_id, quantity: 1 });
+        } else {
+          orderItems.push({
+            name: setupProduct.product_name,
+            price: setupProduct.price,
+            quantity: 1,
+          });
+        }
+      }
+    }
+    
+    // 5. 주문 생성
+    const orderResult = await steppayFetch(c.env, '/orders', 'POST', {
+      customerCode: customerCode,
+      items: orderItems,
+    });
+    
+    const orderCode = orderResult.orderCode || orderResult.code;
+    const orderId = orderResult.id || orderResult.orderId;
+    
+    // 6. 결제 링크 생성
+    const paymentLink = `https://api.steppay.kr/api/public/orders/${orderCode}/pay`;
+    
+    // 7. DB 업데이트 (구독 레코드 생성/업데이트)
+    const existingSubRecord = await c.env.DB.prepare(
+      'SELECT id FROM xivix_subscriptions WHERE store_id = ?'
+    ).bind(store_id).first<any>();
+    
+    if (existingSubRecord) {
+      await c.env.DB.prepare(`
+        UPDATE xivix_subscriptions SET 
+          plan = ?, monthly_fee = ?, status = 'pending',
+          steppay_customer_id = ?, steppay_customer_code = ?,
+          steppay_order_id = ?, steppay_order_code = ?,
+          steppay_product_id = ?, steppay_price_id = ?,
+          payment_method = 'steppay',
+          updated_at = CURRENT_TIMESTAMP
+        WHERE store_id = ?
+      `).bind(plan, planProduct.price, customerId, customerCode, orderId, orderCode, 
+              planProduct.steppay_product_id, planProduct.steppay_price_id, store_id).run();
+    } else {
+      await c.env.DB.prepare(`
+        INSERT INTO xivix_subscriptions (store_id, plan, monthly_fee, status, 
+          steppay_customer_id, steppay_customer_code, 
+          steppay_order_id, steppay_order_code,
+          steppay_product_id, steppay_price_id, payment_method)
+        VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, 'steppay')
+      `).bind(store_id, plan, planProduct.price, customerId, customerCode, 
+              orderId, orderCode, planProduct.steppay_product_id, planProduct.steppay_price_id).run();
+    }
+    
+    // 결제 이력 생성
+    await c.env.DB.prepare(`
+      INSERT INTO xivix_payments (store_id, payment_type, amount, vat_amount, total_amount, 
+        pg_provider, description, status, steppay_order_id)
+      VALUES (?, 'monthly', ?, ?, ?, 'steppay', ?, 'pending', ?)
+    `).bind(store_id, planProduct.price, Math.round(planProduct.price * 0.1), 
+            planProduct.price + Math.round(planProduct.price * 0.1),
+            `${planProduct.product_name} 월 구독`, orderId).run();
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        payment_link: paymentLink,
+        order_code: orderCode,
+        order_id: orderId,
+        customer_code: customerCode,
+        plan: plan,
+        monthly_fee: planProduct.price,
+        setup_fee: setup_type ? (setup_type === 'premium' ? 500000 : 300000) : 0,
+        message: '결제 링크가 생성되었습니다. 고객에게 전달해주세요.',
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    console.error('[Steppay] Subscribe error:', error);
+    return c.json<ApiResponse>({ success: false, error: error.message, timestamp: Date.now() }, 500);
+  }
+});
+
+// [V3.0-30] 구독 상태 조회
+api.get('/steppay/subscription/:storeId', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  
+  const subscription = await c.env.DB.prepare(`
+    SELECT s.*, sp.product_name, sp.billing_period
+    FROM xivix_subscriptions s
+    LEFT JOIN xivix_steppay_products sp ON s.plan = sp.plan
+    WHERE s.store_id = ?
+  `).bind(storeId).first<any>();
+  
+  if (!subscription) {
+    return c.json<ApiResponse>({ success: false, error: '구독 정보가 없습니다', timestamp: Date.now() }, 404);
+  }
+  
+  // Steppay에서 실시간 구독 상태 조회
+  let steppayStatus = null;
+  if (subscription.steppay_subscription_id) {
+    try {
+      steppayStatus = await steppayFetch(c.env, `/subscriptions/${subscription.steppay_subscription_id}`);
+    } catch {
+      // Steppay 조회 실패 시 DB 데이터만 반환
+    }
+  }
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: {
+      ...subscription,
+      steppay_live_status: steppayStatus,
+    },
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-31] 구독 취소
+api.post('/steppay/cancel/:storeId', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  const { reason } = await c.req.json() as { reason?: string };
+  
+  const subscription = await c.env.DB.prepare(
+    'SELECT * FROM xivix_subscriptions WHERE store_id = ? AND status = ?'
+  ).bind(storeId, 'active').first<any>();
+  
+  if (!subscription) {
+    return c.json<ApiResponse>({ success: false, error: '활성 구독이 없습니다', timestamp: Date.now() }, 404);
+  }
+  
+  try {
+    // Steppay 구독 취소 API 호출
+    if (subscription.steppay_subscription_id) {
+      await steppayFetch(c.env, `/subscriptions/${subscription.steppay_subscription_id}/cancel`, 'POST', {
+        reason: reason || '관리자 취소',
+      });
+    }
+    
+    // DB 업데이트
+    await c.env.DB.prepare(`
+      UPDATE xivix_subscriptions SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+      WHERE store_id = ? AND status = 'active'
+    `).bind(storeId).run();
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: { message: '구독이 취소되었습니다', reason },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({ success: false, error: error.message, timestamp: Date.now() }, 500);
+  }
+});
+
+// [V3.0-32] 구독 플랜 변경 (업/다운그레이드)
+api.post('/steppay/change-plan/:storeId', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  const { new_plan } = await c.req.json() as { new_plan: string };
+  
+  const subscription = await c.env.DB.prepare(
+    'SELECT * FROM xivix_subscriptions WHERE store_id = ? AND status = ?'
+  ).bind(storeId, 'active').first<any>();
+  
+  if (!subscription) {
+    return c.json<ApiResponse>({ success: false, error: '활성 구독이 없습니다', timestamp: Date.now() }, 404);
+  }
+  
+  const newPlanProduct = await c.env.DB.prepare(
+    'SELECT * FROM xivix_steppay_products WHERE plan = ? AND is_active = 1'
+  ).bind(new_plan).first<any>();
+  
+  if (!newPlanProduct) {
+    return c.json<ApiResponse>({ success: false, error: `${new_plan} 요금제를 찾을 수 없습니다`, timestamp: Date.now() }, 404);
+  }
+  
+  try {
+    // Steppay 구독 플랜 변경 (다음 결제 주기부터 적용)
+    if (subscription.steppay_subscription_id && newPlanProduct.steppay_price_id) {
+      await steppayFetch(c.env, `/subscriptions/${subscription.steppay_subscription_id}/change`, 'POST', {
+        priceId: newPlanProduct.steppay_price_id,
+      });
+    }
+    
+    // DB 업데이트
+    await c.env.DB.prepare(`
+      UPDATE xivix_subscriptions SET plan = ?, monthly_fee = ?, 
+        steppay_product_id = ?, steppay_price_id = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE store_id = ? AND status = 'active'
+    `).bind(new_plan, newPlanProduct.price, newPlanProduct.steppay_product_id, newPlanProduct.steppay_price_id, storeId).run();
+    
+    // 매장 요금제도 업데이트
+    await c.env.DB.prepare(
+      'UPDATE xivix_stores SET plan = ?, monthly_fee = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).bind(new_plan, newPlanProduct.price, storeId).run();
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: { 
+        message: `요금제가 ${subscription.plan} → ${new_plan}으로 변경되었습니다`,
+        old_plan: subscription.plan,
+        new_plan: new_plan,
+        new_monthly_fee: newPlanProduct.price,
+      },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({ success: false, error: error.message, timestamp: Date.now() }, 500);
+  }
+});
+
+// [V3.0-33] Steppay 웹훅 수신 (결제 완료 / 구독 갱신 / 실패 등)
+api.post('/steppay/webhook', async (c) => {
+  try {
+    const payload = await c.req.json() as any;
+    const eventType = payload.eventType || payload.type || 'unknown';
+    
+    console.log(`[Steppay Webhook] Event: ${eventType}`, JSON.stringify(payload).slice(0, 500));
+    
+    // 웹훅 로그 저장
+    await c.env.DB.prepare(`
+      INSERT INTO xivix_steppay_webhook_logs (event_type, event_id, order_code, raw_payload)
+      VALUES (?, ?, ?, ?)
+    `).bind(eventType, payload.eventId || '', payload.orderCode || payload.data?.orderCode || '', JSON.stringify(payload)).run();
+    
+    const data = payload.data || payload;
+    const orderCode = data.orderCode || data.order_code || '';
+    
+    // 주문 코드로 매장 찾기
+    let subscription: any = null;
+    if (orderCode) {
+      subscription = await c.env.DB.prepare(
+        'SELECT * FROM xivix_subscriptions WHERE steppay_order_code = ?'
+      ).bind(orderCode).first<any>();
+    }
+    
+    switch (eventType) {
+      case 'ORDER_PAID':
+      case 'order.paid': {
+        // ── 최초 결제 완료 ──
+        if (subscription) {
+          const subscriptionId = data.subscriptionId || data.subscription?.id;
+          
+          await c.env.DB.prepare(`
+            UPDATE xivix_subscriptions SET 
+              status = 'active', 
+              steppay_subscription_id = ?,
+              started_at = CURRENT_TIMESTAMP,
+              next_billing_at = datetime('now', '+1 month'),
+              auto_renew = 1,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE store_id = ?
+          `).bind(subscriptionId || null, subscription.store_id).run();
+          
+          // 매장 상태 활성화
+          await c.env.DB.prepare(
+            "UPDATE xivix_stores SET is_active = 1, plan = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+          ).bind(subscription.plan, subscription.store_id).run();
+          
+          // 결제 이력 업데이트
+          await c.env.DB.prepare(`
+            UPDATE xivix_payments SET status = 'paid', paid_at = CURRENT_TIMESTAMP, 
+              raw_response = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE store_id = ? AND status = 'pending' AND pg_provider = 'steppay'
+            ORDER BY created_at DESC LIMIT 1
+          `).bind(JSON.stringify(data), subscription.store_id).run();
+          
+          // 웹훅 로그에 store_id 업데이트
+          await c.env.DB.prepare(`
+            UPDATE xivix_steppay_webhook_logs SET store_id = ?, processed = 1
+            WHERE order_code = ? AND event_type = ? ORDER BY created_at DESC LIMIT 1
+          `).bind(subscription.store_id, orderCode, eventType).run();
+        }
+        break;
+      }
+      
+      case 'SUBSCRIPTION_RENEWED':
+      case 'subscription.renewed': {
+        // ── 구독 갱신 (자동 월결제 성공) ──
+        if (subscription) {
+          await c.env.DB.prepare(`
+            UPDATE xivix_subscriptions SET 
+              next_billing_at = datetime('now', '+1 month'),
+              updated_at = CURRENT_TIMESTAMP
+            WHERE store_id = ?
+          `).bind(subscription.store_id).run();
+          
+          // 갱신 결제 이력 추가
+          await c.env.DB.prepare(`
+            INSERT INTO xivix_payments (store_id, payment_type, amount, vat_amount, total_amount,
+              pg_provider, description, status, paid_at, raw_response, steppay_order_id)
+            VALUES (?, 'monthly', ?, ?, ?, 'steppay', ?, 'paid', CURRENT_TIMESTAMP, ?, ?)
+          `).bind(
+            subscription.store_id, subscription.monthly_fee,
+            Math.round(subscription.monthly_fee * 0.1),
+            subscription.monthly_fee + Math.round(subscription.monthly_fee * 0.1),
+            `구독 갱신 - ${subscription.plan}`, JSON.stringify(data),
+            subscription.steppay_order_id
+          ).run();
+          
+          // 사용량 리셋 (월 초기화)
+          const period = new Date().toISOString().slice(0, 7);
+          await c.env.DB.prepare(`
+            INSERT OR IGNORE INTO xivix_usage (store_id, period, ai_conversations, sms_sent, lms_sent, image_analyses)
+            VALUES (?, ?, 0, 0, 0, 0)
+          `).bind(subscription.store_id, period).run();
+        }
+        break;
+      }
+      
+      case 'SUBSCRIPTION_PAYMENT_FAILED':
+      case 'subscription.payment_failed': {
+        // ── 결제 실패 ──
+        if (subscription) {
+          await c.env.DB.prepare(`
+            UPDATE xivix_subscriptions SET status = 'paused', updated_at = CURRENT_TIMESTAMP
+            WHERE store_id = ?
+          `).bind(subscription.store_id).run();
+          
+          // 결제 실패 이력
+          await c.env.DB.prepare(`
+            INSERT INTO xivix_payments (store_id, payment_type, amount, vat_amount, total_amount,
+              pg_provider, description, status, raw_response)
+            VALUES (?, 'monthly', ?, ?, ?, 'steppay', '결제 실패 - 구독 일시정지', 'failed', ?)
+          `).bind(
+            subscription.store_id, subscription.monthly_fee,
+            Math.round(subscription.monthly_fee * 0.1),
+            subscription.monthly_fee + Math.round(subscription.monthly_fee * 0.1),
+            JSON.stringify(data)
+          ).run();
+        }
+        break;
+      }
+      
+      case 'SUBSCRIPTION_CANCELLED':
+      case 'subscription.cancelled': {
+        // ── 구독 취소 ──
+        if (subscription) {
+          await c.env.DB.prepare(`
+            UPDATE xivix_subscriptions SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE store_id = ?
+          `).bind(subscription.store_id).run();
+        }
+        break;
+      }
+      
+      default:
+        console.log(`[Steppay Webhook] Unhandled event type: ${eventType}`);
+    }
+    
+    return c.json({ success: true, message: 'Webhook received' });
+  } catch (error: any) {
+    console.error('[Steppay Webhook] Error:', error);
+    // 웹훅은 항상 200 반환 (재시도 방지)
+    return c.json({ success: false, error: error.message });
+  }
+});
+
+// [V3.0-34] 전체 구독 현황 대시보드 (마스터용)
+api.get('/steppay/dashboard', async (c) => {
+  const subscriptions = await c.env.DB.prepare(`
+    SELECT s.*, st.store_name, st.is_active as store_active, sp.product_name
+    FROM xivix_subscriptions s
+    LEFT JOIN xivix_stores st ON s.store_id = st.id
+    LEFT JOIN xivix_steppay_products sp ON s.plan = sp.plan
+    ORDER BY s.updated_at DESC
+  `).all();
+  
+  // 통계
+  const stats = await c.env.DB.prepare(`
+    SELECT 
+      COUNT(*) as total,
+      SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
+      SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+      SUM(CASE WHEN status = 'paused' THEN 1 ELSE 0 END) as paused,
+      SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
+      SUM(CASE WHEN status = 'active' THEN monthly_fee ELSE 0 END) as monthly_revenue
+    FROM xivix_subscriptions
+  `).first<any>();
+  
+  // 최근 결제 이력
+  const recentPayments = await c.env.DB.prepare(`
+    SELECT p.*, st.store_name 
+    FROM xivix_payments p
+    LEFT JOIN xivix_stores st ON p.store_id = st.id
+    WHERE p.pg_provider = 'steppay'
+    ORDER BY p.created_at DESC LIMIT 20
+  `).all();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: {
+      stats,
+      subscriptions: subscriptions.results,
+      recent_payments: recentPayments.results,
+    },
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-35] 결제 링크 재생성 (미결제 고객용)
+api.post('/steppay/resend-link/:storeId', async (c) => {
+  const storeId = parseInt(c.req.param('storeId'), 10);
+  
+  const subscription = await c.env.DB.prepare(
+    'SELECT * FROM xivix_subscriptions WHERE store_id = ?'
+  ).bind(storeId).first<any>();
+  
+  if (!subscription || !subscription.steppay_order_code) {
+    return c.json<ApiResponse>({ success: false, error: '주문 정보가 없습니다. 새로 구독을 생성해주세요.', timestamp: Date.now() }, 404);
+  }
+  
+  const paymentLink = `https://api.steppay.kr/api/public/orders/${subscription.steppay_order_code}/pay`;
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: {
+      payment_link: paymentLink,
+      order_code: subscription.steppay_order_code,
+      plan: subscription.plan,
+      monthly_fee: subscription.monthly_fee,
+      status: subscription.status,
+    },
+    timestamp: Date.now()
+  });
+});
+
+// [V3.0-36] 웹훅 로그 조회 (디버깅용)
+api.get('/steppay/webhook-logs', async (c) => {
+  const limit = parseInt(c.req.query('limit') || '50', 10);
+  
+  const logs = await c.env.DB.prepare(`
+    SELECT * FROM xivix_steppay_webhook_logs ORDER BY created_at DESC LIMIT ?
+  `).bind(limit).all();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: logs.results,
+    timestamp: Date.now()
+  });
+});
+
 export default api;
