@@ -11812,7 +11812,7 @@ api.post('/steppay/subscribe', async (c) => {
     buyer_name: string;
     buyer_email: string;
     buyer_phone?: string;
-    setup_type?: 'basic' | 'premium'; // 셋팅비 포함 여부
+    setup_type?: 'starter' | 'basic' | 'premium'; // 셋팅비 포함 여부
   };
   
   if (!store_id || !plan || !buyer_name || !buyer_email) {
@@ -12140,7 +12140,8 @@ api.post('/steppay/webhook', async (c) => {
     const payload = await c.req.json() as any;
     const eventType = payload.event || payload.eventType || payload.type || 'unknown';
     const eventData = payload.data || payload;
-    const orderCode_ = eventData.code || eventData.orderCode || payload.orderCode || '';
+    // V2 페이로드: data.code가 주문코드, data.orderCode는 subscription에서 사용
+    const orderCode_ = eventData.code || eventData.orderCode || eventData.order_code || payload.orderCode || '';
     
     console.log(`[Steppay Webhook] Event: ${eventType}, OrderCode: ${orderCode_}`, JSON.stringify(payload).slice(0, 500));
     
@@ -12275,6 +12276,24 @@ api.post('/steppay/webhook', async (c) => {
         break;
       }
       
+      case 'subscription.created': {
+        // ── 구독 생성됨 ──
+        if (subscription) {
+          const subId = data.id || data.subscriptionId;
+          if (subId) {
+            await c.env.DB.prepare(`
+              UPDATE xivix_subscriptions SET steppay_subscription_id = ?, updated_at = CURRENT_TIMESTAMP
+              WHERE store_id = ?
+            `).bind(subId, subscription.store_id).run();
+          }
+          await c.env.DB.prepare(`
+            UPDATE xivix_steppay_webhook_logs SET store_id = ?, processed = 1
+            WHERE order_code = ? AND event_type = ? ORDER BY created_at DESC LIMIT 1
+          `).bind(subscription.store_id, orderCode, eventType).run();
+        }
+        break;
+      }
+      
       case 'order.updated': {
         // order.updated에서 결제 완료 여부 확인 (items[0].status === 'PAID')
         const items = data.items || [];
@@ -12392,6 +12411,130 @@ api.post('/steppay/resend-link/:storeId', async (c) => {
     },
     timestamp: Date.now()
   });
+});
+
+// [V3.0-37] 웹훅 리플레이 - 미처리 웹훅 재처리 (마스터용)
+api.post('/steppay/webhook-replay', async (c) => {
+  try {
+    // 미처리 웹훅 조회
+    const unprocessed = await c.env.DB.prepare(`
+      SELECT id, raw_payload, event_type, order_code, created_at
+      FROM xivix_steppay_webhook_logs WHERE processed = 0
+      ORDER BY created_at ASC
+    `).all<any>();
+    
+    const results: any[] = [];
+    
+    for (const log of unprocessed.results || []) {
+      const payload = JSON.parse(log.raw_payload);
+      const eventType = payload.event || payload.eventType || payload.type || 'unknown';
+      const data = payload.data || payload;
+      const orderCode = data.code || data.orderCode || data.order_code || '';
+      
+      // 먼저 DB의 event_type과 order_code 업데이트
+      await c.env.DB.prepare(`
+        UPDATE xivix_steppay_webhook_logs SET event_type = ?, order_code = ? WHERE id = ?
+      `).bind(eventType, orderCode, log.id).run();
+      
+      let subscription: any = null;
+      if (orderCode) {
+        subscription = await c.env.DB.prepare(
+          'SELECT * FROM xivix_subscriptions WHERE steppay_order_code = ?'
+        ).bind(orderCode).first<any>();
+      }
+      
+      let action = 'skipped';
+      
+      if (eventType === 'order.payment_completed' || eventType === 'order.paid' || eventType === 'ORDER_PAID') {
+        if (subscription) {
+          const subscriptionId = data.subscriptionId || data.subscription?.id;
+          await c.env.DB.prepare(`
+            UPDATE xivix_subscriptions SET 
+              status = 'active', steppay_subscription_id = COALESCE(?, steppay_subscription_id),
+              started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+              next_billing_at = datetime('now', '+1 month'), auto_renew = 1, updated_at = CURRENT_TIMESTAMP
+            WHERE store_id = ?
+          `).bind(subscriptionId || null, subscription.store_id).run();
+          
+          await c.env.DB.prepare(
+            "UPDATE xivix_stores SET is_active = 1, plan = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+          ).bind(subscription.plan, subscription.store_id).run();
+          
+          await c.env.DB.prepare(`
+            UPDATE xivix_payments SET status = 'paid', paid_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE store_id = ? AND status = 'pending' AND pg_provider = 'steppay'
+            ORDER BY created_at DESC LIMIT 1
+          `).bind(subscription.store_id).run();
+          
+          action = 'activated';
+        } else {
+          action = 'no_subscription';
+        }
+      } else if (eventType === 'order.updated') {
+        const items = data.items || [];
+        const isPaid = items.some((item: any) => item.status === 'PAID');
+        if (isPaid && subscription) {
+          const subscriptionId = data.subscriptionId || data.subscription?.id ||
+            items.find((item: any) => item.subscriptionId)?.subscriptionId;
+          
+          await c.env.DB.prepare(`
+            UPDATE xivix_subscriptions SET 
+              status = 'active', steppay_subscription_id = COALESCE(?, steppay_subscription_id),
+              started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+              next_billing_at = datetime('now', '+1 month'), auto_renew = 1, updated_at = CURRENT_TIMESTAMP
+            WHERE store_id = ?
+          `).bind(subscriptionId || null, subscription.store_id).run();
+          
+          await c.env.DB.prepare(
+            "UPDATE xivix_stores SET is_active = 1, plan = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+          ).bind(subscription.plan, subscription.store_id).run();
+          
+          action = 'activated_via_order_updated';
+        } else {
+          action = isPaid ? 'no_subscription' : 'not_paid';
+        }
+      } else if (eventType === 'subscription.created') {
+        if (subscription) {
+          const subId = data.id || data.subscriptionId;
+          if (subId) {
+            await c.env.DB.prepare(`
+              UPDATE xivix_subscriptions SET steppay_subscription_id = ?, updated_at = CURRENT_TIMESTAMP
+              WHERE store_id = ?
+            `).bind(subId, subscription.store_id).run();
+          }
+          action = 'subscription_id_saved';
+        } else {
+          action = 'no_subscription';
+        }
+      } else if (eventType === 'payment.completed') {
+        // payment.completed는 orderCode가 다를 수 있어 별도 처리
+        if (subscription) {
+          action = 'payment_noted';
+        } else {
+          action = 'no_subscription';
+        }
+      } else {
+        action = `unhandled:${eventType}`;
+      }
+      
+      // processed 마킹
+      if (action !== 'skipped' && action !== 'no_subscription') {
+        await c.env.DB.prepare(`
+          UPDATE xivix_steppay_webhook_logs SET processed = 1, store_id = ? WHERE id = ?
+        `).bind(subscription?.store_id || null, log.id).run();
+      }
+      
+      results.push({ id: log.id, event: eventType, orderCode, action });
+    }
+    
+    return c.json<ApiResponse>({
+      success: true,
+      data: { total: unprocessed.results?.length || 0, results },
+      timestamp: Date.now()
+    });
+  } catch (error: any) {
+    return c.json<ApiResponse>({ success: false, error: error.message, timestamp: Date.now() }, 500);
+  }
 });
 
 // [V3.0-36] 웹훅 로그 조회 (디버깅용)
