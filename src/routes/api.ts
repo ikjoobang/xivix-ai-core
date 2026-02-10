@@ -11663,12 +11663,17 @@ async function steppayFetch(env: Env, endpoint: string, method: string = 'GET', 
   if (!response.ok) {
     const errorText = await response.text();
     console.error(`[Steppay] ${method} ${endpoint} → ${response.status}:`, errorText);
-    throw new Error(`Steppay API 오류 (${response.status}): ${errorText}`);
+    // 에러 상세 정보를 포함하여 throw
+    const err: any = new Error(`Steppay API 오류 (${response.status}): ${errorText}`);
+    err.statusCode = response.status;
+    try { err.detail = JSON.parse(errorText); } catch { err.detail = errorText; }
+    throw err;
   }
   
   const text = await response.text();
   return text ? JSON.parse(text) : null;
 }
+
 
 // [V3.0-25] Steppay 연동 상태 확인
 api.get('/steppay/status', async (c) => {
@@ -11750,19 +11755,23 @@ api.post('/steppay/sync-products', async (c) => {
   }
 });
 
-// [V3.0-28] Steppay 상품 ID 매핑 업데이트
+// [V3.0-28] Steppay 상품 ID/Code 매핑 업데이트
 api.put('/steppay/products/:plan', async (c) => {
   const plan = c.req.param('plan');
-  const { steppay_product_id, steppay_price_id } = await c.req.json() as {
+  const { steppay_product_id, steppay_price_id, steppay_product_code, steppay_price_code } = await c.req.json() as {
     steppay_product_id: number;
     steppay_price_id: number;
+    steppay_product_code?: string;
+    steppay_price_code?: string;
   };
   
   await c.env.DB.prepare(`
     UPDATE xivix_steppay_products 
-    SET steppay_product_id = ?, steppay_price_id = ?, updated_at = CURRENT_TIMESTAMP 
+    SET steppay_product_id = ?, steppay_price_id = ?,
+        steppay_product_code = ?, steppay_price_code = ?,
+        updated_at = CURRENT_TIMESTAMP 
     WHERE plan = ?
-  `).bind(steppay_product_id, steppay_price_id, plan).run();
+  `).bind(steppay_product_id, steppay_price_id, steppay_product_code || null, steppay_price_code || null, plan).run();
   
   return c.json<ApiResponse>({
     success: true,
@@ -11771,19 +11780,22 @@ api.put('/steppay/products/:plan', async (c) => {
   });
 });
 
-// [V3.0-28b] Steppay 셋팅비 상품 ID 매핑 업데이트
+// [V3.0-28b] Steppay 셋팅비 상품 ID/Code 매핑 업데이트
 api.put('/steppay/setup-products/:setupType', async (c) => {
   const setupType = c.req.param('setupType');
-  const { steppay_product_id, steppay_price_id } = await c.req.json() as {
+  const { steppay_product_id, steppay_price_id, steppay_product_code, steppay_price_code } = await c.req.json() as {
     steppay_product_id: number;
     steppay_price_id: number;
+    steppay_product_code?: string;
+    steppay_price_code?: string;
   };
   
   await c.env.DB.prepare(`
     UPDATE xivix_steppay_setup_products 
-    SET steppay_product_id = ?, steppay_price_id = ?
+    SET steppay_product_id = ?, steppay_price_id = ?,
+        steppay_product_code = ?, steppay_price_code = ?
     WHERE setup_type = ?
-  `).bind(steppay_product_id, steppay_price_id, setupType).run();
+  `).bind(steppay_product_id, steppay_price_id, steppay_product_code || null, steppay_price_code || null, setupType).run();
   
   return c.json<ApiResponse>({
     success: true,
@@ -11842,31 +11854,49 @@ api.post('/steppay/subscribe', async (c) => {
       customerCode = existingSub.steppay_customer_code;
       customerId = existingSub.steppay_customer_id;
     } else {
-      // 새 고객 생성
+      // 새 고객 생성 (이미 있으면 조회)
       const customerCode_ = `XIVIX_STORE_${store_id}`;
-      const customerResult = await steppayFetch(c.env, '/customers', 'POST', {
-        name: buyer_name,
-        email: buyer_email,
-        phone: buyer_phone || '',
-        code: customerCode_,
-      });
-      customerCode = customerCode_;
-      customerId = customerResult.id || customerResult.customerId;
+      try {
+        const customerResult = await steppayFetch(c.env, '/customers', 'POST', {
+          name: buyer_name,
+          email: buyer_email,
+          phone: buyer_phone || '',
+          code: customerCode_,
+        });
+        customerCode = customerCode_;
+        customerId = customerResult.id || customerResult.customerId;
+      } catch (customerError: any) {
+        // 이미 존재하는 고객인 경우 코드로 조회
+        console.log(`[Steppay] Customer creation failed, trying lookup: ${customerError.message}`);
+        try {
+          const existingCustomer = await steppayFetch(c.env, `/customers?code=${customerCode_}&pageNum=1&pageSize=1`);
+          const customers = existingCustomer.content || existingCustomer;
+          if (Array.isArray(customers) && customers.length > 0) {
+            customerCode = customerCode_;
+            customerId = customers[0].id || customers[0].customerId;
+          } else {
+            throw new Error('고객 생성 및 조회 모두 실패했습니다');
+          }
+        } catch {
+          throw customerError; // 원래 에러 전파
+        }
+      }
     }
     
-    // 4. 주문 아이템 구성
+    // 4. 주문 아이템 구성 (Steppay API는 productCode + priceCode 형식 필요)
     const orderItems: any[] = [];
     
     // 월 구독 상품
-    if (planProduct.steppay_price_id) {
+    if (planProduct.steppay_product_code && planProduct.steppay_price_code) {
+      // Code 기반 (필수: Steppay API는 Code 형식만 인식)
       orderItems.push({
-        priceId: planProduct.steppay_price_id,
+        productCode: planProduct.steppay_product_code,
+        priceCode: planProduct.steppay_price_code,
         quantity: 1,
       });
     } else {
-      // steppay_price_id 미설정 시 직접 가격 지정
+      // Code 미설정 시 name + price fallback (custom 아이템)
       orderItems.push({
-        productId: planProduct.steppay_product_id || undefined,
         name: planProduct.product_name,
         price: planProduct.price,
         quantity: 1,
@@ -11884,8 +11914,12 @@ api.post('/steppay/subscribe', async (c) => {
       ).bind(setup_type).first<any>();
       
       if (setupProduct) {
-        if (setupProduct.steppay_price_id) {
-          orderItems.push({ priceId: setupProduct.steppay_price_id, quantity: 1 });
+        if (setupProduct.steppay_product_code && setupProduct.steppay_price_code) {
+          orderItems.push({ 
+            productCode: setupProduct.steppay_product_code, 
+            priceCode: setupProduct.steppay_price_code, 
+            quantity: 1 
+          });
         } else {
           orderItems.push({
             name: setupProduct.product_name,
@@ -11898,7 +11932,7 @@ api.post('/steppay/subscribe', async (c) => {
     
     // 5. 주문 생성
     const orderResult = await steppayFetch(c.env, '/orders', 'POST', {
-      customerCode: customerCode,
+      customerId: customerId,
       items: orderItems,
     });
     
@@ -11916,24 +11950,28 @@ api.post('/steppay/subscribe', async (c) => {
     if (existingSubRecord) {
       await c.env.DB.prepare(`
         UPDATE xivix_subscriptions SET 
-          plan = ?, monthly_fee = ?, status = 'pending',
+          plan = ?, monthly_fee = ?, status = 'trial',
           steppay_customer_id = ?, steppay_customer_code = ?,
           steppay_order_id = ?, steppay_order_code = ?,
           steppay_product_id = ?, steppay_price_id = ?,
+          steppay_product_code = ?, steppay_price_code = ?,
           payment_method = 'steppay',
           updated_at = CURRENT_TIMESTAMP
         WHERE store_id = ?
       `).bind(plan, planProduct.price, customerId, customerCode, orderId, orderCode, 
-              planProduct.steppay_product_id, planProduct.steppay_price_id, store_id).run();
+              planProduct.steppay_product_id, planProduct.steppay_price_id, 
+              planProduct.steppay_product_code, planProduct.steppay_price_code, store_id).run();
     } else {
       await c.env.DB.prepare(`
         INSERT INTO xivix_subscriptions (store_id, plan, monthly_fee, status, 
           steppay_customer_id, steppay_customer_code, 
           steppay_order_id, steppay_order_code,
-          steppay_product_id, steppay_price_id, payment_method)
-        VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, 'steppay')
+          steppay_product_id, steppay_price_id,
+          steppay_product_code, steppay_price_code, payment_method)
+        VALUES (?, ?, ?, 'trial', ?, ?, ?, ?, ?, ?, ?, ?, 'steppay')
       `).bind(store_id, plan, planProduct.price, customerId, customerCode, 
-              orderId, orderCode, planProduct.steppay_product_id, planProduct.steppay_price_id).run();
+              orderId, orderCode, planProduct.steppay_product_id, planProduct.steppay_price_id,
+              planProduct.steppay_product_code, planProduct.steppay_price_code).run();
     }
     
     // 결제 이력 생성
@@ -12060,9 +12098,9 @@ api.post('/steppay/change-plan/:storeId', async (c) => {
   
   try {
     // Steppay 구독 플랜 변경 (다음 결제 주기부터 적용)
-    if (subscription.steppay_subscription_id && newPlanProduct.steppay_price_id) {
+    if (subscription.steppay_subscription_id && newPlanProduct.steppay_price_code) {
       await steppayFetch(c.env, `/subscriptions/${subscription.steppay_subscription_id}/change`, 'POST', {
-        priceId: newPlanProduct.steppay_price_id,
+        priceCode: newPlanProduct.steppay_price_code,
       });
     }
     
@@ -12070,9 +12108,11 @@ api.post('/steppay/change-plan/:storeId', async (c) => {
     await c.env.DB.prepare(`
       UPDATE xivix_subscriptions SET plan = ?, monthly_fee = ?, 
         steppay_product_id = ?, steppay_price_id = ?,
+        steppay_product_code = ?, steppay_price_code = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE store_id = ? AND status = 'active'
-    `).bind(new_plan, newPlanProduct.price, newPlanProduct.steppay_product_id, newPlanProduct.steppay_price_id, storeId).run();
+    `).bind(new_plan, newPlanProduct.price, newPlanProduct.steppay_product_id, newPlanProduct.steppay_price_id,
+            newPlanProduct.steppay_product_code, newPlanProduct.steppay_price_code, storeId).run();
     
     // 매장 요금제도 업데이트
     await c.env.DB.prepare(
