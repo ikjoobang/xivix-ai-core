@@ -1,14 +1,15 @@
-# XIVIX AI Core V3.0
+# XIVIX AI Core V3.0.7
 
 > **GPT-4o + Gemini 2.5 Pro 듀얼 AI 엔진 기반 초정밀 상담 자동화**
 > 
-> **12개 업종 특화 + AI 모델 선택 + 실시간 DB 반영**
+> **12개 업종 특화 + AI 모델 선택 + Steppay 구독결제 연동**
 
 <p align="center">
   <img src="https://img.shields.io/badge/AI-GPT--4o%20%2B%20Gemini%202.5-blue?style=for-the-badge" alt="AI">
   <img src="https://img.shields.io/badge/Framework-Hono-orange?style=for-the-badge" alt="Hono">
   <img src="https://img.shields.io/badge/Platform-Cloudflare-yellow?style=for-the-badge" alt="Cloudflare">
-  <img src="https://img.shields.io/badge/Version-3.0.1-green?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/Version-3.0.7-green?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/Payment-Steppay-purple?style=for-the-badge" alt="Steppay">
 </p>
 
 ---
@@ -25,8 +26,42 @@
 | **고객 연동 페이지** | https://studioaibotbot.com/connect | 사장님 30초 연동 |
 | **결제 페이지** | https://studioaibotbot.com/payment/{storeId} | KG이니시스 결제 |
 | **영업사원 정산** | https://studioaibotbot.com/sales | 영업사원 수수료 정산 대시보드 |
+| **사장님 사용설명서** | https://studioaibotbot.com/guide | 매니저 등록/결제 가이드 (NEW) |
 | **네이버 Webhook** | https://studioaibotbot.com/v1/naver/callback/{storeId} | 톡톡 메시지 수신 |
+| **Steppay Webhook** | https://studioaibotbot.com/api/steppay/webhook | 결제/구독 이벤트 수신 |
 | **헬스체크** | https://studioaibotbot.com/api/health | 시스템 상태 |
+
+---
+
+## V3.0.7 신규 기능 (2026-02-10)
+
+### 사장님용 사용설명서 `/guide` (NEW)
+- **시각적 스텝바이스텝 가이드**: 네이버 톡톡 매니저 등록, 서비스 신청, 결제까지 전 과정
+- **모의 스크린샷 UI**: 클릭 위치를 빨간 원/화살표로 표시
+- **모바일 반응형**: 사장님이 폰에서도 바로 확인 가능
+- **복사 버튼**: 이메일/URL 등 주요 정보 원클릭 복사
+- **접속**: https://studioaibotbot.com/guide
+
+### Steppay 구독 결제 안정성 개선 (V3.0.5~V3.0.7)
+- **구독 상태 보존 버그 수정**: 새 주문 생성 시 기존 active 구독을 trial로 덮어쓰던 버그 해결
+- **`pending_payment` 상태 도입**: 결제 전 구독은 pending_payment, 결제 완료 시 active로 전환
+- **웹훅 리플레이 API**: `POST /api/steppay/webhook-replay` — 미처리 웹훅 일괄 재처리
+- **subscription.created 핸들러**: Steppay에서 subscription_id를 DB에 자동 저장
+- **order_code 추출 개선**: V2 페이로드 `data.code` 우선 사용으로 호환성 향상
+- **플랜 변경/취소 복원력**: Steppay API 실패 시에도 DB 업데이트 보장
+- **소상공인 셋팅비(starter)**: 100,000원 단건 상품 추가, 주문에 구독+셋팅비 동시 포함
+
+### Steppay 상품 매핑 (8개)
+| 유형 | 상품 | 월요금 | Product Code | Price Code |
+|------|------|--------|-------------|------------|
+| 구독 | 미니 | 29,000원 | product_PZr2XVYSA | price_HQ0Uz3gGU |
+| 구독 | 라이트 | 49,000원 | product_zMHKnsGMG | price_InGSeFetI |
+| 구독 | 스탠다드 | 99,000원 | product_7JJQpUADm | price_n53tsTyI6 |
+| 구독 | 프리미엄 | 149,000원 | product_8MeW5yScL | price_ukoqrE7fM |
+| 구독 | 엔터프라이즈 | 149,000원 | product_P3TzlYLpc | price_1k2P6oXsP |
+| 셋팅 | 소상공인 | 100,000원 | product_9urtWOscK | price_LK6HAbifF |
+| 셋팅 | 기본 | 300,000원 | product_IcJv9JjZa | price_SM0WEWnUb |
+| 셋팅 | 프리미엄 | 500,000원 | product_BtwFRCXDY | price_5UaiJNR3o |
 
 ---
 

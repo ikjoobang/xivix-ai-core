@@ -11948,9 +11948,16 @@ api.post('/steppay/subscribe', async (c) => {
     ).bind(store_id).first<any>();
     
     if (existingSubRecord) {
+      // 기존 구독이 active인 경우 status를 보존하고 주문 정보만 업데이트
+      // active가 아닌 경우(trial, cancelled 등)에만 pending_payment로 변경
+      const existingSub = await c.env.DB.prepare(
+        'SELECT status FROM xivix_subscriptions WHERE store_id = ?'
+      ).bind(store_id).first<any>();
+      const newStatus = existingSub?.status === 'active' ? 'active' : 'pending_payment';
+      
       await c.env.DB.prepare(`
         UPDATE xivix_subscriptions SET 
-          plan = ?, monthly_fee = ?, status = 'trial',
+          plan = ?, monthly_fee = ?, status = ?,
           steppay_customer_id = ?, steppay_customer_code = ?,
           steppay_order_id = ?, steppay_order_code = ?,
           steppay_product_id = ?, steppay_price_id = ?,
@@ -11958,7 +11965,7 @@ api.post('/steppay/subscribe', async (c) => {
           payment_method = 'steppay',
           updated_at = CURRENT_TIMESTAMP
         WHERE store_id = ?
-      `).bind(plan, planProduct.price, customerId, customerCode, orderId, orderCode, 
+      `).bind(plan, planProduct.price, newStatus, customerId, customerCode, orderId, orderCode, 
               planProduct.steppay_product_id, planProduct.steppay_price_id, 
               planProduct.steppay_product_code, planProduct.steppay_price_code, store_id).run();
     } else {
@@ -11968,7 +11975,7 @@ api.post('/steppay/subscribe', async (c) => {
           steppay_order_id, steppay_order_code,
           steppay_product_id, steppay_price_id,
           steppay_product_code, steppay_price_code, payment_method)
-        VALUES (?, ?, ?, 'trial', ?, ?, ?, ?, ?, ?, ?, ?, 'steppay')
+        VALUES (?, ?, ?, 'pending_payment', ?, ?, ?, ?, ?, ?, ?, ?, 'steppay')
       `).bind(store_id, plan, planProduct.price, customerId, customerCode, 
               orderId, orderCode, planProduct.steppay_product_id, planProduct.steppay_price_id,
               planProduct.steppay_product_code, planProduct.steppay_price_code).run();
@@ -12052,14 +12059,19 @@ api.post('/steppay/cancel/:storeId', async (c) => {
   }
   
   try {
-    // Steppay 구독 취소 API 호출
+    // Steppay 구독 취소 API 호출 (실패해도 DB는 업데이트)
+    let steppayResult = null;
     if (subscription.steppay_subscription_id) {
-      await steppayFetch(c.env, `/subscriptions/${subscription.steppay_subscription_id}/cancel`, 'POST', {
-        reason: reason || '관리자 취소',
-      });
+      try {
+        steppayResult = await steppayFetch(c.env, `/subscriptions/${subscription.steppay_subscription_id}/cancel`, 'POST', {
+          reason: reason || '관리자 취소',
+        });
+      } catch (e: any) {
+        console.log(`[Cancel] Steppay API failed (ignored): ${e.message}`);
+      }
     }
     
-    // DB 업데이트
+    // DB 업데이트 (Steppay 실패 여부와 무관하게 항상 실행)
     await c.env.DB.prepare(`
       UPDATE xivix_subscriptions SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
       WHERE store_id = ? AND status = 'active'
@@ -12097,14 +12109,18 @@ api.post('/steppay/change-plan/:storeId', async (c) => {
   }
   
   try {
-    // Steppay 구독 플랜 변경 (다음 결제 주기부터 적용)
+    // Steppay 구독 플랜 변경 (다음 결제 주기부터 적용, 실패해도 DB는 업데이트)
     if (subscription.steppay_subscription_id && newPlanProduct.steppay_price_code) {
-      await steppayFetch(c.env, `/subscriptions/${subscription.steppay_subscription_id}/change`, 'POST', {
-        priceCode: newPlanProduct.steppay_price_code,
-      });
+      try {
+        await steppayFetch(c.env, `/subscriptions/${subscription.steppay_subscription_id}/change`, 'POST', {
+          priceCode: newPlanProduct.steppay_price_code,
+        });
+      } catch (e: any) {
+        console.log(`[ChangePlan] Steppay API failed (ignored): ${e.message}`);
+      }
     }
     
-    // DB 업데이트
+    // DB 업데이트 (Steppay 실패 여부와 무관하게 항상 실행)
     await c.env.DB.prepare(`
       UPDATE xivix_subscriptions SET plan = ?, monthly_fee = ?, 
         steppay_product_id = ?, steppay_price_id = ?,

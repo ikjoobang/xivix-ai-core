@@ -18,6 +18,7 @@ import { renderCustomerManagement } from './views/customer-management';
 import { renderUnifiedAdmin } from './views/admin-unified';
 import { renderPaymentPage } from './views/payment';
 import { renderSalesAgentDashboard } from './views/sales-agent';
+import { renderGuidePage } from './views/guide';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -176,6 +177,11 @@ app.get('/store/:storeId/customers', async (c) => {
 // 설정 변경 요청 페이지 (사장님용)
 app.get('/request', async (c) => {
   return c.html(renderRequestPage());
+});
+
+// 사장님용 사용설명서 가이드 페이지
+app.get('/guide', async (c) => {
+  return c.html(renderGuidePage());
 });
 
 // 통합 관리자 페이지 (V3.0)

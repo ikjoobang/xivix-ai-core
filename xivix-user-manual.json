@@ -1,457 +1,434 @@
 {
   "document_info": {
-    "title": "XIVIX AI 사용설명서",
-    "version": "V3.0",
+    "title": "XIVIX AI 사용설명서 - 사장님용",
+    "subtitle": "네이버 톡톡 AI 자동응대 서비스 설정 가이드",
+    "version": "V1.0",
     "date": "2026-02-10",
     "company": "XIVIX AI (지빅스AI)",
-    "website": "https://studioaibotbot.com",
-    "landing_page": "https://xivix.kr",
-    "contact": {
-      "phone": "010-4845-3065",
-      "email": "xivix.kr@gmail.com"
-    }
+    "note": "이 JSON은 Gemini에서 이미지 포함 사용설명서로 변환하기 위한 원본 데이터입니다. screenshot_instruction 필드를 참고하여 실제 스크린샷을 첨부하세요."
   },
 
-  "manuals": [
+  "preparation": {
+    "title": "시작 전 준비물",
+    "items": [
+      "네이버 아이디 (매장 사장님 본인 계정)",
+      "사업자등록증 (사업자 계정 등록 시)",
+      "휴대폰 (본인 인증용)",
+      "PC 또는 노트북 (설정은 PC에서 하는 것이 편합니다)"
+    ],
+    "important_notice": "사장님의 네이버 아이디/비밀번호는 저희에게 알려주실 필요 없습니다! 사장님이 직접 아래 과정을 따라하시면 됩니다. 어려우시면 전화(010-4845-3065)로 화면 공유하며 도와드립니다."
+  },
+
+  "chapters": [
     {
-      "type": "매장_사장님용",
-      "target": "매장 사장님 (비기술 사용자)",
-      "tone": "친근하고 쉬운 설명, 스크린샷 중심",
-      "sections": [
+      "chapter": 1,
+      "title": "네이버 톡톡 파트너센터 가입하기",
+      "estimated_time": "5분",
+      "difficulty": "쉬움",
+      "steps": [
         {
-          "title": "1. 가입 방법",
-          "steps": [
-            {
-              "step": 1,
-              "action": "연동 신청 페이지 접속",
-              "url": "https://studioaibotbot.com/request",
-              "description": "브라우저에서 위 주소를 입력하거나, XIVIX 담당자가 보내준 링크를 클릭합니다.",
-              "screenshot_description": "연동 신청 페이지 - 매장 정보 입력 폼이 보이는 화면"
-            },
-            {
-              "step": 2,
-              "action": "매장 정보 입력",
-              "fields": [
-                {"field": "매장명", "example": "다듬다헤어", "required": true},
-                {"field": "업종", "example": "미용실", "required": true},
-                {"field": "사업자번호", "example": "123-45-67890", "required": true},
-                {"field": "대표자명", "example": "홍길동", "required": true},
-                {"field": "연락처", "example": "010-1234-5678", "required": true},
-                {"field": "이메일", "example": "shop@example.com", "required": true},
-                {"field": "매장 주소", "example": "서울시 강남구 역삼동 123", "required": true},
-                {"field": "영업시간", "example": "10:00~21:00", "required": true},
-                {"field": "네이버 스마트플레이스 URL", "example": "https://naver.me/xxxx", "required": true}
-              ],
-              "description": "모든 필수 항목을 입력합니다. 네이버 스마트플레이스 URL을 입력하면 AI가 자동으로 매장 정보를 분석합니다.",
-              "screenshot_description": "매장 정보 입력 폼 - 각 필드에 예시가 채워진 상태"
-            },
-            {
-              "step": 3,
-              "action": "요금제 선택",
-              "options": [
-                {
-                  "plan": "미니",
-                  "price": "29,000원/월",
-                  "setup_fee": "100,000원 (소상공인 셋팅비)",
-                  "ai_limit": "월 500건",
-                  "sms_limit": "50건",
-                  "recommended_for": "소규모 일반음식점, 개인카페",
-                  "features": ["AI 자동응답", "메뉴/가격 안내", "위치/영업시간 안내", "콜백 요청"]
-                },
-                {
-                  "plan": "라이트",
-                  "price": "49,000원/월",
-                  "setup_fee": "300,000원 (기본 셋팅비)",
-                  "ai_limit": "월 1,000건",
-                  "sms_limit": "100건",
-                  "recommended_for": "미용실, 네일샵, 일반 음식점",
-                  "features": ["AI 자동응답", "8개국어 다국어", "예약 리마인더", "노쇼 방지"]
-                },
-                {
-                  "plan": "스탠다드",
-                  "price": "99,000원/월",
-                  "setup_fee": "300,000원 (기본 셋팅비)",
-                  "ai_limit": "월 5,000건",
-                  "sms_limit": "300건",
-                  "recommended_for": "프랜차이즈, 병원, 학원",
-                  "features": ["라이트 전체 기능", "고객 데이터 관리", "방문주기 알림", "매출 통계", "수동 메시지 발송"]
-                },
-                {
-                  "plan": "프리미엄",
-                  "price": "149,000원/월",
-                  "setup_fee": "500,000원 (프리미엄 셋팅비)",
-                  "ai_limit": "월 20,000건",
-                  "sms_limit": "1,000건",
-                  "recommended_for": "대형 병원, 프랜차이즈 본사, 멀티매장",
-                  "features": ["스탠다드 전체 기능", "전문상담 AI(GPT-4o)", "멀티매장 통합관리", "전담 매니저"]
-                },
-                {
-                  "plan": "엔터프라이즈",
-                  "price": "149,000원/월 (협의)",
-                  "setup_fee": "별도 협의",
-                  "ai_limit": "무제한",
-                  "sms_limit": "협의",
-                  "recommended_for": "대기업, 특수 커스터마이징 필요",
-                  "features": ["프리미엄 전체 기능", "맞춤 개발", "API 연동", "전용 서버"]
-                }
-              ],
-              "description": "매장 규모와 필요한 기능에 맞는 요금제를 선택합니다.",
-              "screenshot_description": "요금제 비교표 - 5개 요금제가 카드 형태로 나열된 화면"
-            },
-            {
-              "step": 4,
-              "action": "결제",
-              "description": "카카오페이로 간편하게 결제합니다. 첫 결제 시 월 구독료 + 셋팅비가 함께 결제됩니다.",
-              "payment_methods": ["카카오페이", "신용카드", "가상계좌"],
-              "screenshot_description": "Steppay 결제 화면 - 상품 2개(월구독+셋팅비)가 표시된 결제 페이지"
-            },
-            {
-              "step": 5,
-              "action": "셋팅 완료 대기",
-              "description": "결제 완료 후 XIVIX 팀이 AI 셋팅을 진행합니다. 보통 1~2영업일 이내 완료되며, 완료 시 알림을 보내드립니다.",
-              "screenshot_description": "셋팅 진행 중 안내 화면 또는 카톡 알림 예시"
-            }
-          ]
+          "step": "1-1",
+          "title": "톡톡 파트너센터 접속",
+          "action": "네이버에서 '톡톡 파트너센터' 검색 → 첫 번째 결과 클릭",
+          "direct_url": "https://partner.talk.naver.com",
+          "detail": "PC 브라우저(크롬, 엣지 등)에서 위 주소를 입력하거나, 네이버에서 '톡톡 파트너센터'를 검색하세요.",
+          "screenshot_instruction": "네이버 검색 결과에서 '톡톡 파트너센터' 링크가 보이는 화면. 클릭할 곳에 빨간 화살표 표시.",
+          "click_target": "검색 결과 중 '톡톡 파트너센터' 링크"
         },
         {
-          "title": "2. 네이버 톡톡 연동 확인",
-          "steps": [
-            {
-              "step": 1,
-              "action": "네이버 톡톡 관리 페이지 확인",
-              "url": "https://partner.talk.naver.com",
-              "description": "네이버 톡톡 파트너센터에 로그인하여 자동응답 설정이 되어 있는지 확인합니다."
-            },
-            {
-              "step": 2,
-              "action": "테스트 메시지 보내기",
-              "description": "본인 매장의 네이버 톡톡으로 '안녕하세요' 또는 '메뉴 알려주세요'라고 보내봅니다. AI가 자동으로 응답하면 성공!",
-              "screenshot_description": "네이버 톡톡 대화창 - AI가 메뉴와 가격을 자동 응답한 화면"
-            }
-          ]
+          "step": "1-2",
+          "title": "시작하기 버튼 클릭",
+          "action": "파트너센터 메인 화면에서 '시작하기' 버튼을 클릭합니다",
+          "detail": "이미 네이버에 로그인 되어있으면 바로 넘어갑니다. 로그인이 안 되어있으면 네이버 아이디/비밀번호로 로그인하세요.",
+          "screenshot_instruction": "톡톡 파트너센터 메인 페이지. '시작하기' 버튼에 빨간 원 표시.",
+          "click_target": "'시작하기' 버튼 (초록색 또는 파란색 큰 버튼)"
         },
         {
-          "title": "3. 기본 사용법",
-          "subsections": [
-            {
-              "subtitle": "AI가 자동으로 하는 것",
-              "items": [
-                "고객 문의에 자동 응답 (메뉴, 가격, 위치, 영업시간)",
-                "8개국어 자동 감지 및 해당 언어로 응답",
-                "예약 접수 및 확인 메시지 발송",
-                "예약 1일 전 / 2시간 전 리마인더 발송",
-                "노쇼 방지 안내 메시지",
-                "방문주기 자동 분석 및 알림 (스탠다드 이상)"
-              ]
-            },
-            {
-              "subtitle": "사장님이 확인할 것",
-              "items": [
-                "매장 대시보드에서 오늘의 예약 확인",
-                "AI가 처리 못한 특수 문의 확인 (콜백 요청)",
-                "월별 AI 대화 건수 및 SMS 사용량 확인",
-                "고객 리뷰 및 만족도 확인"
-              ]
-            },
-            {
-              "subtitle": "매장 대시보드 접속",
-              "url": "https://studioaibotbot.com/dashboard/{매장ID}",
-              "description": "XIVIX에서 제공한 매장 ID로 대시보드에 접속합니다. 북마크 해두면 편합니다.",
-              "screenshot_description": "매장 대시보드 - 오늘의 예약, AI 대화 수, SMS 사용량이 표시된 메인 화면"
-            }
-          ]
+          "step": "1-3",
+          "title": "회원가입 & 약관 동의",
+          "action": "이용약관에 모두 동의 체크 → '동의' 버튼 클릭",
+          "detail": "네이버 아이디와 자동 연동되므로 별도 가입은 필요 없습니다. 약관만 동의하면 됩니다.",
+          "screenshot_instruction": "약관 동의 화면. '전체 동의' 체크박스에 빨간 원, 하단 '동의' 버튼에 빨간 화살표.",
+          "click_target": "'전체 동의' 체크 → '동의' 버튼"
         },
         {
-          "title": "4. 자주 묻는 질문 (FAQ)",
-          "items": [
-            {
-              "q": "AI가 잘못된 답변을 하면 어떡하나요?",
-              "a": "AI는 사장님이 등록한 정보만 기반으로 답변합니다. 메뉴/가격이 바뀌면 XIVIX 담당자에게 알려주시면 바로 업데이트합니다."
-            },
-            {
-              "q": "요금제를 변경하고 싶어요.",
-              "a": "XIVIX 담당자에게 연락하시면 다음 결제일부터 변경됩니다. 업그레이드는 즉시, 다운그레이드는 다음 결제일부터 적용됩니다."
-            },
-            {
-              "q": "해지하고 싶어요.",
-              "a": "위약금 없이 언제든 해지 가능합니다. 담당자에게 연락하시면 다음 결제일 전에 처리됩니다."
-            },
-            {
-              "q": "AI 대화 한도를 초과하면?",
-              "a": "한도 초과 시 AI가 '현재 상담량이 많아 잠시 후 연락드리겠습니다'라고 안내하고, 사장님에게 SMS로 알림이 갑니다."
-            },
-            {
-              "q": "SMS 포함건수를 다 쓰면?",
-              "a": "포함건수 초과 시 건당 요금(요금제별 다름)이 자동 부과됩니다. 대시보드에서 실시간 확인 가능합니다."
-            },
-            {
-              "q": "외국인 고객이 오면?",
-              "a": "AI가 자동으로 언어를 감지하고, 해당 언어(영어, 중국어, 일본어 등 8개국어)로 응답합니다. 별도 설정 불필요."
-            }
-          ]
+          "step": "1-4",
+          "title": "본인 인증",
+          "action": "휴대폰 번호 입력 → 인증번호 받기 → 인증번호 입력",
+          "detail": "사장님 본인 휴대폰으로 인증번호가 옵니다. 번호를 입력하면 인증 완료!",
+          "screenshot_instruction": "본인 인증 화면. 휴대폰 번호 입력란과 '인증번호 받기' 버튼에 빨간 표시.",
+          "click_target": "휴대폰 번호 입력 → '인증번호 받기' → 인증번호 입력 → '확인'"
+        },
+        {
+          "step": "1-5",
+          "title": "톡톡 계정 만들기",
+          "action": "인증 완료 후 '톡톡 계정 만들기' 버튼 클릭",
+          "detail": "스마트스토어나 플레이스 연결은 나중에 해도 됩니다. 일단 '건너뛰기'를 눌러도 괜찮습니다.",
+          "screenshot_instruction": "계정 만들기 화면. '톡톡 계정 만들기' 버튼에 빨간 원. 스마트스토어 연결은 '건너뛰기' 가능하다고 화살표로 표시.",
+          "click_target": "'톡톡 계정 만들기' 버튼"
+        },
+        {
+          "step": "1-6",
+          "title": "계정 대표 정보 입력",
+          "action": "사업자인 경우 사업자등록증 정보 입력. 개인이면 개인으로 선택.",
+          "fields_to_fill": [
+            {"field": "계정 유형", "value": "사업자 (사업자등록증이 있는 경우) 또는 개인"},
+            {"field": "상호명", "value": "매장 이름 (예: 다듬다헤어)"},
+            {"field": "사업자등록번호", "value": "사업자등록증에 있는 번호"},
+            {"field": "대표자명", "value": "사장님 성함"}
+          ],
+          "detail": "사업자등록증을 첨부하면 검수가 더 빨리 됩니다. 정보 입력 후 '다음' 버튼을 누르세요.",
+          "screenshot_instruction": "계정 대표 정보 입력 폼. 각 입력란에 예시가 채워진 상태. '다음' 버튼에 빨간 화살표.",
+          "click_target": "정보 입력 → '다음' 버튼"
+        },
+        {
+          "step": "1-7",
+          "title": "검수 대기 (자동)",
+          "action": "사용 신청이 완료되면 '검수중' 상태가 됩니다",
+          "detail": "네이버에서 검수하는 데 보통 4시간~2일 정도 걸립니다. 승인되면 문자로 알림이 옵니다. 이 시간 동안 다른 것은 할 필요 없습니다.",
+          "screenshot_instruction": "'검수중' 상태 화면 캡처. '검수 완료 시 문자 알림' 안내 문구 표시.",
+          "important": "검수가 완료될 때까지 기다려주세요! 문자가 오면 다음 단계로 넘어갑니다."
         }
       ]
     },
 
     {
-      "type": "영업사원_대리점용",
-      "target": "영업사원 / 대리점 파트너",
-      "tone": "전문적이고 수익 중심, 데이터 기반 설득",
-      "sections": [
+      "chapter": 2,
+      "title": "XIVIX AI를 매니저로 등록하기",
+      "estimated_time": "3분",
+      "difficulty": "쉬움",
+      "prerequisite": "1장의 검수가 완료된 후 진행",
+      "why": "사장님의 네이버 아이디/비밀번호를 저희에게 주실 필요 없습니다! 대신 XIVIX AI를 '매니저'로 초대하면, AI가 사장님의 톡톡 메시지를 대신 응답할 수 있게 됩니다.",
+      "steps": [
         {
-          "title": "1. 매장 등록 방법",
-          "steps": [
-            {
-              "step": 1,
-              "action": "영업사원 대시보드 접속",
-              "url": "https://studioaibotbot.com/sales",
-              "description": "영업사원 전용 대시보드에 로그인합니다.",
-              "screenshot_description": "영업사원 대시보드 - 내 매장 목록, 수수료 현황이 보이는 메인 화면"
-            },
-            {
-              "step": 2,
-              "action": "신규 매장 등록",
-              "description": "매장 사장님과 상담 후, 온보딩 신청 페이지 링크를 전달합니다.",
-              "link_to_share": "https://studioaibotbot.com/request",
-              "tip": "사장님이 직접 작성하게 하거나, 대신 입력해줄 수 있습니다."
-            },
-            {
-              "step": 3,
-              "action": "결제 링크 전달",
-              "description": "마스터 승인 후 생성된 결제 링크를 사장님에게 카톡으로 전달합니다.",
-              "screenshot_description": "결제 링크가 포함된 카카오톡 메시지 예시"
-            },
-            {
-              "step": 4,
-              "action": "결제 확인",
-              "description": "사장님이 결제를 완료하면 영업사원 대시보드에서 확인할 수 있습니다.",
-              "screenshot_description": "영업사원 대시보드 - 매장 결제 완료 상태 표시"
-            }
-          ]
+          "step": "2-1",
+          "title": "톡톡 파트너센터 로그인",
+          "action": "PC에서 partner.talk.naver.com 접속 → 사장님 네이버 아이디로 로그인",
+          "direct_url": "https://partner.talk.naver.com",
+          "screenshot_instruction": "톡톡 파트너센터 로그인 후 메인 화면. 좌측 메뉴가 보이는 상태.",
+          "click_target": "네이버 아이디로 로그인"
         },
         {
-          "title": "2. 수수료 구조",
-          "data": {
-            "setup_commission": {
-              "title": "셋팅비 수수료 (1회)",
-              "rates": [
-                {"type": "소상공인 셋팅", "sale_price": 100000, "commission_rate": "30%", "commission": 30000},
-                {"type": "기본 셋팅", "sale_price": 300000, "commission_rate": "30%", "commission": 90000},
-                {"type": "프리미엄 셋팅", "sale_price": 500000, "commission_rate": "30%", "commission": 150000}
-              ]
-            },
-            "monthly_commission": {
-              "title": "월 이용료 수수료 (매월 반복)",
-              "rates": [
-                {"plan": "미니", "sale_price": 29000, "commission_rate": "20%", "commission": 5800},
-                {"plan": "라이트", "sale_price": 49000, "commission_rate": "20%", "commission": 9800},
-                {"plan": "스탠다드", "sale_price": 99000, "commission_rate": "20%", "commission": 19800},
-                {"plan": "프리미엄", "sale_price": 149000, "commission_rate": "20%", "commission": 29800},
-                {"plan": "엔터프라이즈", "sale_price": 149000, "commission_rate": "20%", "commission": 29800}
-              ]
-            },
-            "payment_schedule": "매월 15일 (전월 실적 기준)",
-            "minimum_stores": "3개 (미만 시 수수료율 15%로 하향)"
-          }
+          "step": "2-2",
+          "title": "계정관리 메뉴 클릭",
+          "action": "왼쪽 메뉴에서 '계정관리' 클릭",
+          "detail": "좌측 사이드바 메뉴 하단에 '계정관리'가 있습니다.",
+          "screenshot_instruction": "좌측 메뉴. '계정관리' 항목에 빨간 원과 화살표 표시. 메뉴 위치: 보통 하단 쪽.",
+          "click_target": "좌측 메뉴 → '계정관리'"
         },
         {
-          "title": "3. 수익 시뮬레이션",
-          "scenarios": [
-            {
-              "name": "신입 영업사원 (첫 3개월)",
-              "stores": 5,
-              "avg_plan": "미니+소상공인셋팅",
-              "setup_total": 150000,
-              "monthly_total": 29000,
-              "year1_income": "셋팅 15만 + 월 14.5만 × 12 = 189만원"
-            },
-            {
-              "name": "중급 영업사원 (6개월 차)",
-              "stores": 10,
-              "avg_plan": "라이트+기본셋팅",
-              "setup_total": 900000,
-              "monthly_total": 98000,
-              "year1_income": "셋팅 90만 + 월 9.8만 × 12 = 207.6만원"
-            },
-            {
-              "name": "시니어 영업사원 (1년 차)",
-              "stores": 20,
-              "avg_plan": "스탠다드 혼합",
-              "setup_total": 2400000,
-              "monthly_total": 396000,
-              "year1_income": "셋팅 240만 + 월 39.6만 × 12 = 715.2만원"
-            },
-            {
-              "name": "탑 영업사원",
-              "stores": 50,
-              "avg_plan": "혼합",
-              "setup_total": 5500000,
-              "monthly_total": 1188000,
-              "year1_income": "셋팅 550만 + 월 118.8만 × 12 = 1975.6만원"
-            }
-          ]
+          "step": "2-3",
+          "title": "설정 탭 클릭",
+          "action": "계정관리 페이지 상단의 '설정' 탭 클릭",
+          "detail": "'계정관리' 안에 여러 탭이 있습니다. '설정' 탭을 찾아 클릭하세요.",
+          "screenshot_instruction": "계정관리 페이지. 상단 탭 중 '설정' 탭에 빨간 원 표시. 탭 순서: 대시보드, 채팅목록, ..., 설정.",
+          "click_target": "'설정' 탭"
         },
         {
-          "title": "4. 영업 팁",
-          "tips": [
-            {
-              "situation": "사장님이 비싸다고 할 때",
-              "script": "사장님, 최저시급이 시간당 10,030원이에요. AI는 24시간이니까 하루 24만원 직원 한 명인데, 월 2.9만원이면 하루에 1,000원도 안 됩니다."
-            },
-            {
-              "situation": "AI가 못 믿겠다고 할 때",
-              "script": "사장님 매장 정보로 바로 데모를 보여드릴게요. 네이버 스마트플레이스 링크만 주시면 5분 안에 AI가 사장님 매장 정보로 응답하는 걸 보여드립니다."
-            },
-            {
-              "situation": "이미 톡톡 자동응답을 쓰고 있다고 할 때",
-              "script": "기본 자동응답은 정해진 답만 해요. 저희 AI는 고객이 '일요일 3시 예약 되나요?'라고 물으면 일요일 영업 여부를 확인하고 답해줍니다. 완전히 다릅니다."
-            },
-            {
-              "situation": "생각해보겠다고 할 때",
-              "script": "네, 그러세요! 이 링크 드릴 테니 궁금한 거 있으시면 언제든 문의 주세요. (명함+QR코드 전달)"
-            }
-          ]
+          "step": "2-4",
+          "title": "상담멤버관리 메뉴 찾기",
+          "action": "설정 페이지에서 '상담멤버관리' 항목을 찾습니다",
+          "detail": "설정 페이지 안에 여러 메뉴가 있습니다. '상담멤버관리'를 찾아 클릭하세요.",
+          "screenshot_instruction": "설정 페이지의 메뉴 목록. '상담멤버관리' 항목에 빨간 원 표시.",
+          "click_target": "'상담멤버관리'"
+        },
+        {
+          "step": "2-5",
+          "title": "'새로운 멤버 초대하기' 버튼 클릭",
+          "action": "상담멤버관리 화면에서 '새로운 멤버 초대하기' 버튼을 클릭합니다",
+          "detail": "이 버튼을 누르면 새 매니저를 추가할 수 있는 초대 화면이 나옵니다.",
+          "screenshot_instruction": "상담멤버관리 화면. '새로운 멤버 초대하기' 버튼에 빨간 원과 큰 화살표. 버튼 위치 명확히 표시.",
+          "click_target": "'새로운 멤버 초대하기' 버튼"
+        },
+        {
+          "step": "2-6",
+          "title": "XIVIX AI 계정 정보 입력",
+          "action": "초대할 멤버 정보에 아래 내용을 정확히 입력하세요",
+          "fields_to_fill": [
+            {"field": "이메일", "value": "xivix.kr@gmail.com", "important": true},
+            {"field": "이름(별명)", "value": "XIVIX AI"},
+            {"field": "권한", "value": "매니저 (또는 '상담원')"}
+          ],
+          "detail": "이메일은 반드시 xivix.kr@gmail.com 으로 입력해주세요! 이 이메일로 초대장이 발송되고, 저희가 수락하면 AI가 사장님 톡톡에 연결됩니다.",
+          "screenshot_instruction": "멤버 초대 입력 폼. 이메일 입력란에 'xivix.kr@gmail.com'이 입력된 상태. 이메일 란에 빨간 밑줄과 '이 이메일을 정확히 입력하세요!' 화살표. 권한은 '매니저' 선택된 상태.",
+          "click_target": "이메일 입력 → 이름 입력 → 권한 선택 → '초대하기' 버튼",
+          "warning": "이메일 주소를 틀리면 초대가 안 됩니다! xivix.kr@gmail.com 을 복사해서 붙여넣기 하세요."
+        },
+        {
+          "step": "2-7",
+          "title": "초대 완료 확인",
+          "action": "초대가 발송되면 '초대 완료' 메시지가 나옵니다",
+          "detail": "초대를 보내면 XIVIX 팀에서 수락 처리합니다. 보통 1시간 이내에 완료됩니다. 수락이 완료되면 사장님에게 카톡 또는 문자로 알려드립니다.",
+          "screenshot_instruction": "초대 완료 확인 화면. '초대가 발송되었습니다' 메시지. 멤버 목록에 'XIVIX AI (대기중)' 표시.",
+          "next_action": "이제 사장님은 기다리시면 됩니다! XIVIX 팀에서 초대를 수락하고, AI 셋팅을 진행합니다."
         }
       ]
     },
 
     {
-      "type": "내부_운영용",
-      "target": "XIVIX 내부 운영팀 (방대표님)",
-      "tone": "기술적이고 실무 중심, 트러블슈팅 포함",
-      "sections": [
+      "chapter": 3,
+      "title": "AI 서비스 신청하기",
+      "estimated_time": "5분",
+      "difficulty": "쉬움",
+      "steps": [
         {
-          "title": "1. 마스터 대시보드 사용법",
-          "url": "https://studioaibotbot.com/master",
-          "login": {
-            "method": "마스터 로그인",
-            "endpoint": "https://studioaibotbot.com/login"
-          },
-          "features": [
+          "step": "3-1",
+          "title": "서비스 신청 페이지 접속",
+          "action": "아래 링크를 클릭하거나, XIVIX 담당자가 보내준 링크를 클릭합니다",
+          "direct_url": "https://studioaibotbot.com/request",
+          "detail": "담당자가 카톡이나 문자로 보내준 링크를 클릭하면 신청 페이지로 이동합니다. 또는 위 주소를 직접 입력해도 됩니다.",
+          "screenshot_instruction": "서비스 신청 페이지 메인 화면. '네이버톡톡 AI 연동 신청' 제목이 보이는 화면.",
+          "click_target": "링크 클릭"
+        },
+        {
+          "step": "3-2",
+          "title": "매장 정보 입력",
+          "action": "매장 이름, 업종, 연락처 등을 입력합니다",
+          "fields_to_fill": [
+            {"field": "매장명", "value": "예: 다듬다헤어", "required": true},
+            {"field": "업종 선택", "value": "드롭다운에서 선택 (미용실, 음식점, 카페 등)", "required": true},
+            {"field": "대표자 성함", "value": "예: 홍길동", "required": true},
+            {"field": "연락처", "value": "예: 010-1234-5678", "required": true},
+            {"field": "이메일", "value": "예: shop@naver.com", "required": true},
+            {"field": "매장 주소", "value": "예: 서울시 강남구 역삼동 123", "required": true},
+            {"field": "영업시간", "value": "예: 10:00 ~ 21:00 (일요일 휴무)", "required": true}
+          ],
+          "detail": "모든 정보를 정확하게 입력해주세요. 이 정보가 AI 응답에 사용됩니다. 잘못된 정보를 입력하면 AI가 고객에게 틀린 답변을 할 수 있습니다!",
+          "screenshot_instruction": "매장 정보 입력 폼. 각 필드에 예시가 입력된 상태. 필수 항목에 빨간 별(*) 표시.",
+          "click_target": "각 입력란에 정보 입력"
+        },
+        {
+          "step": "3-3",
+          "title": "네이버 스마트플레이스 URL 입력 (중요!)",
+          "action": "사장님 매장의 네이버 스마트플레이스 URL을 입력합니다",
+          "how_to_find": [
+            "네이버에서 '매장이름' 검색 (예: '다듬다헤어 강남')",
+            "검색 결과에서 내 매장의 스마트플레이스가 나오면 클릭",
+            "브라우저 주소창의 URL을 복사",
+            "또는 네이버 지도에서 내 매장을 찾아 '공유' → 링크 복사"
+          ],
+          "detail": "이 URL을 입력하면 AI가 자동으로 매장의 메뉴, 가격, 사진, 리뷰 등을 분석합니다. 사장님이 하나하나 입력할 필요가 없어요!",
+          "screenshot_instruction": "스마트플레이스 URL 입력란. 예시 URL(https://naver.me/xxxx)이 입력된 상태. 아래에 'URL 찾는 방법' 보조 이미지: 네이버 검색 → 매장 클릭 → 주소창 복사 과정을 3단계 스크린샷.",
+          "click_target": "URL 입력란에 붙여넣기"
+        },
+        {
+          "step": "3-4",
+          "title": "요금제 선택",
+          "action": "원하는 요금제를 선택합니다",
+          "options": [
             {
-              "name": "매장 관리",
-              "description": "전체 매장 목록 조회, 매장별 상세 정보, AI 상태 확인",
-              "screenshot_description": "마스터 대시보드 메인 - 매장 카드 목록, 활성/비활성 필터"
+              "plan": "미니",
+              "price_monthly": "29,000원/월",
+              "setup_fee": "100,000원 (소상공인 셋팅비, 1회)",
+              "first_payment": "129,000원 (월구독 29,000 + 셋팅비 100,000)",
+              "after_that": "매월 29,000원 자동결제",
+              "recommended": "소규모 매장, 문의가 많지 않은 곳",
+              "ai_conversations": "월 500건",
+              "features": "AI 자동응답, 메뉴/가격 안내, 위치/영업시간 안내"
             },
             {
-              "name": "온보딩 승인",
-              "description": "신규 매장 신청 확인 → 정보 검토 → 승인/반려",
-              "url": "https://studioaibotbot.com/master (대기 중 탭)",
-              "screenshot_description": "온보딩 대기 목록 - 승인/반려 버튼이 있는 화면"
+              "plan": "라이트",
+              "price_monthly": "49,000원/월",
+              "setup_fee": "300,000원 (기본 셋팅비, 1회)",
+              "first_payment": "349,000원",
+              "after_that": "매월 49,000원 자동결제",
+              "recommended": "미용실, 네일샵, 일반 음식점",
+              "ai_conversations": "월 1,000건",
+              "features": "미니 전체 + 8개국어 다국어, 예약 리마인더, 노쇼 방지"
             },
             {
-              "name": "AI 프롬프트 관리",
-              "description": "매장별 AI 응답 스타일, 메뉴, 가격 정보 수정",
-              "screenshot_description": "매장 상세 - AI 프롬프트 편집 화면"
+              "plan": "스탠다드",
+              "price_monthly": "99,000원/월",
+              "setup_fee": "300,000원 (기본 셋팅비, 1회)",
+              "first_payment": "399,000원",
+              "after_that": "매월 99,000원 자동결제",
+              "recommended": "프랜차이즈, 병원, 학원, 문의가 많은 매장",
+              "ai_conversations": "월 5,000건",
+              "features": "라이트 전체 + 고객관리, 방문주기 알림, 매출 통계"
             },
             {
-              "name": "실시간 로그",
-              "description": "AI 대화 실시간 모니터링, 할루시네이션 감지",
-              "screenshot_description": "실시간 로그 화면 - AI 대화 목록과 품질 점수"
-            },
-            {
-              "name": "구독 & 결제",
-              "description": "Steppay 구독 현황, 결제 이력, 결제 링크 재발송",
-              "api_endpoints": [
-                "GET /api/steppay/dashboard - 전체 구독 현황",
-                "GET /api/steppay/subscription/:storeId - 매장별 구독 조회",
-                "POST /api/steppay/subscribe - 구독 생성 + 결제 링크",
-                "POST /api/steppay/change-plan/:storeId - 플랜 변경",
-                "POST /api/steppay/cancel/:storeId - 구독 취소",
-                "POST /api/steppay/resend-link/:storeId - 결제 링크 재발송",
-                "GET /api/steppay/webhook-logs - 웹훅 로그 조회",
-                "POST /api/steppay/webhook-replay - 미처리 웹훅 재처리"
-              ]
+              "plan": "프리미엄",
+              "price_monthly": "149,000원/월",
+              "setup_fee": "500,000원 (프리미엄 셋팅비, 1회)",
+              "first_payment": "649,000원",
+              "after_that": "매월 149,000원 자동결제",
+              "recommended": "대형 병원, 프랜차이즈 본사",
+              "ai_conversations": "월 20,000건",
+              "features": "스탠다드 전체 + 전문상담 AI, 멀티매장 관리, 전담 매니저"
             }
-          ]
+          ],
+          "screenshot_instruction": "요금제 선택 화면. 4개 요금제가 카드 형태로 나열. 각 카드에 가격, 기능이 표시. '선택' 버튼에 빨간 원.",
+          "click_target": "원하는 요금제의 '선택' 버튼 클릭"
         },
         {
-          "title": "2. 트러블슈팅",
-          "issues": [
-            {
-              "problem": "AI가 응답하지 않음",
-              "checks": [
-                "매장 is_active 상태 확인 (마스터 대시보드)",
-                "네이버 톡톡 토큰 유효성 확인 (GET /api/stores/:id/tokens)",
-                "AI API 키 확인 (GET /api/stores/:id/ai-keys)",
-                "시스템 헬스 확인 (GET /api/system/health)"
-              ],
-              "solution": "대부분 톡톡 토큰 만료. 토큰 재발급 후 POST /api/stores/:id/tokens로 갱신."
-            },
-            {
-              "problem": "결제 후 구독이 활성화 안 됨",
-              "checks": [
-                "웹훅 로그 확인 (GET /api/steppay/webhook-logs)",
-                "웹훅 event_type이 unknown인지 확인",
-                "구독 status가 trial인지 확인"
-              ],
-              "solution": "POST /api/steppay/webhook-replay 실행하여 미처리 웹훅 재처리. 또는 직접 D1에서 status를 active로 업데이트."
-            },
-            {
-              "problem": "SMS 발송 실패",
-              "checks": [
-                "Solapi API 키 확인",
-                "발신번호 등록 여부 확인",
-                "SMS 잔여 한도 확인 (GET /api/usage/:storeId)"
-              ],
-              "solution": "Solapi 대시보드에서 잔액/발신번호 확인. 한도 초과 시 플랜 업그레이드 안내."
-            },
-            {
-              "problem": "할루시네이션 (잘못된 AI 응답)",
-              "checks": [
-                "할루시네이션 알림 확인 (GET /api/master/alerts/hallucination)",
-                "프롬프트 확인 (매장 상세 → AI 설정)",
-                "최근 로그에서 문제 대화 확인"
-              ],
-              "solution": "프롬프트 재조정 (POST /api/master/store/:id/patch-prompt). 심각 시 매장 봇 일시 중지 (POST /api/master/bot-toggle/:id)."
-            }
-          ]
+          "step": "3-5",
+          "title": "신청 완료",
+          "action": "'신청하기' 버튼을 클릭합니다",
+          "detail": "모든 정보 입력과 요금제 선택이 끝나면 하단의 '신청하기' 버튼을 클릭합니다. 신청이 접수되면 XIVIX 팀에서 확인 후 결제 링크를 보내드립니다.",
+          "screenshot_instruction": "신청 폼 하단. '신청하기' 버튼에 큰 빨간 화살표. '신청 완료!' 확인 팝업.",
+          "click_target": "'신청하기' 버튼"
+        }
+      ]
+    },
+
+    {
+      "chapter": 4,
+      "title": "결제하기",
+      "estimated_time": "2분",
+      "difficulty": "쉬움",
+      "prerequisite": "XIVIX 팀에서 결제 링크를 카톡/문자로 전달받은 후",
+      "steps": [
+        {
+          "step": "4-1",
+          "title": "결제 링크 클릭",
+          "action": "카톡 또는 문자로 받은 결제 링크를 클릭합니다",
+          "detail": "XIVIX 팀이 신청 확인 후 카카오톡이나 문자로 결제 링크를 보내드립니다. 링크를 클릭하면 결제 페이지로 이동합니다.",
+          "example_link": "https://api.steppay.kr/api/public/orders/order_XXXXXX/pay",
+          "screenshot_instruction": "카카오톡 대화창에 결제 링크가 포함된 메시지. 링크에 빨간 원 표시. 메시지 내용 예: '[XIVIX AI] 결제 링크가 생성되었습니다. 아래 링크를 클릭하여 결제해주세요.'",
+          "click_target": "결제 링크 클릭"
         },
         {
-          "title": "3. 주요 관리 URL 모음",
-          "urls": {
-            "마스터 대시보드": "https://studioaibotbot.com/master",
-            "매장 대시보드": "https://studioaibotbot.com/dashboard/{storeId}",
-            "온보딩 신청": "https://studioaibotbot.com/request",
-            "로그인": "https://studioaibotbot.com/login",
-            "영업사원 대시보드": "https://studioaibotbot.com/sales",
-            "매장 설정": "https://studioaibotbot.com/store/{storeId}/settings",
-            "고객 관리": "https://studioaibotbot.com/store/{storeId}/customers",
-            "결제 페이지": "https://studioaibotbot.com/payment/{storeId}",
-            "API 문서": "https://studioaibotbot.com/api/docs",
-            "시스템 헬스": "https://studioaibotbot.com/api/system/health",
-            "랜딩 페이지": "https://xivix.kr",
-            "Steppay 포탈": "https://portal.steppay.kr",
-            "GitHub": "https://github.com/ikjoobang/xivix-ai-core"
-          }
+          "step": "4-2",
+          "title": "결제 화면 확인",
+          "action": "결제 화면에서 상품 정보와 금액을 확인합니다",
+          "what_you_will_see": [
+            "서비스명: 지빅스AI 'XIVIX AI'",
+            "상품 1: 네이버톡톡 '봇' XIVIX AI [요금제명] (월간 구독) - 월 금액",
+            "상품 2: XIVIX AI [셋팅비 유형] - 셋팅비 금액 (1회)",
+            "총 결제 금액: 월 구독료 + 셋팅비"
+          ],
+          "detail": "두 상품이 함께 표시됩니다. 첫 결제에만 셋팅비가 포함되고, 다음 달부터는 월 구독료만 자동 결제됩니다.",
+          "screenshot_instruction": "Steppay 결제 화면. 상단에 서비스명 '지빅스AI', 상품 2개(월구독+셋팅비)가 목록으로 표시. 총 금액 표시. 결제 수단 선택 영역.",
+          "click_target": "금액 확인"
         },
         {
-          "title": "4. 일일 운영 체크리스트",
-          "daily_tasks": [
-            {"time": "09:00", "task": "마스터 대시보드 접속 → 신규 온보딩 신청 확인", "priority": "high"},
-            {"time": "09:30", "task": "할루시네이션 알림 확인 → 문제 있으면 프롬프트 수정", "priority": "high"},
-            {"time": "10:00", "task": "전일 AI 대화 로그 샘플 확인 (품질 체크)", "priority": "medium"},
-            {"time": "12:00", "task": "결제 현황 확인 → 미결제 매장 리마인더 발송", "priority": "medium"},
-            {"time": "17:00", "task": "당일 예약 리마인더 발송 상태 확인", "priority": "low"},
-            {"time": "수시", "task": "고객 콜백 요청 확인 → 사장님에게 전달", "priority": "high"}
-          ]
+          "step": "4-3",
+          "title": "결제 수단 선택",
+          "action": "원하는 결제 수단을 선택합니다",
+          "payment_methods": [
+            {"method": "카카오페이", "description": "카카오톡으로 간편 결제 (추천)", "is_recommended": true},
+            {"method": "신용카드", "description": "카드 번호 입력하여 결제"},
+            {"method": "가상계좌", "description": "계좌이체로 결제"}
+          ],
+          "screenshot_instruction": "결제 수단 선택 화면. 카카오페이, 신용카드, 가상계좌 버튼. 카카오페이에 '추천' 뱃지와 빨간 원 표시.",
+          "click_target": "'카카오페이' 버튼 (또는 원하는 결제 수단)"
+        },
+        {
+          "step": "4-4",
+          "title": "약관 동의 & 결제 진행",
+          "action": "약관에 동의 체크 → '결제하기' 버튼 클릭",
+          "detail": "이용약관과 정기결제 동의에 체크한 후 결제 버튼을 누릅니다. 카카오페이를 선택했다면 카카오톡 앱에서 비밀번호를 입력하면 완료!",
+          "screenshot_instruction": "약관 동의 체크박스에 빨간 원. '결제하기' 버튼에 빨간 화살표. 카카오페이 선택 시 카카오톡 결제 화면도 함께.",
+          "click_target": "약관 동의 체크 → '결제하기' 버튼 → (카카오페이) 카톡에서 비밀번호 입력"
+        },
+        {
+          "step": "4-5",
+          "title": "결제 완료!",
+          "action": "결제가 완료되면 확인 화면이 나옵니다",
+          "what_you_will_see": [
+            "결제가 완료되었습니다!",
+            "다음 결제일: 매월 같은 날 자동 결제",
+            "결제 금액, 결제 방법, 주문번호"
+          ],
+          "detail": "결제 완료 후 XIVIX 팀이 AI 셋팅을 시작합니다. 보통 1~2영업일 이내에 완료되며, 완료되면 알려드립니다.",
+          "screenshot_instruction": "결제 완료 화면. '결제가 완료되었습니다' 메시지. 결제 금액, 다음 결제일 표시.",
+          "next_action": "이제 기다리시면 됩니다! AI 셋팅이 완료되면 카톡으로 안내드립니다."
+        }
+      ]
+    },
+
+    {
+      "chapter": 5,
+      "title": "AI 동작 확인하기",
+      "estimated_time": "2분",
+      "difficulty": "매우 쉬움",
+      "prerequisite": "XIVIX 팀에서 '셋팅 완료' 안내를 받은 후",
+      "steps": [
+        {
+          "step": "5-1",
+          "title": "내 톡톡으로 테스트 메시지 보내기",
+          "action": "네이버에서 내 매장을 검색 → '톡톡하기' 클릭 → 메시지 보내기",
+          "test_messages": [
+            {"message": "안녕하세요", "expected": "AI가 매장 소개와 함께 인사 응답"},
+            {"message": "메뉴 알려주세요", "expected": "AI가 등록된 메뉴와 가격을 응답"},
+            {"message": "영업시간이 어떻게 돼요?", "expected": "AI가 영업시간 안내"},
+            {"message": "예약하고 싶어요", "expected": "AI가 예약 안내 또는 전화 안내"},
+            {"message": "where are you?", "expected": "AI가 영어로 위치 안내 (라이트 이상)"}
+          ],
+          "detail": "직접 내 매장 톡톡에 메시지를 보내보세요! AI가 자동으로 응답하면 성공입니다. 응답이 3초 이내에 와야 정상입니다.",
+          "screenshot_instruction": "네이버 톡톡 대화창. 사장님이 보낸 '메뉴 알려주세요' 메시지 → AI가 메뉴와 가격을 자동 응답한 화면. AI 응답 말풍선에 초록색 체크 표시.",
+          "troubleshooting": "응답이 안 오면: XIVIX 담당자에게 연락 (010-4845-3065). 대부분 매니저 초대 수락이 안 된 경우입니다."
+        },
+        {
+          "step": "5-2",
+          "title": "매장 대시보드 확인 (선택사항)",
+          "action": "XIVIX에서 안내한 대시보드 링크로 접속하여 AI 대화 현황을 확인합니다",
+          "detail": "대시보드에서 오늘 들어온 AI 대화 수, 예약 현황, SMS 사용량을 확인할 수 있습니다. 매일 확인하실 필요는 없지만, 가끔 확인하면 좋습니다.",
+          "screenshot_instruction": "매장 대시보드 메인 화면. AI 대화 수, 예약 현황, SMS 사용량이 카드 형태로 표시된 화면."
+        }
+      ]
+    },
+
+    {
+      "chapter": 6,
+      "title": "이런 경우에는 이렇게 하세요 (FAQ)",
+      "steps": [
+        {
+          "step": "6-1",
+          "title": "메뉴/가격이 바뀌었을 때",
+          "action": "XIVIX 담당자에게 카톡이나 전화로 알려주세요",
+          "detail": "메뉴가 추가되거나 가격이 변경되면 담당자에게 알려주시면 AI 응답을 업데이트합니다. 보통 당일 내 반영됩니다.",
+          "contact": "카톡 또는 전화: 010-4845-3065"
+        },
+        {
+          "step": "6-2",
+          "title": "AI가 이상한 답변을 할 때",
+          "action": "해당 대화 내용을 캡처해서 담당자에게 보내주세요",
+          "detail": "AI가 틀린 정보를 답하거나 이상한 응답을 보내면, 대화 캡처를 보내주시면 즉시 수정합니다."
+        },
+        {
+          "step": "6-3",
+          "title": "요금제를 바꾸고 싶을 때",
+          "action": "담당자에게 변경할 요금제를 말씀해주세요",
+          "detail": "업그레이드는 즉시 적용, 다운그레이드는 다음 결제일부터 적용됩니다."
+        },
+        {
+          "step": "6-4",
+          "title": "서비스를 해지하고 싶을 때",
+          "action": "담당자에게 해지 의사를 알려주세요",
+          "detail": "위약금 없이 언제든 해지 가능합니다. 다음 결제일 전에 처리됩니다. 해지 후에도 남은 기간 동안은 서비스를 이용할 수 있습니다."
+        },
+        {
+          "step": "6-5",
+          "title": "결제가 실패했을 때",
+          "action": "카드 한도, 잔액을 확인해주세요",
+          "detail": "결제 실패 시 AI 서비스가 일시 중단될 수 있습니다. 카드 변경이 필요하면 담당자에게 연락하시면 새 결제 링크를 보내드립니다."
+        },
+        {
+          "step": "6-6",
+          "title": "매니저 초대가 안 될 때",
+          "action": "이메일 주소를 다시 확인해주세요",
+          "detail": "반드시 xivix.kr@gmail.com 으로 초대해주세요. 오타가 있으면 초대가 안 됩니다. 그래도 안 되면 담당자에게 전화주세요."
         }
       ]
     }
   ],
 
-  "product_mapping": {
-    "plans": [
-      {"plan": "mini", "name": "소상공인 미니", "price": 29000, "steppay_product_id": 24778, "steppay_product_code": "product_PZr2XVYSA"},
-      {"plan": "light", "name": "라이트", "price": 49000, "steppay_product_id": 24781, "steppay_product_code": "product_zMHKnsGMG"},
-      {"plan": "standard", "name": "스탠다드", "price": 99000, "steppay_product_id": 24782, "steppay_product_code": "product_7JJQpUADm"},
-      {"plan": "premium", "name": "프리미엄", "price": 149000, "steppay_product_id": 24784, "steppay_product_code": "product_8MeW5yScL"},
-      {"plan": "enterprise", "name": "엔터프라이즈", "price": 149000, "steppay_product_id": 24785, "steppay_product_code": "product_P3TzlYLpc"}
+  "quick_reference": {
+    "title": "한눈에 보는 전체 흐름",
+    "flow": [
+      {"step": 1, "action": "톡톡 파트너센터 가입", "who": "사장님", "time": "5분 + 검수 대기"},
+      {"step": 2, "action": "XIVIX AI 매니저 초대", "who": "사장님", "time": "3분", "key_info": "이메일: xivix.kr@gmail.com"},
+      {"step": 3, "action": "서비스 신청서 작성", "who": "사장님 (또는 담당자 도움)", "time": "5분"},
+      {"step": 4, "action": "결제 (카카오페이)", "who": "사장님", "time": "2분"},
+      {"step": 5, "action": "AI 셋팅", "who": "XIVIX 팀", "time": "1~2영업일"},
+      {"step": 6, "action": "AI 동작 확인", "who": "사장님", "time": "2분"}
     ],
-    "setup_fees": [
-      {"type": "starter", "name": "소상공인 셋팅비", "price": 100000, "steppay_product_code": "product_9urtWOscK"},
-      {"type": "basic", "name": "기본 셋팅비", "price": 300000, "steppay_product_code": "product_IcJv9JjZa"},
-      {"type": "premium", "name": "프리미엄 셋팅비", "price": 500000, "steppay_product_code": "product_BtwFRCXDY"}
-    ]
+    "total_time": "사장님이 하실 일: 약 15분 + 검수 대기",
+    "contact": {
+      "phone": "010-4845-3065",
+      "email": "xivix.kr@gmail.com",
+      "homepage": "https://xivix.kr"
+    }
   }
 }
