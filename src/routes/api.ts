@@ -11771,6 +11771,27 @@ api.put('/steppay/products/:plan', async (c) => {
   });
 });
 
+// [V3.0-28b] Steppay 셋팅비 상품 ID 매핑 업데이트
+api.put('/steppay/setup-products/:setupType', async (c) => {
+  const setupType = c.req.param('setupType');
+  const { steppay_product_id, steppay_price_id } = await c.req.json() as {
+    steppay_product_id: number;
+    steppay_price_id: number;
+  };
+  
+  await c.env.DB.prepare(`
+    UPDATE xivix_steppay_setup_products 
+    SET steppay_product_id = ?, steppay_price_id = ?
+    WHERE setup_type = ?
+  `).bind(steppay_product_id, steppay_price_id, setupType).run();
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: { message: `${setupType} 셋팅비 Steppay 상품 매핑 완료` },
+    timestamp: Date.now()
+  });
+});
+
 // [V3.0-29] 구독 결제 시작 (고객 생성 → 주문 생성 → 결제 링크 반환)
 api.post('/steppay/subscribe', async (c) => {
   const { store_id, plan, buyer_name, buyer_email, buyer_phone, setup_type } = await c.req.json() as {
@@ -12100,7 +12121,8 @@ api.post('/steppay/webhook', async (c) => {
     
     switch (eventType) {
       case 'ORDER_PAID':
-      case 'order.paid': {
+      case 'order.paid':
+      case 'order.payment_completed': {
         // ── 최초 결제 완료 ──
         if (subscription) {
           const subscriptionId = data.subscriptionId || data.subscription?.id;
@@ -12139,7 +12161,8 @@ api.post('/steppay/webhook', async (c) => {
       }
       
       case 'SUBSCRIPTION_RENEWED':
-      case 'subscription.renewed': {
+      case 'subscription.renewed':
+      case 'payment.completed': {
         // ── 구독 갱신 (자동 월결제 성공) ──
         if (subscription) {
           await c.env.DB.prepare(`
@@ -12173,7 +12196,8 @@ api.post('/steppay/webhook', async (c) => {
       }
       
       case 'SUBSCRIPTION_PAYMENT_FAILED':
-      case 'subscription.payment_failed': {
+      case 'subscription.payment_failed':
+      case 'payment.failed': {
         // ── 결제 실패 ──
         if (subscription) {
           await c.env.DB.prepare(`
@@ -12197,7 +12221,8 @@ api.post('/steppay/webhook', async (c) => {
       }
       
       case 'SUBSCRIPTION_CANCELLED':
-      case 'subscription.cancelled': {
+      case 'subscription.cancelled':
+      case 'payment.canceled': {
         // ── 구독 취소 ──
         if (subscription) {
           await c.env.DB.prepare(`
