@@ -11992,7 +11992,7 @@ api.post('/steppay/subscribe', async (c) => {
         customer_code: customerCode,
         plan: plan,
         monthly_fee: planProduct.price,
-        setup_fee: setup_type ? (setup_type === 'premium' ? 500000 : 300000) : 0,
+        setup_fee: setup_type ? (setup_type === 'premium' ? 500000 : setup_type === 'basic' ? 300000 : 100000) : 0,
         message: '결제 링크가 생성되었습니다. 고객에게 전달해주세요.',
       },
       timestamp: Date.now()
