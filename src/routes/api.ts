@@ -6,6 +6,12 @@ import type { Env, Store, User, ConversationLog, Reservation, DashboardStats, Ap
 import { getStoreStats, cacheStoreStats } from '../lib/kv-context';
 import { getImage, deleteImage, cleanupOldImages } from '../lib/r2-storage';
 import {
+  notifyMasterPaymentCompleted,
+  notifyMasterPaymentFailed,
+  notifyMasterSubscriptionRenewed,
+  notifyMasterSubscriptionCancelled
+} from '../lib/notification';
+import {
   masterLogin,
   ownerLogin,
   registerOwner,
@@ -941,7 +947,7 @@ api.post('/onboarding/request', async (c) => {
         VALUES (?, 'onboarding_request', ?, 'master', ?, ?, CURRENT_TIMESTAMP)
       `).bind(
         storeId,
-        c.env.MASTER_PHONE || '010-4845-3065',
+        c.env.MASTER_PHONE || '010-3988-0124',
         JSON.stringify({ 
           storeName: data.store_name, 
           ownerName: data.owner_name,
@@ -2625,7 +2631,7 @@ AI 지배인이 톡톡 상담을 시작합니다.
 ▶ 네이버 톡톡 바로가기:
 https://talk.naver.com/ct/${data.naver_talktalk_id || ''}
 
-문의: 010-4845-3065`;
+문의: 010-3988-0124`;
 
   const isTestMode = env.IS_TEST_MODE === 'true';
   
@@ -9185,7 +9191,7 @@ PDF에서 다음 정보를 추출해서 JSON 배열로 반환해주세요:
 2. "이용완료" 상태인 예약만 필터링 가능하도록 status 필드 포함
 3. 날짜 형식: 26. 1. 4.(일) → 2026-01-04
 4. 금액에서 쉼표, "원" 등 제거하고 숫자만
-5. 담당자가 "다듬다헤어(현장결제)" 같은 경우는 designer를 null로
+5. 담당자가 "매장명(현장결제)" 같은 경우는 designer를 null로
 6. JSON 배열만 반환하고 다른 텍스트는 포함하지 마세요
 `;
 
@@ -12215,6 +12221,15 @@ api.post('/steppay/webhook', async (c) => {
             UPDATE xivix_steppay_webhook_logs SET store_id = ?, processed = 1
             WHERE order_code = ? AND event_type = ? ORDER BY created_at DESC LIMIT 1
           `).bind(subscription.store_id, orderCode, eventType).run();
+          
+          // 마스터에게 결제 완료 알림 SMS
+          try {
+            const store = await c.env.DB.prepare('SELECT store_name FROM xivix_stores WHERE id = ?').bind(subscription.store_id).first<any>();
+            await notifyMasterPaymentCompleted(
+              c.env, store?.store_name || `매장#${subscription.store_id}`,
+              subscription.plan, subscription.monthly_fee, subscription.store_id
+            );
+          } catch (e) { console.error('[Webhook] 결제 완료 알림 실패:', e); }
         }
         break;
       }
@@ -12250,6 +12265,15 @@ api.post('/steppay/webhook', async (c) => {
             INSERT OR IGNORE INTO xivix_usage (store_id, period, ai_conversations, sms_sent, lms_sent, image_analyses)
             VALUES (?, ?, 0, 0, 0, 0)
           `).bind(subscription.store_id, period).run();
+          
+          // 마스터에게 구독 갱신 알림 SMS
+          try {
+            const store = await c.env.DB.prepare('SELECT store_name FROM xivix_stores WHERE id = ?').bind(subscription.store_id).first<any>();
+            await notifyMasterSubscriptionRenewed(
+              c.env, store?.store_name || `매장#${subscription.store_id}`,
+              subscription.plan, subscription.monthly_fee, subscription.store_id
+            );
+          } catch (e) { console.error('[Webhook] 구독 갱신 알림 실패:', e); }
         }
         break;
       }
@@ -12275,6 +12299,16 @@ api.post('/steppay/webhook', async (c) => {
             subscription.monthly_fee + Math.round(subscription.monthly_fee * 0.1),
             JSON.stringify(data)
           ).run();
+          
+          // 마스터에게 결제 실패 알림 SMS
+          try {
+            const store = await c.env.DB.prepare('SELECT store_name FROM xivix_stores WHERE id = ?').bind(subscription.store_id).first<any>();
+            const failReason = data.failReason || data.errorMessage || '';
+            await notifyMasterPaymentFailed(
+              c.env, store?.store_name || `매장#${subscription.store_id}`,
+              subscription.plan, subscription.monthly_fee, subscription.store_id, failReason
+            );
+          } catch (e) { console.error('[Webhook] 결제 실패 알림 실패:', e); }
         }
         break;
       }
@@ -12288,6 +12322,15 @@ api.post('/steppay/webhook', async (c) => {
             UPDATE xivix_subscriptions SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
             WHERE store_id = ?
           `).bind(subscription.store_id).run();
+          
+          // 마스터에게 구독 취소 알림 SMS
+          try {
+            const store = await c.env.DB.prepare('SELECT store_name FROM xivix_stores WHERE id = ?').bind(subscription.store_id).first<any>();
+            await notifyMasterSubscriptionCancelled(
+              c.env, store?.store_name || `매장#${subscription.store_id}`,
+              subscription.plan, subscription.store_id
+            );
+          } catch (e) { console.error('[Webhook] 구독 취소 알림 실패:', e); }
         }
         break;
       }

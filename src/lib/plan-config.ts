@@ -219,7 +219,7 @@ export function getUpgradeMessage(feature: FeatureKey, currentPlan: PlanType): s
 
   return `⚠️ [${featureName}] 기능은 현재 ${currentName} 요금제에서 제공되지 않습니다.\n` +
     `${requiredName} 요금제 이상으로 업그레이드하시면 이용 가능합니다.\n` +
-    `📞 문의: 010-4845-3065`;
+    `📞 문의: 010-3988-0124`;
 }
 
 /**
@@ -231,7 +231,7 @@ export function getAILimitMessage(plan: PlanType, used: number, limit: number): 
     `📊 현재 요금제: ${config.name}\n` +
     `💬 사용량: ${used.toLocaleString()}건 / ${limit.toLocaleString()}건\n\n` +
     `상위 요금제로 업그레이드하시면 더 많은 AI 대화를 이용할 수 있습니다.\n` +
-    `📞 문의: 010-4845-3065`;
+    `📞 문의: 010-3988-0124`;
 }
 
 /**

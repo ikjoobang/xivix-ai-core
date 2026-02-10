@@ -226,7 +226,7 @@ export function renderRequestPage(): string {
     
     <!-- 안내 문구 -->
     <div class="text-center text-white/40 text-sm mt-8">
-      <p>급한 문의는 <a href="tel:010-4845-3065" class="gold hover:underline">010-4845-3065</a>로 연락주세요</p>
+      <p>급한 문의는 <a href="tel:010-3988-0124" class="gold hover:underline">010-3988-0124</a>로 연락주세요</p>
     </div>
     
   </main>

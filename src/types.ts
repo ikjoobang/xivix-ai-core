@@ -17,7 +17,7 @@ export interface Env {
   SOLAPI_API_KEY?: string;
   SOLAPI_API_SECRET?: string;
   SOLAPI_SENDER_PHONE?: string;  // 발신번호
-  MASTER_PHONE?: string;         // 마스터 휴대폰 (010-4845-3065)
+  MASTER_PHONE?: string;         // 마스터 휴대폰 (010-3988-0124)
   
   // Email (Resend)
   RESEND_API_KEY?: string;

@@ -173,7 +173,7 @@ export function renderPaymentPage(storeId: number): string {
       
       <div class="text-center mt-3 text-xs text-white/30 space-y-1">
         <p><i class="fas fa-lock mr-1"></i>Steppay 보안결제 · 언제든 해지 가능</p>
-        <p>결제 문의: 010-4845-3065</p>
+        <p>결제 문의: 010-3988-0124</p>
       </div>
     </div>
 
@@ -242,7 +242,7 @@ export function renderPaymentPage(storeId: number): string {
 
       <div class="text-center mt-3 text-xs text-white/30 space-y-1">
         <p>PG사: KG이니시스 | 사업자: XIVIX AI</p>
-        <p>결제 문의: 010-4845-3065</p>
+        <p>결제 문의: 010-3988-0124</p>
       </div>
     </div>
 

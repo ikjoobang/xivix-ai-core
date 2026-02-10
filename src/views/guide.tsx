@@ -246,7 +246,7 @@ export function renderGuidePage(): string {
       <a href="#chapter1" class="bg-white text-green-800 font-bold px-6 py-3 rounded-full text-sm hover:bg-green-50 transition">
         <i class="fas fa-play mr-2"></i>바로 시작하기
       </a>
-      <a href="tel:010-4845-3065" class="border-2 border-white/50 text-white font-bold px-6 py-3 rounded-full text-sm hover:bg-white/10 transition">
+      <a href="tel:010-3988-0124" class="border-2 border-white/50 text-white font-bold px-6 py-3 rounded-full text-sm hover:bg-white/10 transition">
         <i class="fas fa-phone mr-2"></i>전화 도움 요청
       </a>
     </div>
@@ -338,7 +338,7 @@ export function renderGuidePage(): string {
         <span class="text-2xl">🔒</span>
         <div>
           <p class="font-bold text-green-800">사장님의 네이버 아이디/비밀번호는 저희에게 알려주실 필요 없습니다!</p>
-          <p class="text-sm text-green-700 mt-1">사장님이 직접 아래 과정을 따라하시면 됩니다. 어려우시면 전화(<a href="tel:010-4845-3065" class="underline font-bold">010-4845-3065</a>)로 화면 공유하며 도와드립니다.</p>
+          <p class="text-sm text-green-700 mt-1">사장님이 직접 아래 과정을 따라하시면 됩니다. 어려우시면 전화(<a href="tel:010-3988-0124" class="underline font-bold">010-3988-0124</a>)로 화면 공유하며 도와드립니다.</p>
         </div>
       </div>
     </div>
@@ -539,7 +539,7 @@ export function renderGuidePage(): string {
             </div>
             <div class="flex items-center gap-3">
               <span class="text-sm font-bold text-gray-600 w-28">상호명</span>
-              <span class="text-sm text-gray-500">예: 다듬다헤어</span>
+              <span class="text-sm text-gray-500">예: 사업자등록증 상의 상호명</span>
             </div>
             <div class="flex items-center gap-3">
               <span class="text-sm font-bold text-gray-600 w-28">사업자번호</span>
@@ -942,7 +942,7 @@ export function renderGuidePage(): string {
             <div class="flex items-center gap-3 p-2 bg-white rounded-lg">
               <span class="text-red-500">*</span>
               <span class="font-bold text-gray-600 w-24">매장명</span>
-              <span class="text-gray-500">예: 다듬다헤어</span>
+              <span class="text-gray-500">예: 네이버플레이스 매장 이름</span>
             </div>
             <div class="flex items-center gap-3 p-2 bg-white rounded-lg">
               <span class="text-red-500">*</span>
@@ -989,7 +989,7 @@ export function renderGuidePage(): string {
             <div class="space-y-3">
               <div class="flex items-start gap-3">
                 <span class="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">1</span>
-                <p class="text-sm">네이버에서 <strong>'매장이름'</strong> 검색 (예: '다듬다헤어 강남')</p>
+                <p class="text-sm">네이버에서 <strong>'매장이름'</strong> 검색 (예: '우리매장 강남')</p>
               </div>
               <div class="flex items-start gap-3">
                 <span class="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">2</span>
@@ -1265,7 +1265,7 @@ export function renderGuidePage(): string {
               <div class="phone-screen">
                 <div class="phone-notch"></div>
                 <div class="bg-green-500 text-white p-3 text-center">
-                  <p class="font-bold text-sm">다듬다헤어 톡톡</p>
+                  <p class="font-bold text-sm">우리매장 톡톡</p>
                 </div>
                 <div class="p-3 space-y-3">
                   <!-- User message -->
@@ -1277,7 +1277,7 @@ export function renderGuidePage(): string {
                   <!-- AI response -->
                   <div class="flex justify-start">
                     <div class="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-2 max-w-[200px]">
-                      <p class="text-xs mb-2">안녕하세요! 다듬다헤어입니다 😊</p>
+                      <p class="text-xs mb-2">안녕하세요! OO매장입니다 😊</p>
                       <p class="text-xs"><strong>커트:</strong> 15,000원</p>
                       <p class="text-xs"><strong>펌:</strong> 60,000원~</p>
                       <p class="text-xs"><strong>염색:</strong> 50,000원~</p>
@@ -1329,7 +1329,7 @@ export function renderGuidePage(): string {
             <p class="text-sm">
               <i class="fas fa-exclamation-circle text-orange-500 mr-1"></i>
               <strong>응답이 안 오나요?</strong> XIVIX 담당자에게 연락해주세요. 
-              <a href="tel:010-4845-3065" class="underline font-bold">010-4845-3065</a>
+              <a href="tel:010-3988-0124" class="underline font-bold">010-3988-0124</a>
             </p>
           </div>
         </div>
@@ -1354,7 +1354,7 @@ export function renderGuidePage(): string {
         <i class="fas fa-chevron-down faq-arrow text-gray-400"></i>
       </div>
       <div class="faq-answer px-4">
-        <div class="pb-4 text-sm text-gray-600">담당자에게 카톡이나 전화(<a href="tel:010-4845-3065" class="underline text-green-700">010-4845-3065</a>)로 알려주세요. 보통 당일 내 AI 응답에 반영됩니다.</div>
+        <div class="pb-4 text-sm text-gray-600">담당자에게 카톡이나 전화(<a href="tel:010-3988-0124" class="underline text-green-700">010-3988-0124</a>)로 알려주세요. 보통 당일 내 AI 응답에 반영됩니다.</div>
       </div>
     </div>
     
@@ -1416,9 +1416,9 @@ export function renderGuidePage(): string {
     <h2 class="text-xl font-bold mb-2">도움이 필요하시면 언제든!</h2>
     <p class="text-gray-400 text-sm mb-6">화면 공유로 직접 도와드립니다</p>
     <div class="flex flex-wrap justify-center gap-4">
-      <a href="tel:010-4845-3065" class="bg-green-600 hover:bg-green-700 text-white font-bold px-8 py-3 rounded-xl text-sm transition flex items-center gap-2">
+      <a href="tel:010-3988-0124" class="bg-green-600 hover:bg-green-700 text-white font-bold px-8 py-3 rounded-xl text-sm transition flex items-center gap-2">
         <i class="fas fa-phone"></i>
-        010-4845-3065
+        010-3988-0124
       </a>
       <a href="mailto:xivix.kr@gmail.com" class="border border-gray-600 hover:bg-gray-800 text-white font-bold px-8 py-3 rounded-xl text-sm transition flex items-center gap-2">
         <i class="fas fa-envelope"></i>

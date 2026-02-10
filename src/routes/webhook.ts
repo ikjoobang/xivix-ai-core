@@ -438,7 +438,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     
     // ============ [전화번호 포함 메시지 - 원장님께 SMS 전송] ============
     // 메시지에 전화번호가 포함되어 있으면 원장님께 SMS 전송 (3번 메뉴 응답 후)
-    // 패턴: 공백/하이픈 유연하게 처리 (010 4845 3065, 010-4845-3065, 01048453065 모두 인식)
+    // 패턴: 공백/하이픈 유연하게 처리 (010 4845 3065, 010-3988-0124, 01048453065 모두 인식)
     const flexiblePhonePattern = /(?:010|011|016|017|018|019)[\s\-]?\d{3,4}[\s\-]?\d{4}/;
     const phoneMatch = originalMessage.match(flexiblePhonePattern);
     
@@ -1291,7 +1291,7 @@ ${eventsText.trim()}`;
     
     if (consultationType === 'image' && !canUseFeature(storePlan, 'imageAnalysis')) {
       // 이미지 분석 미지원 요금제 → 안내 메시지
-      await sendTextMessage(env, customerId, '이미지 분석 기능은 프리미엄 요금제에서 이용 가능합니다.\n\n업그레이드 문의: 010-4845-3065', storeId);
+      await sendTextMessage(env, customerId, '이미지 분석 기능은 프리미엄 요금제에서 이용 가능합니다.\n\n업그레이드 문의: 010-3988-0124', storeId);
       return c.json({ success: true, store_id: storeId, action: 'feature_disabled' });
     }
     

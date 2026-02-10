@@ -276,7 +276,7 @@ export async function notifyMasterOnboarding(
   };
   
   // 마스터 연락처
-  const masterPhone = env.MASTER_PHONE || '010-4845-3065';
+  const masterPhone = env.MASTER_PHONE || '010-3988-0124';
   const masterEmail = env.MASTER_EMAIL || 'xivix.kr@gmail.com';
   
   // 1. SMS 발송
@@ -401,7 +401,7 @@ export async function notifyOwnerSetupComplete(
   const text = `[XIVIX AI] ${storeName} 세팅 완료!
 AI 챗봇이 활성화되었습니다.
 네이버 톡톡으로 고객 응대를 시작합니다.
-👉 문의: 010-4845-3065`;
+👉 문의: 010-3988-0124`;
 
   return sendSMS(env, ownerPhone, text);
 }
@@ -437,6 +437,79 @@ ${hoursBeforeText} 예정입니다.
 방문 예정대로 괜찮으신가요?`;
 
   return sendSMS(env, customerPhone, text);
+}
+
+// ============ 결제 관련 알림 ============
+
+// 결제 완료 알림 (마스터에게)
+export async function notifyMasterPaymentCompleted(
+  env: Env,
+  storeName: string,
+  plan: string,
+  amount: number,
+  storeId: number
+): Promise<{ success: boolean; error?: string }> {
+  const masterPhone = env.MASTER_PHONE || '010-3988-0124';
+  const text = `[XIVIX AI] 💰 결제 완료
+매장: ${storeName} (#${storeId})
+요금제: ${plan}
+금액: ${amount.toLocaleString()}원
+구독이 활성화되었습니다.`;
+
+  return sendSMS(env, masterPhone, text);
+}
+
+// 결제 실패 알림 (마스터에게)
+export async function notifyMasterPaymentFailed(
+  env: Env,
+  storeName: string,
+  plan: string,
+  amount: number,
+  storeId: number,
+  reason?: string
+): Promise<{ success: boolean; error?: string }> {
+  const masterPhone = env.MASTER_PHONE || '010-3988-0124';
+  const text = `[XIVIX AI] ⚠️ 결제 실패
+매장: ${storeName} (#${storeId})
+요금제: ${plan}
+금액: ${amount.toLocaleString()}원
+${reason ? `사유: ${reason}\n` : ''}구독이 일시정지되었습니다.`;
+
+  return sendSMS(env, masterPhone, text);
+}
+
+// 구독 갱신 알림 (마스터에게)
+export async function notifyMasterSubscriptionRenewed(
+  env: Env,
+  storeName: string,
+  plan: string,
+  amount: number,
+  storeId: number
+): Promise<{ success: boolean; error?: string }> {
+  const masterPhone = env.MASTER_PHONE || '010-3988-0124';
+  const text = `[XIVIX AI] 🔄 구독 갱신
+매장: ${storeName} (#${storeId})
+요금제: ${plan}
+금액: ${amount.toLocaleString()}원
+다음 결제일: 1개월 후`;
+
+  return sendSMS(env, masterPhone, text);
+}
+
+// 구독 취소 알림 (마스터에게)
+export async function notifyMasterSubscriptionCancelled(
+  env: Env,
+  storeName: string,
+  plan: string,
+  storeId: number
+): Promise<{ success: boolean; error?: string }> {
+  const masterPhone = env.MASTER_PHONE || '010-3988-0124';
+  const text = `[XIVIX AI] ❌ 구독 취소
+매장: ${storeName} (#${storeId})
+요금제: ${plan}
+구독이 취소되었습니다.`;
+
+  return sendSMS(env, masterPhone, text);
 }
 
 // Export individual functions for testing

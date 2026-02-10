@@ -479,8 +479,8 @@ export function renderClientOnboarding(storeId?: number): string {
           
           <div class="glass rounded-xl p-4">
             <p class="text-sm text-white/60 mb-2">문의가 필요하시면</p>
-            <a href="tel:010-4845-3065" class="text-lg gold font-medium">
-              <i class="fas fa-phone mr-2"></i>010-4845-3065
+            <a href="tel:010-3988-0124" class="text-lg gold font-medium">
+              <i class="fas fa-phone mr-2"></i>010-3988-0124
             </a>
           </div>
         </div>
@@ -888,8 +888,8 @@ export function renderClientOnboarding(storeId?: number): string {
           
           <div class="glass rounded-xl p-4 mt-4">
             <p class="text-sm text-white/60 mb-2">문의가 필요하시면</p>
-            <a href="tel:010-4845-3065" class="text-lg gold font-medium">
-              <i class="fas fa-phone mr-2"></i>010-4845-3065
+            <a href="tel:010-3988-0124" class="text-lg gold font-medium">
+              <i class="fas fa-phone mr-2"></i>010-3988-0124
             </a>
           </div>
           
@@ -989,7 +989,7 @@ export function renderClientOnboarding(storeId?: number): string {
                 <i class="fas fa-info-circle mr-1"></i>
                 지금부터 AI 지배인이 고객 상담을 시작합니다!
               </p>
-              <p class="text-xs text-white/30">문의: 010-4845-3065 | © 2026 XIVIX</p>
+              <p class="text-xs text-white/30">문의: 010-3988-0124 | © 2026 XIVIX</p>
             </div>
           </div>
           
