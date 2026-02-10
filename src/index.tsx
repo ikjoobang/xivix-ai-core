@@ -268,13 +268,8 @@ app.get('/', (c) => {
         <span class="text-white/90"> AI</span>
       </h1>
       
-      <p class="text-xl md:text-2xl text-white/50 font-light tracking-wide mb-2">
-        CORE V3.0
-      </p>
-      
       <p class="text-lg text-white/40 max-w-xl mx-auto mb-12 leading-relaxed">
-        GPT-4o + Gemini 2.5 Pro 듀얼 AI 엔진<br>
-        <span class="text-[#007AFF]">12개 업종 특화 · 초정밀 상담 자동화</span>
+        <span class="text-[#007AFF]">'네이버 톡톡' 8개국어 상담 · 초정밀 상담 자동화</span>
       </p>
       
       <!-- Action Buttons -->
@@ -291,45 +286,13 @@ app.get('/', (c) => {
       </div>
     </div>
     
-    <!-- Feature Cards -->
-    <div class="relative z-10 mt-20 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl">
-      <div class="glass rounded-2xl p-6 hover:bg-white/5 transition-all duration-300">
-        <div class="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center mb-4">
-          <i class="fas fa-robot text-green-400 text-xl"></i>
-        </div>
-        <h3 class="text-lg font-semibold mb-2">GPT-4o 전문 상담</h3>
-        <p class="text-white/50 text-sm leading-relaxed">
-          의료/법률/보험 정확도 최고<br>
-          전문가급 응답 품질
-        </p>
-      </div>
-      
-      <div class="glass rounded-2xl p-6 hover:bg-white/5 transition-all duration-300">
-        <div class="w-12 h-12 rounded-xl bg-indigo-500/10 flex items-center justify-center mb-4">
-          <i class="fas fa-shield-check text-indigo-400 text-xl"></i>
-        </div>
-        <h3 class="text-lg font-semibold mb-2">Gemini Pro 검증</h3>
-        <p class="text-white/50 text-sm leading-relaxed">
-          할루시네이션 자동 감지<br>
-          교차 검증으로 신뢰도 보장
-        </p>
-      </div>
-      
-      <div class="glass rounded-2xl p-6 hover:bg-white/5 transition-all duration-300">
-        <div class="w-12 h-12 rounded-xl bg-[#007AFF]/10 flex items-center justify-center mb-4">
-          <i class="fas fa-bolt text-[#007AFF] text-xl"></i>
-        </div>
-        <h3 class="text-lg font-semibold mb-2">Flash 빠른 응답</h3>
-        <p class="text-white/50 text-sm leading-relaxed">
-          일반 문의 0.5초 응답<br>
-          SSE 스트리밍 지원
-        </p>
-      </div>
-    </div>
+
     
-    <!-- Version Badge -->
+    <!-- Footer -->
     <div class="absolute bottom-8 text-center text-white/30 text-sm">
-      <p>Powered by <span class="text-[#007AFF]">Cloudflare Workers</span> · Edge Computing</p>
+      <a href="https://xivix.kr/" target="_blank" class="hover:text-[#007AFF] transition-colors">xivix.kr</a>
+      <span class="mx-2">|</span>
+      <span>@XIΛIXㅣ© 2026. ALL RIGHTS RESERVED.</span>
     </div>
   </div>
 </body>
