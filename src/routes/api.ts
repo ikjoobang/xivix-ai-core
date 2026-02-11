@@ -1801,12 +1801,27 @@ async function resolveNaverShortUrl(shortUrl: string): Promise<{ resolved: boole
 }
 
 // 스마트 플레이스 URL 검증 (naver.me 지원 추가)
-function validateSmartPlaceUrl(url: string): { valid: boolean; placeId?: string; error?: string; needsRedirect?: boolean } {
+// SNS URL 타입 판별 헬퍼
+function detectSnsType(url: string): 'blog' | 'instagram' | 'youtube' | null {
+  const lower = url.toLowerCase();
+  if (lower.includes('blog.naver.com') || lower.includes('m.blog.naver.com')) return 'blog';
+  if (lower.includes('instagram.com')) return 'instagram';
+  if (lower.includes('youtube.com') || lower.includes('youtu.be')) return 'youtube';
+  return null;
+}
+
+function validateSmartPlaceUrl(url: string): { valid: boolean; placeId?: string; error?: string; needsRedirect?: boolean; snsType?: 'blog' | 'instagram' | 'youtube' } {
   if (!url || typeof url !== 'string') {
     return { valid: false, error: '올바른 링크를 입력해주세요' };
   }
   
   const trimmedUrl = url.trim();
+  
+  // ============ SNS URL 인식 (프리랜서/개인사업자 지원) ============
+  const snsType = detectSnsType(trimmedUrl);
+  if (snsType) {
+    return { valid: true, snsType };
+  }
   
   // naver.me 단축 URL인 경우 리다이렉트 필요 표시 (analyze API에서 처리)
   if (trimmedUrl.includes('naver.me')) {
@@ -1841,7 +1856,7 @@ function validateSmartPlaceUrl(url: string): { valid: boolean; placeId?: string;
     return { valid: true, placeId: trimmedUrl };
   }
   
-  return { valid: false, error: '지원하지 않는 링크 형식입니다. 네이버 플레이스/지도 링크 또는 Place ID를 입력해주세요.' };
+  return { valid: false, error: '지원하지 않는 링크 형식입니다. 네이버 플레이스/지도 링크, 블로그, 인스타그램, 유튜브 링크를 입력해주세요.' };
 }
 
 // 스마트 플레이스 정보 크롤링 API
@@ -1898,6 +1913,262 @@ api.post('/smartplace/analyze', async (c) => {
     }
   }
   // ============ naver.me 단축 URL 처리 끝 ============
+  
+  // ============ SNS URL 처리 (블로그/인스타/유튜브 - 프리랜서/개인사업자 지원) ============
+  const snsType = detectSnsType(url);
+  if (snsType) {
+    console.log(`[SmartPlace] SNS URL 감지: ${snsType} - ${url}`);
+    
+    try {
+      let snsContent = '';
+      let snsTitle = '';
+      let snsDescription = '';
+      
+      // ---- 네이버 블로그 크롤링 ----
+      if (snsType === 'blog') {
+        try {
+          const mobileUrl = url.replace('blog.naver.com', 'm.blog.naver.com');
+          const blogRes = await fetch(mobileUrl, {
+            headers: { 
+              'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15',
+              'Accept': 'text/html,application/xhtml+xml',
+              'Accept-Language': 'ko-KR,ko;q=0.9'
+            }
+          });
+          const html = await blogRes.text();
+          
+          // 블로그 제목 추출
+          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+          if (titleMatch) snsTitle = titleMatch[1].replace(/ : 네이버 블로그$/, '').trim();
+          
+          // 메타 설명 추출
+          const descMatch = html.match(/<meta[^>]*property="og:description"[^>]*content="([^"]+)"/i) ||
+                            html.match(/<meta[^>]*name="description"[^>]*content="([^"]+)"/i);
+          if (descMatch) snsDescription = descMatch[1];
+          
+          // 본문 텍스트 추출
+          const mainMatch = html.match(/se-main-container[^>]*>([\s\S]*?)<\/div>/);
+          if (mainMatch) {
+            snsContent = mainMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+          }
+          
+          if (!snsContent || snsContent.length < 200) {
+            snsContent = html
+              .replace(/<script[\s\S]*?<\/script>/gi, '')
+              .replace(/<style[\s\S]*?<\/style>/gi, '')
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
+          }
+          
+          snsContent = snsContent.substring(0, 15000);
+          console.log(`[SmartPlace] 블로그 크롤링 완료: ${snsTitle} (${snsContent.length}자)`);
+        } catch (e) {
+          console.error('[SmartPlace] 블로그 크롤링 실패:', e);
+        }
+      }
+      
+      // ---- 인스타그램 기본 정보 추출 ----
+      else if (snsType === 'instagram') {
+        try {
+          const igRes = await fetch(url, {
+            headers: { 
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'text/html',
+              'Accept-Language': 'ko-KR,ko;q=0.9'
+            }
+          });
+          const html = await igRes.text();
+          
+          const ogTitle = html.match(/<meta[^>]*property="og:title"[^>]*content="([^"]+)"/i);
+          const ogDesc = html.match(/<meta[^>]*property="og:description"[^>]*content="([^"]+)"/i);
+          const ogMeta = html.match(/<meta[^>]*name="description"[^>]*content="([^"]+)"/i);
+          
+          if (ogTitle) snsTitle = ogTitle[1];
+          if (ogDesc) snsDescription = ogDesc[1];
+          else if (ogMeta) snsDescription = ogMeta[1];
+          
+          snsContent = `인스타그램 프로필: ${snsTitle || url}\n${snsDescription || ''}`;
+          console.log(`[SmartPlace] 인스타그램 정보 추출: ${snsTitle}`);
+        } catch (e) {
+          console.error('[SmartPlace] 인스타그램 크롤링 실패:', e);
+          snsContent = `인스타그램 프로필: ${url}`;
+        }
+      }
+      
+      // ---- 유튜브 기본 정보 추출 ----
+      else if (snsType === 'youtube') {
+        try {
+          const ytRes = await fetch(url, {
+            headers: { 
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Accept': 'text/html',
+              'Accept-Language': 'ko-KR,ko;q=0.9'
+            }
+          });
+          const html = await ytRes.text();
+          
+          const ogTitle = html.match(/<meta[^>]*property="og:title"[^>]*content="([^"]+)"/i) ||
+                          html.match(/<title[^>]*>([^<]+)<\/title>/i);
+          const ogDesc = html.match(/<meta[^>]*property="og:description"[^>]*content="([^"]+)"/i) ||
+                          html.match(/<meta[^>]*name="description"[^>]*content="([^"]+)"/i);
+          
+          if (ogTitle) snsTitle = ogTitle[1].replace(/ - YouTube$/, '').trim();
+          if (ogDesc) snsDescription = ogDesc[1];
+          
+          snsContent = `유튜브 채널/영상: ${snsTitle || url}\n${snsDescription || ''}`;
+          console.log(`[SmartPlace] 유튜브 정보 추출: ${snsTitle}`);
+        } catch (e) {
+          console.error('[SmartPlace] 유튜브 크롤링 실패:', e);
+          snsContent = `유튜브 채널: ${url}`;
+        }
+      }
+      
+      // ---- Gemini AI로 SNS 콘텐츠에서 서비스 정보 추출 ----
+      let aiAnalysis = null;
+      
+      if (c.env.GEMINI_API_KEY && (snsContent || snsTitle || snsDescription)) {
+        try {
+          const snsPrompt = `당신은 AI 상담사 페르소나를 설계하는 전문가입니다.
+
+다음은 ${snsType === 'blog' ? '네이버 블로그' : snsType === 'instagram' ? '인스타그램' : '유튜브'}에서 수집된 정보입니다.
+이 사람은 매장이 없는 **프리랜서/개인사업자**일 수 있습니다.
+
+[수집된 SNS 정보]
+URL: ${url}
+제목: ${snsTitle || '미확인'}
+설명: ${snsDescription || '미확인'}
+본문 내용 (일부):
+${(snsContent || '정보 없음').substring(0, 5000)}
+
+중요 지침:
+1. 위 내용에서 이 사람이 제공하는 서비스/상품을 파악하세요.
+2. 매장명이 없으면 블로그/SNS 이름에서 추론하세요.
+3. 업종을 최대한 정확히 판단하세요. 판단 불가 시 "OTHER"로 설정.
+4. 프리랜서인 경우 "프리랜서"라고 명시하세요.
+5. 절대 데이터를 지어내지 마세요. 확인할 수 없는 항목은 "정보 없음"으로 표시.
+
+다음 JSON 형식으로만 응답하세요:
+{
+  "store_name": "서비스/매장 이름 (블로그명 또는 SNS 이름 가능)",
+  "business_type": "업종 코드 (BEAUTY_HAIR, BEAUTY_SKIN, BEAUTY_NAIL, RESTAURANT, CAFE, FITNESS, MEDICAL, EDUCATION, PET_SERVICE, FREELANCER, OTHER 중 선택)",
+  "business_type_name": "업종명 (한글)",
+  "ai_persona": "AI 상담사 역할 설명 (2-3문장, 서비스 특성 반영)",
+  "ai_tone": "말투 스타일 (friendly/professional/casual)",
+  "ai_features": "주요 기능들 (서비스에 맞는 기능, 쉼표로 구분)",
+  "greeting_message": "첫 인사말 예시",
+  "description": "서비스 설명 요약 (1-2문장)",
+  "menu_items": "발견된 서비스/상품/메뉴 목록 (쉼표 구분, 없으면 빈 문자열)",
+  "address": "주소 (발견 시, 없으면 빈 문자열)",
+  "business_hours": "영업시간 (발견 시, 없으면 빈 문자열)",
+  "is_freelancer": true/false
+}`;
+
+          const geminiRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${c.env.GEMINI_API_KEY}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: snsPrompt }] }],
+                generationConfig: {
+                  temperature: 0.5,
+                  maxOutputTokens: 1200
+                }
+              })
+            }
+          );
+          
+          if (geminiRes.ok) {
+            const geminiData = await geminiRes.json() as any;
+            const responseText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            
+            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              try {
+                aiAnalysis = JSON.parse(jsonMatch[0]);
+                console.log(`[SmartPlace] SNS AI 분석 완료: ${aiAnalysis.store_name} (${aiAnalysis.business_type})`);
+              } catch {
+                console.log('[SmartPlace] SNS AI 응답 JSON 파싱 실패');
+              }
+            }
+          }
+        } catch (e) {
+          console.error('[SmartPlace] SNS Gemini 분석 오류:', e);
+        }
+      }
+      
+      // AI 분석 실패 시 기본값
+      if (!aiAnalysis) {
+        aiAnalysis = {
+          store_name: snsTitle || '',
+          business_type: 'OTHER',
+          business_type_name: '기타',
+          ai_persona: '전문 AI 상담사입니다. 고객님의 문의에 친절하게 응대합니다.',
+          ai_tone: 'friendly',
+          ai_features: '서비스 안내, 문의 응대',
+          greeting_message: `안녕하세요! 무엇을 도와드릴까요?`,
+          description: '',
+          menu_items: '',
+          address: '',
+          business_hours: '',
+          is_freelancer: true
+        };
+      }
+      
+      return c.json<ApiResponse>({
+        success: true,
+        data: {
+          source_type: 'sns',
+          sns_type: snsType,
+          sns_url: url,
+          place_info: {
+            place_id: null,
+            store_name: aiAnalysis.store_name || snsTitle || '',
+            category: aiAnalysis.business_type_name || '',
+            address: aiAnalysis.address || '',
+            phone: '',
+            business_hours: aiAnalysis.business_hours || '',
+            description: aiAnalysis.description || snsDescription || '',
+            menu_items: aiAnalysis.menu_items ? aiAnalysis.menu_items.split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+            review_keywords: [],
+            images: [],
+            rating: 0,
+            review_count: 0,
+            business_type_code: '',
+            is_freelancer: aiAnalysis.is_freelancer || false
+          },
+          ai_analysis: {
+            business_type: aiAnalysis.business_type || 'OTHER',
+            business_type_name: aiAnalysis.business_type_name || '기타',
+            ai_persona: aiAnalysis.ai_persona || '',
+            ai_tone: aiAnalysis.ai_tone || 'friendly',
+            ai_features: aiAnalysis.ai_features || '',
+            greeting_message: aiAnalysis.greeting_message || ''
+          },
+          auto_fill: {
+            store_name: aiAnalysis.store_name || snsTitle || '',
+            business_type: aiAnalysis.business_type || 'OTHER',
+            business_type_name: aiAnalysis.business_type_name || '기타',
+            business_specialty: aiAnalysis.ai_features || '',
+            ai_persona: aiAnalysis.ai_persona || '',
+            ai_tone: aiAnalysis.ai_tone || 'friendly',
+            greeting_message: aiAnalysis.greeting_message || ''
+          }
+        },
+        timestamp: Date.now()
+      });
+      
+    } catch (error) {
+      console.error('[SmartPlace] SNS 분석 전체 오류:', error);
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'SNS 링크 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+        timestamp: Date.now()
+      }, 500);
+    }
+  }
+  // ============ SNS URL 처리 끝 ============
   
   // placeId가 아직 없으면 URL 검증
   if (!placeId) {
@@ -2357,7 +2628,10 @@ api.post('/smartplace/validate', async (c) => {
   
   return c.json<ApiResponse>({
     success: validation.valid,
-    data: validation.valid ? { place_id: validation.placeId } : null,
+    data: validation.valid ? { 
+      place_id: validation.placeId || null,
+      sns_type: validation.snsType || null
+    } : null,
     error: validation.error,
     timestamp: Date.now()
   }, validation.valid ? 200 : 400);

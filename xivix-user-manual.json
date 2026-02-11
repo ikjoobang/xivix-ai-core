@@ -208,7 +208,16 @@
             "또는 네이버 지도에서 내 매장을 찾아 '공유' → 링크 복사"
           ],
           "detail": "이 URL을 입력하면 AI가 자동으로 매장의 메뉴, 가격, 사진, 리뷰 등을 분석합니다. 사장님이 하나하나 입력할 필요가 없어요!",
-          "screenshot_instruction": "스마트플레이스 URL 입력란. 예시 URL(https://naver.me/xxxx)이 입력된 상태. 아래에 'URL 찾는 방법' 보조 이미지: 네이버 검색 → 매장 클릭 → 주소창 복사 과정을 3단계 스크린샷.",
+          "freelancer_support": {
+            "description": "매장이 없는 프리랜서·개인사업자도 블로그·SNS 링크로 가입 가능!",
+            "supported_links": [
+              "네이버 블로그 (blog.naver.com/내블로그)",
+              "인스타그램 (instagram.com/내계정)",
+              "유튜브 (youtube.com/내채널)"
+            ],
+            "examples": "출장 메이크업, 프리랜서 디자이너, 1인 강사, 개인 트레이너 등"
+          },
+          "screenshot_instruction": "스마트플레이스 URL 입력란. 예시 URL(https://naver.me/xxxx)이 입력된 상태. 아래에 'URL 찾는 방법' 보조 이미지: 네이버 검색 → 매장 클릭 → 주소창 복사 과정을 3단계 스크린샷. 프리랜서/개인사업자용 블로그·SNS 링크 안내 포함.",
           "click_target": "URL 입력란에 붙여넣기"
         },
         {

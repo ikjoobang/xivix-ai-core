@@ -291,15 +291,21 @@ export function renderClientOnboarding(storeId?: number): string {
           <div class="flex gap-2">
             <input type="text" id="smart-place-url" 
               class="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-[#D4AF37] transition-all text-sm" 
-              placeholder="네이버 스마트 플레이스 링크 붙여넣기">
+              placeholder="네이버 플레이스, 블로그, 인스타그램, 유튜브 링크">
             <button onclick="analyzeSmartPlace()" id="analyze-btn" class="px-4 py-3 gold-bg text-black rounded-lg font-bold text-sm hover:opacity-90 transition-all shrink-0">
               <i class="fas fa-search" id="analyze-icon"></i>
             </button>
           </div>
-          <p class="text-xs text-white/40 mt-2">
-            <i class="fas fa-info-circle mr-1"></i>
-            네이버 지도나 플레이스 링크를 넣으면 AI가 자동으로 분석합니다
-          </p>
+          <div class="mt-2 space-y-1">
+            <p class="text-xs text-white/40">
+              <i class="fas fa-store mr-1"></i>
+              <strong class="text-white/60">매장 사업자</strong> → 네이버 플레이스/지도 링크
+            </p>
+            <p class="text-xs text-white/40">
+              <i class="fas fa-user mr-1"></i>
+              <strong class="text-white/60">프리랜서/개인</strong> → 블로그, 인스타그램, 유튜브 링크도 OK!
+            </p>
+          </div>
           <!-- 분석 결과 미리보기 -->
           <div id="analysis-result" class="hidden mt-4 p-3 glass rounded-lg border border-emerald-500/30">
             <div class="flex items-center gap-2 mb-2">
@@ -1065,7 +1071,7 @@ export function renderClientOnboarding(storeId?: number): string {
       const url = urlInput?.value?.trim();
       
       if (!url) {
-        alert('네이버 스마트 플레이스 링크를 입력해주세요');
+        alert('링크를 입력해주세요 (네이버 플레이스, 블로그, 인스타그램, 유튜브)');
         return;
       }
       

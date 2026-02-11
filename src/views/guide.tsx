@@ -1001,6 +1001,30 @@ export function renderGuidePage(): string {
               </div>
             </div>
           </div>
+          
+          <!-- 프리랜서/개인사업자 블로그·SNS 안내 -->
+          <div class="bg-purple-50 border border-purple-200 rounded-xl p-4 mt-4">
+            <div class="flex items-center gap-2 mb-3">
+              <i class="fas fa-user-circle text-purple-600"></i>
+              <p class="text-sm font-bold text-purple-800">매장이 없는 프리랜서·개인사업자도 OK!</p>
+            </div>
+            <p class="text-sm text-purple-700 mb-3">네이버 플레이스가 없어도 괜찮아요. 아래 링크로도 AI가 자동 분석합니다:</p>
+            <div class="space-y-2">
+              <div class="flex items-center gap-2 text-sm">
+                <span class="w-6 h-6 bg-green-500 rounded flex items-center justify-center text-white text-xs"><i class="fab fa-blogger-b"></i></span>
+                <span class="text-gray-700"><strong>네이버 블로그</strong> — blog.naver.com/내블로그</span>
+              </div>
+              <div class="flex items-center gap-2 text-sm">
+                <span class="w-6 h-6 bg-gradient-to-tr from-purple-600 to-pink-500 rounded flex items-center justify-center text-white text-xs"><i class="fab fa-instagram"></i></span>
+                <span class="text-gray-700"><strong>인스타그램</strong> — instagram.com/내계정</span>
+              </div>
+              <div class="flex items-center gap-2 text-sm">
+                <span class="w-6 h-6 bg-red-600 rounded flex items-center justify-center text-white text-xs"><i class="fab fa-youtube"></i></span>
+                <span class="text-gray-700"><strong>유튜브</strong> — youtube.com/내채널</span>
+              </div>
+            </div>
+            <p class="text-xs text-purple-500 mt-3"><i class="fas fa-lightbulb mr-1"></i>출장 메이크업, 프리랜서 디자이너, 1인 강사 등 매장 없이 활동하는 분들에게 딱!</p>
+          </div>
         </div>
       </div>
     </div>
