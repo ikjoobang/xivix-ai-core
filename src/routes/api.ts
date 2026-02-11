@@ -4829,6 +4829,31 @@ api.post('/master/quick-setup/:id', async (c) => {
         tone: 'formal',
         features: '진료 안내, 예약 관리, 보험 상담, 주의사항 안내'
       },
+      'INSURANCE': {
+        persona: `${storeName}의 보험 전문 설계사이자 보장분석 어드바이저`,
+        tone: 'professional',
+        features: '보장분석, 보험 상담, 리모델링 제안, 청구 안내'
+      },
+      'FREELANCER_BLOG': {
+        persona: `${storeName}의 콘텐츠 전문가이자 블로그/SNS 상담사`,
+        tone: 'casual',
+        features: '서비스 안내, 포트폴리오 소개, 견적 문의, 협업 상담'
+      },
+      'FREELANCER_DESIGN': {
+        persona: `${storeName}의 디자인/영상 전문가이자 크리에이티브 상담사`,
+        tone: 'friendly',
+        features: '포트폴리오 소개, 작업 견적, 납기 안내, 협업 문의'
+      },
+      'FREELANCER_IT': {
+        persona: `${storeName}의 IT/마케팅 전문가이자 기술 상담사`,
+        tone: 'professional',
+        features: '서비스 소개, 기술 상담, 견적 안내, 프로젝트 문의'
+      },
+      'FREELANCER_TUTOR': {
+        persona: `${storeName}의 교육/컨설팅 전문가이자 학습 상담사`,
+        tone: 'professional',
+        features: '커리큘럼 안내, 수강 상담, 일정 조율, 수강료 문의'
+      },
       'CUSTOM_SECTOR': {
         persona: `${storeName}의 비즈니스 전문 어시스턴트`,
         tone: 'professional',
@@ -4882,8 +4907,15 @@ api.post('/master/quick-setup/:id', async (c) => {
       'BEAUTY_HAIR': '미용실/헤어샵',
       'BEAUTY_SKIN': '피부관리/에스테틱',
       'BEAUTY_NAIL': '네일샵',
+      'RESTAURANT': '음식점/레스토랑',
+      'CAFE': '카페',
+      'FITNESS': '피트니스/헬스',
       'MEDICAL': '병원/의원',
       'INSURANCE': '보험설계사',
+      'FREELANCER_BLOG': '블로거/작가',
+      'FREELANCER_DESIGN': '디자인/영상',
+      'FREELANCER_IT': 'IT/마케팅',
+      'FREELANCER_TUTOR': '강사/컨설턴트',
       'CUSTOM_SECTOR': '기타 서비스업'
     };
     const businessTypeName = businessTypeNames[businessType] || '기타';

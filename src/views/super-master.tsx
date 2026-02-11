@@ -16,6 +16,11 @@ const INDUSTRY_DATABASE = [
   { id: 'REAL_ESTATE', name: '부동산/인테리어', icon: 'fa-home', specialty: '매물 안내, 상담 예약, 시공 문의', basePrompt: '부동산 컨설턴트이자 인테리어 상담사' },
   { id: 'AUTO_SERVICE', name: '자동차 정비/세차', icon: 'fa-car', specialty: '정비 예약, 견적 안내, 부품 상담', basePrompt: '자동차 서비스 매니저이자 정비 상담사' },
   { id: 'PHOTOGRAPHY', name: '사진관/스튜디오', icon: 'fa-camera', specialty: '촬영 예약, 패키지 안내, 포트폴리오 상담', basePrompt: '스튜디오 매니저이자 촬영 코디네이터' },
+  { id: 'INSURANCE', name: '보험설계사', icon: 'fa-shield-alt', specialty: '보장분석, 리모델링 제안, 청구 안내', basePrompt: '보험 전문 설계사이자 보장분석 어드바이저' },
+  { id: 'FREELANCER_BLOG', name: '블로거/작가', icon: 'fa-blog', specialty: '서비스 안내, 포트폴리오 소개, 견적 문의', basePrompt: '콘텐츠 전문가이자 블로그/SNS 상담사' },
+  { id: 'FREELANCER_DESIGN', name: '디자인/영상', icon: 'fa-palette', specialty: '포트폴리오 소개, 작업 견적, 납기 안내', basePrompt: '디자인/영상 전문가이자 크리에이티브 상담사' },
+  { id: 'FREELANCER_IT', name: 'IT/마케팅', icon: 'fa-laptop-code', specialty: '서비스 소개, 기술 상담, 견적 안내', basePrompt: 'IT/마케팅 전문가이자 기술 상담사' },
+  { id: 'FREELANCER_TUTOR', name: '강사/컨설턴트', icon: 'fa-chalkboard-teacher', specialty: '커리큘럼 안내, 수강 상담, 일정 조율', basePrompt: '교육/컨설팅 전문가이자 학습 상담사' },
   { id: 'CUSTOM_SECTOR', name: '직접 입력 (기타)', icon: 'fa-pencil-alt', specialty: '사장님이 정의한 특정 비즈니스 로직에 맞춤 최적화', basePrompt: '비즈니스 전문 어시스턴트' }
 ];
 
@@ -495,6 +500,30 @@ export function renderSuperMasterDashboard(): string {
           </div>
         </button>
         
+        <button onclick="selectIndustry('RESTAURANT')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center">
+              <i class="fas fa-utensils text-orange-400"></i>
+            </div>
+            <div>
+              <p class="font-semibold">음식점/카페</p>
+              <p class="text-xs text-white/50">레스토랑, 카페, 맛집</p>
+            </div>
+          </div>
+        </button>
+        
+        <button onclick="selectIndustry('FITNESS')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-lime-500/20 flex items-center justify-center">
+              <i class="fas fa-dumbbell text-lime-400"></i>
+            </div>
+            <div>
+              <p class="font-semibold">피트니스/헬스</p>
+              <p class="text-xs text-white/50">PT, 요가, 필라테스</p>
+            </div>
+          </div>
+        </button>
+        
         <button onclick="selectIndustry('INSURANCE')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
@@ -507,14 +536,86 @@ export function renderSuperMasterDashboard(): string {
           </div>
         </button>
         
-        <button onclick="selectIndustry('CUSTOM_SECTOR')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+        <button onclick="selectIndustry('MEDICAL')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
+              <i class="fas fa-hospital text-blue-400"></i>
+            </div>
+            <div>
+              <p class="font-semibold">병원/의원</p>
+              <p class="text-xs text-white/50">진료, 치과, 한의원</p>
+            </div>
+          </div>
+        </button>
+      </div>
+      
+      <!-- 프리랜서/개인사업자 전용 섹션 -->
+      <div class="mt-4 pt-4 border-t border-white/10">
+        <p class="text-sm text-purple-400 font-semibold mb-3">
+          <i class="fas fa-user-tie mr-1"></i>
+          프리랜서 · 개인사업자
+        </p>
+        <div class="grid grid-cols-2 gap-3">
+          <button onclick="selectIndustry('FREELANCER_BLOG')" class="industry-option p-4 glass rounded-xl text-left hover:border-purple-500/50 transition-all border-purple-500/20">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                <i class="fas fa-blog text-emerald-400"></i>
+              </div>
+              <div>
+                <p class="font-semibold">블로거/작가</p>
+                <p class="text-xs text-white/50">블로그, 콘텐츠 제작</p>
+              </div>
+            </div>
+          </button>
+          
+          <button onclick="selectIndustry('FREELANCER_DESIGN')" class="industry-option p-4 glass rounded-xl text-left hover:border-purple-500/50 transition-all border-purple-500/20">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-pink-500/20 flex items-center justify-center">
+                <i class="fas fa-palette text-pink-400"></i>
+              </div>
+              <div>
+                <p class="font-semibold">디자인/영상</p>
+                <p class="text-xs text-white/50">그래픽, 사진, 영상</p>
+              </div>
+            </div>
+          </button>
+          
+          <button onclick="selectIndustry('FREELANCER_IT')" class="industry-option p-4 glass rounded-xl text-left hover:border-purple-500/50 transition-all border-purple-500/20">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                <i class="fas fa-laptop-code text-cyan-400"></i>
+              </div>
+              <div>
+                <p class="font-semibold">IT/개발/마케팅</p>
+                <p class="text-xs text-white/50">웹, 앱, SNS 마케팅</p>
+              </div>
+            </div>
+          </button>
+          
+          <button onclick="selectIndustry('FREELANCER_TUTOR')" class="industry-option p-4 glass rounded-xl text-left hover:border-purple-500/50 transition-all border-purple-500/20">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                <i class="fas fa-chalkboard-teacher text-amber-400"></i>
+              </div>
+              <div>
+                <p class="font-semibold">강사/컨설턴트</p>
+                <p class="text-xs text-white/50">교육, 코칭, 상담</p>
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+      
+      <!-- 기타 -->
+      <div class="mt-3">
+        <button onclick="selectIndustry('CUSTOM_SECTOR')" class="industry-option w-full p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-gray-500/20 flex items-center justify-center">
               <i class="fas fa-cog text-gray-400"></i>
             </div>
             <div>
               <p class="font-semibold">기타 서비스업</p>
-              <p class="text-xs text-white/50">직접 설정</p>
+              <p class="text-xs text-white/50">위 목록에 없는 업종 (직접 설정)</p>
             </div>
           </div>
         </button>
