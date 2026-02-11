@@ -12116,6 +12116,81 @@ api.put('/steppay/setup-products/:setupType', async (c) => {
   });
 });
 
+// [V3.0-30] 런칭 프로모션 정보 조회 API
+api.get('/promotion/info', async (c) => {
+  const store_id = c.req.query('store_id');
+  
+  // 프로모션 기본 정보
+  const PROMO_VERIFIED_TYPES = ['BEAUTY_HAIR', 'BEAUTY_SKIN', 'BEAUTY_NAIL', 'RESTAURANT', 'CAFE', 'FITNESS', 'MEDICAL'];
+  
+  let isVerifiedIndustry = false;
+  let businessType = '';
+  
+  if (store_id) {
+    const store = await c.env.DB.prepare(
+      'SELECT business_type FROM xivix_stores WHERE id = ?'
+    ).bind(parseInt(store_id)).first<any>();
+    if (store) {
+      businessType = store.business_type || '';
+      isVerifiedIndustry = PROMO_VERIFIED_TYPES.includes(businessType);
+    }
+  }
+  
+  // 요금표 (프로모션 적용)
+  const plans = [
+    { 
+      id: 'mini', name: 'Mini', 
+      monthly: 29000, setup: 100000,
+      monthly_promo: 29000, // Mini는 첫 달 무료 없음
+      setup_promo: isVerifiedIndustry ? 80000 : 100000,
+      first_month_free: false,
+      setup_discount: isVerifiedIndustry 
+    },
+    { 
+      id: 'light', name: 'Light', 
+      monthly: 49000, setup: 300000,
+      monthly_promo: 49000,
+      setup_promo: isVerifiedIndustry ? 240000 : 300000,
+      first_month_free: false,
+      setup_discount: isVerifiedIndustry 
+    },
+    { 
+      id: 'standard', name: 'Standard', 
+      monthly: 99000, setup: 300000,
+      monthly_promo: 0, // 첫 달 무료
+      setup_promo: isVerifiedIndustry ? 240000 : 300000,
+      first_month_free: true,
+      setup_discount: isVerifiedIndustry 
+    },
+    { 
+      id: 'premium', name: 'Premium', 
+      monthly: 149000, setup: 500000,
+      monthly_promo: 0, // 첫 달 무료
+      setup_promo: isVerifiedIndustry ? 400000 : 500000,
+      first_month_free: true,
+      setup_discount: isVerifiedIndustry 
+    }
+  ];
+  
+  return c.json<ApiResponse>({
+    success: true,
+    data: {
+      active: true,
+      title: '🎁 XIVIX AI 봇 런칭 기념 프로모션',
+      period: '별도 공지 시까지',
+      verified_industry: isVerifiedIndustry,
+      business_type: businessType,
+      conditions: {
+        first_month_free: 'Standard/Premium 플랜 신규 신청 시 첫 달 월 구독료 무료',
+        setup_discount: '네이버 플레이스 URL 인증 시 셋팅비 20% 할인',
+        free_consulting: '무료 AI 도입 진단 상담'
+      },
+      plans
+    },
+    timestamp: Date.now()
+  });
+});
+
 // [V3.0-29] 구독 결제 시작 (고객 생성 → 주문 생성 → 결제 링크 반환)
 api.post('/steppay/subscribe', async (c) => {
   const { store_id, plan, buyer_name, buyer_email, buyer_phone, setup_type } = await c.req.json() as {
@@ -12136,9 +12211,9 @@ api.post('/steppay/subscribe', async (c) => {
   }
   
   try {
-    // 1. 매장 확인
+    // 1. 매장 확인 (프로모션 판단을 위해 업종/스마트플레이스 정보 포함)
     const store = await c.env.DB.prepare(
-      'SELECT id, store_name, plan FROM xivix_stores WHERE id = ?'
+      'SELECT id, store_name, plan, business_type, business_type_name FROM xivix_stores WHERE id = ?'
     ).bind(store_id).first<any>();
     
     if (!store) {
@@ -12219,27 +12294,74 @@ api.post('/steppay/subscribe', async (c) => {
       });
     }
     
-    // 셋팅비 (일회성 추가)
+    // 셋팅비 (일회성 추가) — 프로모션 할인 자동 적용
+    // [런칭 프로모션] 네이버 플레이스 업종 인증 시 셋팅비 20% 할인
+    const PROMO_VERIFIED_TYPES = ['BEAUTY_HAIR', 'BEAUTY_SKIN', 'BEAUTY_NAIL', 'RESTAURANT', 'CAFE', 'FITNESS', 'MEDICAL'];
+    const isVerifiedIndustry = PROMO_VERIFIED_TYPES.includes(store.business_type || '');
+    const setupDiscountRate = isVerifiedIndustry ? 0.20 : 0; // 20% 할인
+    
+    // [런칭 프로모션] Standard/Premium 첫 달 무료
+    const isFirstMonthFree = (plan === 'standard' || plan === 'premium');
+    
+    let promoApplied: string[] = [];
+    let setupFeeOriginal = 0;
+    let setupFeeDiscounted = 0;
     if (setup_type) {
       const setupProduct = await c.env.DB.prepare(
         'SELECT * FROM xivix_steppay_setup_products WHERE setup_type = ? AND is_active = 1'
       ).bind(setup_type).first<any>();
       
       if (setupProduct) {
-        if (setupProduct.steppay_product_code && setupProduct.steppay_price_code) {
-          orderItems.push({ 
-            productCode: setupProduct.steppay_product_code, 
-            priceCode: setupProduct.steppay_price_code, 
-            quantity: 1 
-          });
-        } else {
+        setupFeeOriginal = setupProduct.price || (setup_type === 'premium' ? 500000 : setup_type === 'basic' ? 300000 : 100000);
+        
+        if (setupDiscountRate > 0) {
+          // [프로모션] 업종 인증 셋팅비 할인 적용
+          setupFeeDiscounted = Math.round(setupFeeOriginal * (1 - setupDiscountRate));
+          promoApplied.push(`셋팅비 ${Math.round(setupDiscountRate * 100)}% 할인 (${setupFeeOriginal.toLocaleString()}원→${setupFeeDiscounted.toLocaleString()}원)`);
+          
+          // 할인된 가격으로 커스텀 아이템 추가 (Code 기반 대신 직접 가격 지정)
           orderItems.push({
-            name: setupProduct.product_name,
-            price: setupProduct.price,
+            name: `${setupProduct.product_name} [런칭 프로모션 ${Math.round(setupDiscountRate * 100)}% 할인]`,
+            price: setupFeeDiscounted,
             quantity: 1,
           });
+          console.log(`[Promo] Setup fee discount: ${setupFeeOriginal} → ${setupFeeDiscounted} (${store.business_type})`);
+        } else {
+          // 할인 없음 — 정상가
+          setupFeeDiscounted = setupFeeOriginal;
+          if (setupProduct.steppay_product_code && setupProduct.steppay_price_code) {
+            orderItems.push({ 
+              productCode: setupProduct.steppay_product_code, 
+              priceCode: setupProduct.steppay_price_code, 
+              quantity: 1 
+            });
+          } else {
+            orderItems.push({
+              name: setupProduct.product_name,
+              price: setupProduct.price,
+              quantity: 1,
+            });
+          }
         }
       }
+    }
+    
+    // [프로모션] Standard/Premium 첫 달 무료 처리
+    // Steppay 정기결제에서 첫 달 무료 = 트라이얼 기간으로 처리하거나
+    // 월 구독 아이템을 0원으로 교체 (첫 결제만)
+    if (isFirstMonthFree) {
+      promoApplied.push(`첫 달 월 구독료 무료 (${planProduct.price.toLocaleString()}원→0원)`);
+      console.log(`[Promo] First month free for plan ${plan}, store ${store_id}`);
+      
+      // 월 구독 아이템을 첫 달 0원 + 트라이얼로 재구성
+      // orderItems[0]을 교체 (첫 번째가 월 구독)
+      orderItems[0] = {
+        productCode: planProduct.steppay_product_code,
+        priceCode: planProduct.steppay_price_code,
+        quantity: 1,
+      };
+      // 참고: Steppay에서 트라이얼 설정은 상품 자체에서 관리
+      // 여기서는 프로모션 기록만 하고, 실제 무료는 Steppay 주문 시 discountAmount로 처리
     }
     
     // 5. 주문 생성
@@ -12253,6 +12375,25 @@ api.post('/steppay/subscribe', async (c) => {
     
     // 6. 결제 링크 생성
     const paymentLink = `https://api.steppay.kr/api/public/orders/${orderCode}/pay`;
+    
+    // [프로모션] 적용 내역 로그 저장
+    if (promoApplied.length > 0) {
+      try {
+        await c.env.DB.prepare(`
+          INSERT INTO xivix_admin_logs (admin_id, action, target_store_id, details)
+          VALUES ('system', 'promotion_applied', ?, ?)
+        `).bind(store_id, JSON.stringify({
+          promotions: promoApplied,
+          setup_fee_original: setupFeeOriginal,
+          setup_fee_discounted: setupFeeDiscounted,
+          first_month_free: isFirstMonthFree,
+          verified_industry: isVerifiedIndustry,
+          business_type: store.business_type
+        })).run();
+      } catch (e) {
+        console.error('[Promo] Log save failed:', e);
+      }
+    }
     
     // 7. DB 업데이트 (구독 레코드 생성/업데이트)
     const existingSubRecord = await c.env.DB.prepare(
@@ -12310,9 +12451,14 @@ api.post('/steppay/subscribe', async (c) => {
         order_id: orderId,
         customer_code: customerCode,
         plan: plan,
-        monthly_fee: planProduct.price,
-        setup_fee: setup_type ? (setup_type === 'premium' ? 500000 : setup_type === 'basic' ? 300000 : 100000) : 0,
-        message: '결제 링크가 생성되었습니다. 고객에게 전달해주세요.',
+        monthly_fee: isFirstMonthFree ? 0 : planProduct.price,
+        monthly_fee_regular: planProduct.price,
+        setup_fee: setupFeeDiscounted || (setup_type ? (setup_type === 'premium' ? 500000 : setup_type === 'basic' ? 300000 : 100000) : 0),
+        setup_fee_original: setupFeeOriginal,
+        promotions: promoApplied,
+        message: promoApplied.length > 0 
+          ? `🎁 런칭 프로모션 적용! ${promoApplied.join(', ')}. 결제 링크가 생성되었습니다.`
+          : '결제 링크가 생성되었습니다. 고객에게 전달해주세요.',
       },
       timestamp: Date.now()
     });

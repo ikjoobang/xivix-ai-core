@@ -1046,30 +1046,49 @@ export function renderGuidePage(): string {
                 <h5 class="font-bold">미니</h5>
               </div>
               <div class="text-2xl font-black accent-green mb-1">29,000<span class="text-sm font-normal text-gray-500">원/월</span></div>
-              <p class="text-xs text-gray-500 mb-2">셋팅비: 100,000원 (1회)</p>
+              <p class="text-xs text-gray-500 mb-1">셋팅비: <span style="text-decoration:line-through;color:#999">100,000원</span> <span style="color:#e91e63;font-weight:bold">→ 80,000원</span> <span style="background:#fce4ec;color:#c2185b;font-size:10px;padding:1px 4px;border-radius:4px">20%↓</span></p>
               <p class="text-xs text-gray-600">소규모 매장 · AI 500건/월</p>
             </div>
             <!-- Light -->
             <div class="plan-card p-4">
               <h5 class="font-bold mb-2">라이트</h5>
               <div class="text-2xl font-black accent-green mb-1">49,000<span class="text-sm font-normal text-gray-500">원/월</span></div>
-              <p class="text-xs text-gray-500 mb-2">셋팅비: 300,000원 (1회)</p>
+              <p class="text-xs text-gray-500 mb-1">셋팅비: <span style="text-decoration:line-through;color:#999">300,000원</span> <span style="color:#e91e63;font-weight:bold">→ 240,000원</span> <span style="background:#fce4ec;color:#c2185b;font-size:10px;padding:1px 4px;border-radius:4px">20%↓</span></p>
               <p class="text-xs text-gray-600">미용실, 음식점 · AI 1,000건/월 · 다국어</p>
             </div>
             <!-- Standard -->
-            <div class="plan-card p-4">
-              <h5 class="font-bold mb-2">스탠다드</h5>
-              <div class="text-2xl font-black accent-green mb-1">99,000<span class="text-sm font-normal text-gray-500">원/월</span></div>
-              <p class="text-xs text-gray-500 mb-2">셋팅비: 300,000원 (1회)</p>
+            <div class="plan-card p-4" style="border-color:#e91e63;position:relative">
+              <div class="flex items-center gap-2 mb-2">
+                <span style="background:#fce4ec;color:#c2185b;font-size:10px;font-weight:bold;padding:2px 6px;border-radius:4px">🎁 첫달무료</span>
+                <h5 class="font-bold">스탠다드</h5>
+              </div>
+              <div class="text-2xl font-black accent-green mb-1"><span style="text-decoration:line-through;color:#999;font-size:16px">99,000</span> <span style="color:#e91e63;font-weight:900">0원</span><span class="text-sm font-normal text-gray-500">/첫달</span></div>
+              <p class="text-xs text-gray-400 mb-1">2개월차부터 99,000원/월</p>
+              <p class="text-xs text-gray-500 mb-1">셋팅비: <span style="text-decoration:line-through;color:#999">300,000원</span> <span style="color:#e91e63;font-weight:bold">→ 240,000원</span> <span style="background:#fce4ec;color:#c2185b;font-size:10px;padding:1px 4px;border-radius:4px">20%↓</span></p>
               <p class="text-xs text-gray-600">병원, 학원, 프랜차이즈 · AI 5,000건/월</p>
             </div>
             <!-- Premium -->
-            <div class="plan-card p-4">
-              <h5 class="font-bold mb-2">프리미엄</h5>
-              <div class="text-2xl font-black accent-green mb-1">149,000<span class="text-sm font-normal text-gray-500">원/월</span></div>
-              <p class="text-xs text-gray-500 mb-2">셋팅비: 500,000원 (1회)</p>
+            <div class="plan-card p-4" style="border-color:#e91e63;position:relative">
+              <div class="flex items-center gap-2 mb-2">
+                <span style="background:#fce4ec;color:#c2185b;font-size:10px;font-weight:bold;padding:2px 6px;border-radius:4px">🎁 첫달무료</span>
+                <h5 class="font-bold">프리미엄</h5>
+              </div>
+              <div class="text-2xl font-black accent-green mb-1"><span style="text-decoration:line-through;color:#999;font-size:16px">149,000</span> <span style="color:#e91e63;font-weight:900">0원</span><span class="text-sm font-normal text-gray-500">/첫달</span></div>
+              <p class="text-xs text-gray-400 mb-1">2개월차부터 149,000원/월</p>
+              <p class="text-xs text-gray-500 mb-1">셋팅비: <span style="text-decoration:line-through;color:#999">500,000원</span> <span style="color:#e91e63;font-weight:bold">→ 400,000원</span> <span style="background:#fce4ec;color:#c2185b;font-size:10px;padding:1px 4px;border-radius:4px">20%↓</span></p>
               <p class="text-xs text-gray-600">대형 병원, 본사 · AI 20,000건/월 · 전담 매니저</p>
             </div>
+          </div>
+          
+          <!-- 프로모션 안내 박스 -->
+          <div style="background:linear-gradient(135deg,#fff3e0,#fce4ec);border:2px solid #e91e63;border-radius:12px;padding:16px;margin-top:16px">
+            <p style="font-weight:bold;color:#c2185b;margin-bottom:8px"><i class="fas fa-gift" style="margin-right:6px"></i>🎁 런칭 기념 프로모션</p>
+            <div style="font-size:13px;color:#333;line-height:1.8">
+              <p>✅ <strong>Standard/Premium</strong> 신규 신청 → <strong style="color:#c2185b">첫 달 월 구독료 무료!</strong></p>
+              <p>✅ <strong>네이버 플레이스 인증</strong> 매장 → <strong style="color:#c2185b">셋팅비 20% 할인!</strong></p>
+              <p>✅ <strong>무료 AI 도입 진단 상담</strong> 진행 중</p>
+            </div>
+            <p style="font-size:10px;color:#999;margin-top:8px">📅 별도 공지 시까지 · 프로모션 코드 없이 자동 적용</p>
           </div>
           
           <div class="important-box mt-4">
@@ -1174,21 +1193,28 @@ export function renderGuidePage(): string {
                     <span class="font-bold">29,000원</span>
                   </div>
                 </div>
-                <div class="border border-gray-200 rounded-lg p-3">
+                <div class="border border-gray-200 rounded-lg p-3" style="border-color:#e91e63">
                   <div class="flex justify-between items-center">
                     <div>
-                      <p class="text-sm font-bold">소상공인 셋팅비</p>
+                      <p class="text-sm font-bold">소상공인 셋팅비 <span style="background:#fce4ec;color:#c2185b;font-size:10px;padding:1px 4px;border-radius:4px">🎁 20%할인</span></p>
                       <p class="text-xs text-gray-500">1회 결제</p>
                     </div>
-                    <span class="font-bold">100,000원</span>
+                    <div class="text-right">
+                      <span style="text-decoration:line-through;color:#999;font-size:12px">100,000원</span>
+                      <span class="font-bold" style="color:#c2185b;margin-left:4px">80,000원</span>
+                    </div>
                   </div>
                 </div>
                 <div class="bg-green-50 border-2 border-green-500 rounded-lg p-3">
                   <div class="flex justify-between items-center">
                     <span class="font-bold text-green-800">총 결제 금액</span>
-                    <span class="text-xl font-black text-green-800">129,000원</span>
+                    <div class="text-right">
+                      <span style="text-decoration:line-through;color:#999;font-size:14px">129,000원</span>
+                      <span class="text-xl font-black text-green-800" style="margin-left:4px">109,000원</span>
+                    </div>
                   </div>
                   <p class="text-xs text-green-600 mt-1">※ 다음 달부터 29,000원만 자동결제</p>
+                  <p class="text-xs mt-1" style="color:#c2185b">🎁 네이버 플레이스 인증 → 셋팅비 20% 자동 할인 적용!</p>
                 </div>
               </div>
             </div>

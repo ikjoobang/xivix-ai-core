@@ -129,6 +129,34 @@ export function renderClientOnboarding(storeId?: number): string {
       <p class="text-white/60">어떤 업종이든 30분 내 AI 상담사 배치</p>
     </div>
     
+    <!-- 🎁 런칭 프로모션 배너 -->
+    <div class="mb-6 relative overflow-hidden rounded-2xl" id="promo-banner">
+      <div class="absolute inset-0 bg-gradient-to-r from-yellow-600/30 via-amber-500/20 to-yellow-600/30 animate-pulse"></div>
+      <div class="relative glass rounded-2xl p-5 border border-yellow-500/40">
+        <div class="flex items-start gap-3">
+          <div class="text-3xl">🎁</div>
+          <div class="flex-1">
+            <p class="font-bold text-yellow-400 text-sm mb-2">런칭 기념 프로모션 진행 중!</p>
+            <div class="space-y-1.5">
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold">1</span>
+                <p class="text-xs text-white/80">Standard/Premium <span class="text-emerald-400 font-semibold">첫 달 무료</span></p>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-pink-500/20 text-pink-400 text-xs font-bold">2</span>
+                <p class="text-xs text-white/80">네이버 플레이스 인증 시 <span class="text-pink-400 font-semibold">셋팅비 20% 할인</span></p>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 text-xs font-bold">3</span>
+                <p class="text-xs text-white/80">AI 도입 <span class="text-blue-400 font-semibold">무료 진단 상담</span></p>
+              </div>
+            </div>
+            <p class="text-[10px] text-white/30 mt-2">📅 별도 공지 시까지 · 자동 적용</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    
     <!-- Main Card -->
     <div class="glass rounded-3xl p-8 gold-border">
       
@@ -481,6 +509,22 @@ export function renderClientOnboarding(storeId?: number): string {
                 <span>필요시 전화 안내</span>
               </div>
             </div>
+          </div>
+          
+          <!-- 프로모션 혜택 안내 -->
+          <div class="glass rounded-xl p-4 mb-4 text-left border border-yellow-500/20">
+            <p class="text-sm font-semibold text-yellow-400 mb-3"><i class="fas fa-gift mr-1"></i> 🎁 런칭 프로모션 혜택</p>
+            <div class="space-y-2 text-sm">
+              <div class="flex items-start gap-2 text-white/70">
+                <i class="fas fa-check-circle text-emerald-400 mt-0.5"></i>
+                <span>Standard/Premium 플랜 선택 시 <strong class="text-emerald-400">첫 달 무료</strong></span>
+              </div>
+              <div class="flex items-start gap-2 text-white/70">
+                <i class="fas fa-check-circle text-pink-400 mt-0.5"></i>
+                <span>네이버 플레이스 인증 업종 <strong class="text-pink-400">셋팅비 20% 할인</strong></span>
+              </div>
+            </div>
+            <p class="text-[10px] text-white/30 mt-2">결제 시 자동 적용 · 별도 코드 불필요</p>
           </div>
           
           <div class="glass rounded-xl p-4">
