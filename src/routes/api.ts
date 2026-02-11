@@ -5655,14 +5655,55 @@ api.post('/test-api-key', async (c) => {
         error: result.error,
         timestamp: Date.now()
       });
-    } else if (model === 'gemini') {
-      // Gemini는 환경변수로만 사용
+    } else if (model === 'gemini' || model === 'gemini-pro') {
+      // Gemini Flash / Pro 모두 동일 키 사용
       const hasKey = !!c.env.GEMINI_API_KEY;
       return c.json<ApiResponse>({
         success: hasKey,
+        data: { model: model === 'gemini-pro' ? 'gemini-2.5-pro' : 'gemini-2.5-flash' },
         error: hasKey ? undefined : 'Gemini API 키가 설정되지 않았습니다',
         timestamp: Date.now()
       });
+    } else if (model === 'claude') {
+      // Claude는 Anthropic API Key 사용
+      const key = api_key || c.env.ANTHROPIC_API_KEY;
+      if (!key) {
+        return c.json<ApiResponse>({
+          success: false,
+          error: 'Anthropic API 키가 필요합니다',
+          timestamp: Date.now()
+        }, 400);
+      }
+      
+      // Anthropic API 키 검증
+      try {
+        const testRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': key,
+            'anthropic-version': '2023-06-01',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'claude-3-5-sonnet-20241022',
+            max_tokens: 10,
+            messages: [{ role: 'user', content: 'test' }]
+          })
+        });
+        
+        if (testRes.ok || testRes.status === 200) {
+          return c.json<ApiResponse>({ success: true, data: { model: 'claude-3.5-sonnet' }, timestamp: Date.now() });
+        } else {
+          const errData = await testRes.json().catch(() => ({})) as any;
+          return c.json<ApiResponse>({ 
+            success: false, 
+            error: errData?.error?.message || `Anthropic API 오류 (${testRes.status})`, 
+            timestamp: Date.now() 
+          });
+        }
+      } catch (e: any) {
+        return c.json<ApiResponse>({ success: false, error: 'Anthropic API 연결 실패: ' + e.message, timestamp: Date.now() });
+      }
     }
 
     return c.json<ApiResponse>({ 

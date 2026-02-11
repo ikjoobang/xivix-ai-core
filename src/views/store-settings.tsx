@@ -1702,9 +1702,14 @@ export function renderStoreSettings(storeId: number): string {
     async function testApiKey() {
       const model = document.querySelector('input[name="ai-model"]:checked')?.value;
       const openaiKey = document.getElementById('openai-api-key').value;
+      const anthropicKey = document.getElementById('anthropic-api-key')?.value || '';
       
       if (model === 'openai' && !openaiKey) {
         showToast('OpenAI API 키를 입력해주세요', 'error');
+        return;
+      }
+      if (model === 'claude' && !anthropicKey) {
+        showToast('Anthropic API 키를 입력해주세요', 'error');
         return;
       }
       
@@ -1716,7 +1721,7 @@ export function renderStoreSettings(storeId: number): string {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             model: model,
-            api_key: openaiKey 
+            api_key: model === 'claude' ? anthropicKey : openaiKey 
           })
         });
         
