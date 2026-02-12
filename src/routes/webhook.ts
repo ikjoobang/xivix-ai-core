@@ -173,8 +173,16 @@ function parseGreetingLinks(message: string): { text: string; buttons: { title: 
 async function sendSmartMessage(
   env: Env, userId: string, text: string, storeId: number
 ): Promise<void> {
+  // 0. 마크다운 볼드/이탤릭 제거 (톡톡에서 렌더링 안 됨)
+  let stripped = text
+    .replace(/\*\*(.+?)\*\*/g, '$1')   // **볼드** → 볼드
+    .replace(/\*(.+?)\*/g, '$1')       // *이탤릭* → 이탤릭
+    .replace(/__(.+?)__/g, '$1')       // __볼드__ → 볼드
+    .replace(/_(.+?)_/g, '$1')         // _이탤릭_ → 이탤릭
+    .replace(/#{1,6}\s?/g, '');        // ### 헤딩 → 제거
+  
   // 1. 마크다운 링크 파싱
-  const { text: cleanText, buttons: mdButtons } = parseGreetingLinks(text);
+  const { text: cleanText, buttons: mdButtons } = parseGreetingLinks(stripped);
   
   // 2. 남은 텍스트에서 단독 URL도 감지 (괄호 안 URL 포함)
   const standaloneUrlPattern = /\(?(?<url>https?:\/\/[^\s\)\]]+)\)?/g;
@@ -218,7 +226,7 @@ async function sendSmartMessage(
     }));
     await sendButtonMessage(env, userId, finalText, buttonOptions, storeId);
   } else {
-    await sendTextMessage(env, userId, text, storeId);
+    await sendTextMessage(env, userId, finalText, storeId);
   }
 }
 
@@ -1962,7 +1970,14 @@ webhook.post('/v1/naver/callback', async (c) => {
             currentChunk.length > 100) {
           chunks.push(currentChunk);
           aiResponse += currentChunk;
-          await sendTextMessage(env, customerId, currentChunk.trim(), storeId);
+          // 마크다운 제거 후 전송
+          const cleanChunk = currentChunk.trim()
+            .replace(/\*\*(.+?)\*\*/g, '$1')
+            .replace(/\*(.+?)\*/g, '$1')
+            .replace(/__(.+?)__/g, '$1')
+            .replace(/_(.+?)_/g, '$1')
+            .replace(/#{1,6}\s?/g, '');
+          await sendTextMessage(env, customerId, cleanChunk, storeId);
           currentChunk = '';
           // 타이핑 효과를 위한 짧은 딜레이
           await new Promise(r => setTimeout(r, 100));
@@ -1973,7 +1988,13 @@ webhook.post('/v1/naver/callback', async (c) => {
       if (currentChunk.trim()) {
         chunks.push(currentChunk);
         aiResponse += currentChunk;
-        await sendTextMessage(env, customerId, currentChunk.trim(), storeId);
+        const cleanChunk = currentChunk.trim()
+          .replace(/\*\*(.+?)\*\*/g, '$1')
+          .replace(/\*(.+?)\*/g, '$1')
+          .replace(/__(.+?)__/g, '$1')
+          .replace(/_(.+?)_/g, '$1')
+          .replace(/#{1,6}\s?/g, '');
+        await sendTextMessage(env, customerId, cleanChunk, storeId);
       }
     }
     
