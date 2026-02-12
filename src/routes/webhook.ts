@@ -128,6 +128,18 @@ async function ensureBilingual(
   return aiResponse; // 번역 실패 시 원본
 }
 
+// ============ [업종별 메뉴 시스템 사용 여부] ============
+// 5번 메뉴 시스템(1~5번 버튼)을 사용하는 업종 목록
+// 이 외 업종은 DB 설정 기반 AI 직접 응대
+const MENU_BASED_BUSINESS_TYPES = [
+  'BEAUTY_HAIR', 'BEAUTY_SKIN', 'BEAUTY_NAIL',
+  'RESTAURANT', 'CAFE', 'FITNESS', 'MEDICAL'
+];
+
+function isMenuBasedBusiness(businessType: string): boolean {
+  return MENU_BASED_BUSINESS_TYPES.includes(businessType);
+}
+
 // ============ [매장별 환영 메시지 생성] ============
 function generateWelcomeMessage(store: Store | null): string {
   if (!store) {
@@ -135,13 +147,22 @@ function generateWelcomeMessage(store: Store | null): string {
   }
   
   const storeName = store.store_name || '매장';
-  const greeting = store.greeting_message || `${storeName}에 오신 것을 환영합니다!`;
-  const aiTone = store.ai_tone || 'friendly';
-  
-  // 업종별 환영 메시지 커스터마이징
   const businessType = store.business_type || 'OTHER';
-  let suffix = '';
   
+  // ★ DB에 커스텀 greeting_message가 있으면 그것을 그대로 사용 (업종 무관)
+  if (store.greeting_message && store.greeting_message.trim()) {
+    return store.greeting_message.trim();
+  }
+  
+  // greeting_message가 없는 경우에만 업종별 기본 메시지 생성
+  const greeting = `${storeName}에 오신 것을 환영합니다!`;
+  
+  // 메뉴 기반 업종만 suffix 추가
+  if (!isMenuBasedBusiness(businessType)) {
+    return `${greeting}\n\n무엇이든 물어보세요! 😊`;
+  }
+  
+  let suffix = '';
   switch (businessType) {
     case 'BEAUTY_HAIR':
       suffix = '헤어 스타일, 예약, 가격 안내 등 무엇이든 물어보세요! 💇';
@@ -850,7 +871,24 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         catch (e) { console.warn('[Lang] KV write error:', e); }
       }
       
-      await sendTextMessage(env, customerId, translateGuides[targetLang] || translateGuides.en, storeId);
+      // ★ 업종별 분기: 메뉴 기반 업종만 5번 메뉴 표시
+      const translateBusinessType = storeResult?.business_type || 'OTHER';
+      if (isMenuBasedBusiness(translateBusinessType)) {
+        await sendTextMessage(env, customerId, translateGuides[targetLang] || translateGuides.en, storeId);
+      } else {
+        // 비메뉴 업종: 메뉴 없이 언어 변경 안내만
+        const aiTranslateGuides: Record<string, string> = {
+          ko: `🇰🇷 한국어로 변경되었습니다!\n\n${storeName}입니다. 무엇이든 물어보세요! 😊`,
+          en: `🇺🇸 Switched to English!\n\nWelcome to ${storeName}. Ask me anything! 😊`,
+          ja: `🇯🇵 日本語に変更しました!\n\n${storeName}です。何でもお聞きください! 😊`,
+          zh: `🇨🇳 已切换到中文!\n\n${storeName}。请随时提问! 😊`,
+          tw: `🇹🇼 已切換到繁體中文!\n\n${storeName}。請隨時提問! 😊`,
+          th: `🇹🇭 เปลี่ยนเป็นภาษาไทยแล้ว!\n\n${storeName} ถามได้เลยค่ะ! 😊`,
+          vi: `🇻🇳 Đã chuyển sang tiếng Việt!\n\n${storeName}. Hãy hỏi bất cứ điều gì! 😊`,
+          mn: `🇲🇳 Монгол хэл рүү шилжлээ!\n\n${storeName}. Юу ч асууна уу! 😊`
+        };
+        await sendTextMessage(env, customerId, aiTranslateGuides[targetLang] || aiTranslateGuides.en, storeId);
+      }
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
@@ -885,8 +923,26 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       }
       customerLang = detectedLang;
       
-      const langData = langMenus[detectedLang];
-      await sendTextMessage(env, customerId, langData.welcome + langData.menu, storeId);
+      // ★ 업종별 분기: 메뉴 기반 업종만 5번 메뉴 표시
+      const storeBusinessType = storeResult?.business_type || 'OTHER';
+      if (isMenuBasedBusiness(storeBusinessType)) {
+        // 미용실/음식점 등: 기존 메뉴 시스템
+        const langData = langMenus[detectedLang];
+        await sendTextMessage(env, customerId, langData.welcome + langData.menu, storeId);
+      } else {
+        // IT/프리랜서 등 비메뉴 업종: 언어 변경 확인 + AI 안내만
+        const aiDirectGreetings: Record<string, string> = {
+          ko: `🇰🇷 한국어로 변경되었습니다!\n\n${storeName}입니다. 무엇이든 물어보세요! 😊`,
+          en: `🇺🇸 Switched to English!\n\nWelcome to ${storeName}. Ask me anything! 😊`,
+          ja: `🇯🇵 日本語に変更しました!\n\n${storeName}です。何でもお聞きください! 😊`,
+          zh: `🇨🇳 已切换到中文!\n\n${storeName}。请随时提问! 😊`,
+          tw: `🇹🇼 已切換到繁體中文!\n\n${storeName}。請隨時提問! 😊`,
+          th: `🇹🇭 เปลี่ยนเป็นภาษาไทยแล้ว!\n\n${storeName} ถามได้เลยค่ะ! 😊`,
+          vi: `🇻🇳 Đã chuyển sang tiếng Việt!\n\n${storeName}. Hãy hỏi bất cứ điều gì! 😊`,
+          mn: `🇲🇳 Монгол хэл рүү шилжлээ!\n\n${storeName}. Юу ч асууна уу! 😊`
+        };
+        await sendTextMessage(env, customerId, aiDirectGreetings[detectedLang] || aiDirectGreetings.en, storeId);
+      }
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
@@ -914,6 +970,10 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     // KV에서 저장된 언어 사용 (이미 위에서 customerLang에 로드됨)
     const menuNumber = userMessage.trim();
     const menuLang = customerLang; // KV에서 로드된 언어 사용
+    
+    // ★ 메뉴 기반 업종만 번호(1~5) 가로채기 — 비메뉴 업종은 AI에게 전달
+    const menuGateBusinessType = storeResult?.business_type || 'OTHER';
+    if (isMenuBasedBusiness(menuGateBusinessType) && ['1','2','3','4','5'].includes(menuNumber)) {
     
     if (menuNumber === '1') {
       // 1. 🎁 메뉴/가격 (DB에서 매장별 데이터 사용, 다국어 지원)
@@ -963,7 +1023,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
           
           try {
             // Gemini로 메뉴 번역
-            const translatePrompt = `Translate this Korean hair salon menu to ${targetLang}. 
+            const translatePrompt = `Translate this Korean menu to ${targetLang}. 
 Keep the format exactly the same (line breaks, structure).
 Keep prices in Korean Won (원).
 Only translate, do not add any extra text.
@@ -1075,16 +1135,30 @@ ${menuData.trim()}`;
     }
     
     if (menuNumber === '3') {
-      // 3. 💬 원장님께 상담 메시지 남기기 (8개국어 지원)
+      // 3. 💬 담당자에게 상담 메시지 남기기 (업종별 호칭, 8개국어 지원)
+      const ownerTitles: Record<string, Record<string, string>> = {
+        BEAUTY_HAIR: { ko: '원장님', en: 'Director', ja: '院長', zh: '院长', tw: '院長', th: 'ผู้อำนวยการ', vi: 'Giám đốc', mn: 'Захирал' },
+        BEAUTY_SKIN: { ko: '원장님', en: 'Director', ja: '院長', zh: '院长', tw: '院長', th: 'ผู้อำนวยการ', vi: 'Giám đốc', mn: 'Захирал' },
+        BEAUTY_NAIL: { ko: '원장님', en: 'Director', ja: '院長', zh: '院长', tw: '院長', th: 'ผู้อำนวยการ', vi: 'Giám đốc', mn: 'Захирал' },
+        RESTAURANT: { ko: '사장님', en: 'Owner', ja: 'オーナー', zh: '老板', tw: '老闆', th: 'เจ้าของ', vi: 'Chủ quán', mn: 'Эзэн' },
+        CAFE: { ko: '사장님', en: 'Owner', ja: 'オーナー', zh: '老板', tw: '老闆', th: 'เจ้าของ', vi: 'Chủ quán', mn: 'Эзэн' },
+        FITNESS: { ko: '대표님', en: 'Director', ja: '代表', zh: '负责人', tw: '負責人', th: 'ผู้จัดการ', vi: 'Giám đốc', mn: 'Захирал' },
+        MEDICAL: { ko: '원장님', en: 'Doctor', ja: '院長', zh: '院长', tw: '院長', th: 'แพทย์', vi: 'Bác sĩ', mn: 'Эмч' },
+      };
+      const defaultTitle: Record<string, string> = { ko: '담당자', en: 'Manager', ja: '担当者', zh: '负责人', tw: '負責人', th: 'ผู้จัดการ', vi: 'Người phụ trách', mn: 'Хариуцагч' };
+      const titleMap = ownerTitles[menuGateBusinessType] || defaultTitle;
+      const ownerTitle = titleMap[menuLang] || titleMap.ko;
+      const ownerTitleKo = titleMap.ko || '담당자';
+      
       const msgTemplates: Record<string, string> = {
-        ko: `💬 원장님께 메시지 남기기\n\n원장님께 바로 전달해 드릴게요!\n\n답변받으실 연락처와 함께\n상담 내용을 남겨주세요 📝\n\n━━━━━━━━━━\n예시)\n010-1234-5678\n모공이 고민인데 상담받고 싶어요`,
-        en: `💬 Message to Director\n\nWe'll deliver your message right away!\n\nPlease leave your contact\nand consultation details 📝\n\n━━━━━━━━━━\nExample:\n+82-10-1234-5678\nI want to consult about pore care`,
-        ja: `💬 院長へメッセージ\n\nすぐにお伝えします!\n\n連絡先と相談内容を\n残してください 📝\n\n━━━━━━━━━━\n例:\n+82-10-1234-5678\n毛穴について相談したいです`,
-        zh: `💬 给院长留言\n\n我们会立即转达您的留言!\n\n请留下您的联系方式\n和咨询内容 📝\n\n━━━━━━━━━━\n示例:\n+82-10-1234-5678\n想咨询毛孔问题`,
-        tw: `💬 給院長留言\n\n我們會立即轉達您的留言!\n\n請留下您的聯繫方式\n和諮詢內容 📝\n\n━━━━━━━━━━\n範例:\n+82-10-1234-5678\n想諮詢毛孔問題`,
-        th: `💬 ฝากข้อความถึงผู้อำนวยการ\n\nเราจะส่งข้อความให้ทันที!\n\nกรุณาฝากเบอร์ติดต่อ\nและรายละเอียดการปรึกษา 📝\n\n━━━━━━━━━━\nตัวอย่าง:\n+82-10-1234-5678\nอยากปรึกษาเรื่องรูขุมขน`,
-        vi: `💬 Nhắn tin cho Giám đốc\n\nChúng tôi sẽ chuyển tin nhắn ngay!\n\nVui lòng để lại số liên hệ\nvà nội dung tư vấn 📝\n\n━━━━━━━━━━\nVí dụ:\n+82-10-1234-5678\nTôi muốn tư vấn về lỗ chân lông`,
-        mn: `💬 Захиралд мессеж\n\nБид таны мессежийг шууд дамжуулна!\n\nХолбоо барих болон\nзөвлөгөөний дэлгэрэнгүйг үлдээнэ үү 📝\n\n━━━━━━━━━━\nЖишээ:\n+82-10-1234-5678\nСүвэрхэгийн талаар зөвлөгөө авмаар байна`
+        ko: `💬 ${ownerTitleKo}께 메시지 남기기\n\n${ownerTitleKo}께 바로 전달해 드릴게요!\n\n답변받으실 연락처와 함께\n상담 내용을 남겨주세요 📝\n\n━━━━━━━━━━\n예시)\n010-1234-5678\n상담받고 싶어요`,
+        en: `💬 Message to ${ownerTitle}\n\nWe'll deliver your message right away!\n\nPlease leave your contact\nand consultation details 📝\n\n━━━━━━━━━━\nExample:\n+82-10-1234-5678\nI want to consult`,
+        ja: `💬 ${ownerTitle}へメッセージ\n\nすぐにお伝えします!\n\n連絡先と相談内容を\n残してください 📝\n\n━━━━━━━━━━\n例:\n+82-10-1234-5678\n相談したいです`,
+        zh: `💬 给${ownerTitle}留言\n\n我们会立即转达您的留言!\n\n请留下您的联系方式\n和咨询内容 📝\n\n━━━━━━━━━━\n示例:\n+82-10-1234-5678\n想咨询`,
+        tw: `💬 給${ownerTitle}留言\n\n我們會立即轉達您的留言!\n\n請留下您的聯繫方式\n和諮詢內容 📝\n\n━━━━━━━━━━\n範例:\n+82-10-1234-5678\n想諮詢`,
+        th: `💬 ฝากข้อความถึง${ownerTitle}\n\nเราจะส่งข้อความให้ทันที!\n\nกรุณาฝากเบอร์ติดต่อ\nและรายละเอียดการปรึกษา 📝\n\n━━━━━━━━━━\nตัวอย่าง:\n+82-10-1234-5678\nอยากปรึกษา`,
+        vi: `💬 Nhắn tin cho ${ownerTitle}\n\nChúng tôi sẽ chuyển tin nhắn ngay!\n\nVui lòng để lại số liên hệ\nvà nội dung tư vấn 📝\n\n━━━━━━━━━━\nVí dụ:\n+82-10-1234-5678\nTôi muốn tư vấn`,
+        mn: `💬 ${ownerTitle}-д мессеж\n\nБид таны мессежийг шууд дамжуулна!\n\nХолбоо барих болон\nзөвлөгөөний дэлгэрэнгүйг үлдээнэ үү 📝\n\n━━━━━━━━━━\nЖишээ:\n+82-10-1234-5678\nЗөвлөгөө авмаар байна`
       };
       const messageResponse = msgTemplates[menuLang] || msgTemplates.ko;
       // V3.0.14: 이중언어
@@ -1095,7 +1169,7 @@ ${menuData.trim()}`;
         INSERT INTO xivix_conversation_logs 
         (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
         VALUES (?, ?, 'text', ?, ?, ?, 0)
-      `).bind(storeId, customerId, '3', '[menu-3] 원장님 메시지 안내', responseTime).run();
+      `).bind(storeId, customerId, '3', `[menu-3] ${ownerTitleKo} 메시지 안내`, responseTime).run();
       
       return c.json({ success: true, store_id: storeId, menu_selected: 3 });
     }
@@ -1165,6 +1239,7 @@ ${menuData.trim()}`;
       
       return c.json({ success: true, store_id: storeId, menu_selected: 5 });
     }
+    } // ★ END: isMenuBasedBusiness() 게이트
 
     // ============ [키워드 기반 정보 제공 - AI 의존 제거] ============
     const lowerMessage = userMessage.toLowerCase();
