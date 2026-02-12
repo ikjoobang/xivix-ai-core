@@ -418,6 +418,64 @@ export async function sendTextMessage(
     return { success: true, resultCode: 'TEST_MODE' };
   }
 
+  // ⭐ 긴 메시지 자동 분할 (네이버 톡톡 텍스트 제한 ~1000자)
+  const MAX_LENGTH = 900;
+  if (text.length > MAX_LENGTH) {
+    console.log(`[TalkTalk] Long message detected (${text.length} chars), splitting...`);
+    const chunks = splitMessage(text, MAX_LENGTH);
+    let lastResult: TalkTalkResponse = { success: true, resultCode: 'OK' };
+    for (let i = 0; i < chunks.length; i++) {
+      // 분할 전송 간 딜레이 (톡톡 API 부하 방지)
+      if (i > 0) await new Promise(r => setTimeout(r, 300));
+      lastResult = await sendSingleMessage(env, userId, chunks[i], storeId);
+      if (!lastResult.success) break;
+    }
+    return lastResult;
+  }
+
+  return sendSingleMessage(env, userId, text, storeId);
+}
+
+// 메시지 분할 헬퍼 - 문장/문단 단위로 자연스럽게 나눔
+function splitMessage(text: string, maxLen: number): string[] {
+  const chunks: string[] = [];
+  let remaining = text;
+  
+  while (remaining.length > maxLen) {
+    // 1순위: 문단 나누기 (빈 줄)
+    let splitIdx = remaining.lastIndexOf('\n\n', maxLen);
+    // 2순위: 줄바꿈
+    if (splitIdx < maxLen * 0.3) splitIdx = remaining.lastIndexOf('\n', maxLen);
+    // 3순위: 문장 끝 (. ! ?)
+    if (splitIdx < maxLen * 0.3) {
+      const sentenceEnd = Math.max(
+        remaining.lastIndexOf('. ', maxLen),
+        remaining.lastIndexOf('! ', maxLen),
+        remaining.lastIndexOf('? ', maxLen),
+        remaining.lastIndexOf('요 ', maxLen),
+        remaining.lastIndexOf('다 ', maxLen)
+      );
+      if (sentenceEnd > maxLen * 0.3) splitIdx = sentenceEnd + 1;
+    }
+    // 최후: 강제 분할
+    if (splitIdx < maxLen * 0.3) splitIdx = maxLen;
+    
+    chunks.push(remaining.substring(0, splitIdx).trim());
+    remaining = remaining.substring(splitIdx).trim();
+  }
+  
+  if (remaining.trim()) chunks.push(remaining.trim());
+  return chunks;
+}
+
+// 단일 메시지 전송 (내부용)
+async function sendSingleMessage(
+  env: Env,
+  userId: string,
+  text: string,
+  storeId?: number
+): Promise<TalkTalkResponse> {
+
   // 1. 먼저 DB에서 매장별 토큰 조회 (storeId가 있는 경우)
   let accessToken: string | undefined;
   
