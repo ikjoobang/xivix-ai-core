@@ -262,7 +262,8 @@ export function detectBookingIntent(message: string): BookingIntent {
   const lowerMsg = message.toLowerCase();
   
   // 예약 관련 키워드 (확장)
-  const bookingKeywords = ['예약', '예매', '부킹', '스케줄', '일정', '방문', '상담'];
+  // ★ '상담'은 너무 광범위해서 제거 — '예약상담', '상담예약'은 '예약' 키워드로 이미 감지됨
+  const bookingKeywords = ['예약', '예매', '부킹', '스케줄', '일정'];
   const timeKeywords = ['시간', '언제', '몇시', '오전', '오후', '저녁', '아침'];
   const availableKeywords = ['빈자리', '가능', '자리', '비어있', '남은'];
   const cancelKeywords = ['취소', '캔슬'];
