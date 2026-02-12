@@ -597,9 +597,44 @@ export async function sendButtonMessage(
     const lines = text.split('\n');
     const titleLine = lines[0].substring(0, 100);  // 첫 줄 = 제목 (max 100자)
     const descriptionText = lines.length > 1 
-      ? lines.slice(1).join('\n').trim().substring(0, 800)  // 나머지 = 본문 (max 800자)
+      ? lines.slice(1).join('\n').trim()
       : '';
     
+    // ★ V3.0.18: 본문이 800자 초과 시 → 텍스트 먼저 전송 + 버튼 별도 전송
+    if (descriptionText.length > 800) {
+      // 1) 전체 텍스트를 일반 메시지로 먼저 전송
+      await sendTextMessage(env, userId, text, storeId);
+      
+      // 2) 버튼만 짧은 안내와 함께 전송
+      const requestBody = {
+        event: 'send',
+        user: userId,
+        compositeContent: {
+          compositeList: [{
+            title: '👇 아래 버튼을 눌러보세요!',
+            buttonList
+          }]
+        }
+      };
+      
+      console.log(`[TalkTalk] Long text detected (${descriptionText.length} chars) - sending text + buttons separately`);
+      
+      const response = await fetch(`${TALKTALK_API_BASE}/event`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json;charset=UTF-8',
+          'Authorization': accessToken
+        },
+        body: JSON.stringify(requestBody)
+      });
+      
+      const responseText2 = await response.text();
+      console.log(`[TalkTalk] Button-only response: ${response.status}, body: ${responseText2}`);
+      
+      return { success: response.ok, resultCode: response.ok ? 'OK' : `HTTP_${response.status}`, resultMessage: responseText2 };
+    }
+    
+    // 800자 이내: 기존 방식 (title + description + 버튼 한 덩어리)
     const requestBody = {
       event: 'send',
       user: userId,
