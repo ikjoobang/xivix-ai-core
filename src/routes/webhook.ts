@@ -164,6 +164,64 @@ function parseGreetingLinks(message: string): { text: string; buttons: { title: 
   return { text, buttons };
 }
 
+/**
+ * ★ 스마트 메시지 전송: 링크 감지 시 버튼으로 자동 변환
+ * - [텍스트](URL) → 버튼
+ * - 단독 URL (https://...) → 도메인명 버튼
+ * - 링크 없으면 → 일반 텍스트
+ */
+async function sendSmartMessage(
+  env: Env, userId: string, text: string, storeId: number
+): Promise<void> {
+  // 1. 마크다운 링크 파싱
+  const { text: cleanText, buttons: mdButtons } = parseGreetingLinks(text);
+  
+  // 2. 남은 텍스트에서 단독 URL도 감지 (괄호 안 URL 포함)
+  const standaloneUrlPattern = /\(?(?<url>https?:\/\/[^\s\)\]]+)\)?/g;
+  const extraButtons: { title: string; url: string }[] = [];
+  let finalText = cleanText;
+  
+  let urlMatch;
+  const urlsToRemove: string[] = [];
+  while ((urlMatch = standaloneUrlPattern.exec(cleanText)) !== null) {
+    const fullMatch = urlMatch[0];
+    const url = urlMatch.groups?.url || urlMatch[1];
+    // 이미 마크다운 버튼으로 처리된 URL은 스킵
+    if (!mdButtons.some(b => b.url === url)) {
+      try {
+        const domain = new URL(url).hostname.replace('www.', '');
+        const label = domain.includes('blog.naver') ? '📝 블로그 바로가기'
+          : domain.includes('naver.com') ? '🔗 네이버 바로가기'
+          : domain.includes('instagram') ? '📸 인스타그램'
+          : domain.includes('youtube') ? '🎬 유튜브'
+          : `🔗 ${domain}`;
+        extraButtons.push({ title: label, url });
+        urlsToRemove.push(fullMatch);
+      } catch { /* invalid URL, skip */ }
+    }
+  }
+  
+  // URL 텍스트 제거
+  for (const u of urlsToRemove) {
+    finalText = finalText.replace(u, '');
+  }
+  finalText = finalText.replace(/\n{3,}/g, '\n\n').trim();
+  
+  const allButtons = [...mdButtons, ...extraButtons];
+  
+  // 3. 버튼이 있으면 composite, 없으면 텍스트
+  if (allButtons.length > 0) {
+    const buttonOptions: ButtonOption[] = allButtons.slice(0, 5).map(btn => ({
+      type: 'LINK' as const,
+      title: btn.title.substring(0, 40),
+      linkUrl: btn.url
+    }));
+    await sendButtonMessage(env, userId, finalText, buttonOptions, storeId);
+  } else {
+    await sendTextMessage(env, userId, text, storeId);
+  }
+}
+
 function generateWelcomeMessage(store: Store | null): string {
   if (!store) {
     return '안녕하세요! XIVIX AI 상담사입니다. 무엇을 도와드릴까요?';
@@ -1561,7 +1619,7 @@ ${eventsText.trim()}`;
       aiResponse = await ensureBilingual(env, aiResponse, customerLang);
       
       // 응답 전송
-      await sendTextMessage(env, customerId, aiResponse, storeId);
+      await sendSmartMessage(env, customerId, aiResponse, storeId);
       
       console.log(`[Webhook] AI Response (${aiModel}, verified: ${verified}): ${String(aiResponse || '').slice(0, 50)}...`);
     } 
@@ -1646,7 +1704,7 @@ ${eventsText.trim()}`;
       // V3.0.14: 이중언어 후처리 — 외국어 고객이면 한국어 번역 추가
       aiResponse = await ensureBilingual(env, aiResponse, customerLang);
       
-      await sendTextMessage(env, customerId, aiResponse, storeId);
+      await sendSmartMessage(env, customerId, aiResponse, storeId);
     }
     
     // 대화 컨텍스트 저장
@@ -1889,7 +1947,7 @@ webhook.post('/v1/naver/callback', async (c) => {
       aiResponse = await getGeminiResponse(env, messages, systemInstruction);
       // V3.0.14: 이중언어 후처리
       aiResponse = await ensureBilingual(env, aiResponse, genericLang);
-      await sendTextMessage(env, customerId, aiResponse, storeId);
+      await sendSmartMessage(env, customerId, aiResponse, storeId);
     } else {
       // 스트리밍 응답 (청크 단위 전송)
       const chunks: string[] = [];
