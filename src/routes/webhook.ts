@@ -8,7 +8,8 @@ import {
   parseWebhookMessage, 
   maskPersonalInfo, 
   sendTextMessage,
-  sendButtonMessage 
+  sendButtonMessage,
+  ButtonOption
 } from '../lib/naver-talktalk';
 import { 
   buildGeminiMessages, 
@@ -141,6 +142,28 @@ function isMenuBasedBusiness(businessType: string): boolean {
 }
 
 // ============ [매장별 환영 메시지 생성] ============
+/**
+ * 인사말에서 마크다운 링크 [텍스트](URL) 파싱
+ * 반환: { text: 링크 제거된 본문, buttons: [{title, url}] }
+ */
+function parseGreetingLinks(message: string): { text: string; buttons: { title: string; url: string }[] } {
+  const linkPattern = /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g;
+  const buttons: { title: string; url: string }[] = [];
+  
+  let match;
+  while ((match = linkPattern.exec(message)) !== null) {
+    buttons.push({ title: match[1].trim(), url: match[2].trim() });
+  }
+  
+  // 링크 문법 제거 + 빈 줄 정리
+  const text = message
+    .replace(linkPattern, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  
+  return { text, buttons };
+}
+
 function generateWelcomeMessage(store: Store | null): string {
   if (!store) {
     return '안녕하세요! XIVIX AI 상담사입니다. 무엇을 도와드릴까요?';
@@ -265,8 +288,25 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       console.log(`[Webhook] OPEN event - Sending welcome message for Store ${storeId}`);
       
       const welcomeMsg = generateWelcomeMessage(storeResult);
-      const welcomeResult = await sendTextMessage(env, customerId, welcomeMsg, storeId);
-      console.log(`[Webhook] Welcome message result:`, JSON.stringify(welcomeResult));
+      
+      // ★ 마크다운 링크 [텍스트](URL) 감지 → compositeContent 버튼으로 변환
+      const { text: greetText, buttons: greetButtons } = parseGreetingLinks(welcomeMsg);
+      
+      let welcomeResult;
+      if (greetButtons.length > 0) {
+        // 링크 버튼이 있으면 → compositeContent (URL 숨기고 버튼으로 표시)
+        const buttonOptions: ButtonOption[] = greetButtons.map(btn => ({
+          type: 'LINK' as const,
+          title: btn.title,
+          linkUrl: btn.url
+        }));
+        welcomeResult = await sendButtonMessage(env, customerId, greetText, buttonOptions, storeId);
+        console.log(`[Webhook] Composite welcome (${greetButtons.length} buttons) result:`, JSON.stringify(welcomeResult));
+      } else {
+        // 링크 없으면 → 기존 텍스트 메시지
+        welcomeResult = await sendTextMessage(env, customerId, welcomeMsg, storeId);
+        console.log(`[Webhook] Welcome message result:`, JSON.stringify(welcomeResult));
+      }
       
       // 8개국어 안내 메시지 (환영 인사 바로 다음 - 요금제에 따라 표시)
       const openPlan = (storeResult?.plan || 'light') as PlanType;

@@ -593,14 +593,20 @@ export async function sendButtonMessage(
   }));
 
   try {
-    // 네이버 톡톡 API는 Bearer prefix 없이 토큰만 사용
+    // ★ 긴 텍스트는 title(1줄) + description(본문)으로 분리
+    const lines = text.split('\n');
+    const titleLine = lines[0].substring(0, 100);  // 첫 줄 = 제목 (max 100자)
+    const descriptionText = lines.length > 1 
+      ? lines.slice(1).join('\n').trim().substring(0, 800)  // 나머지 = 본문 (max 800자)
+      : '';
+    
     const requestBody = {
       event: 'send',
       user: userId,
       compositeContent: {
         compositeList: [{
-          title: text.substring(0, 100), // 제목 최대 100자
-          description: '아래 버튼을 눌러주세요', // description 추가
+          title: titleLine,
+          ...(descriptionText ? { description: descriptionText } : {}),
           buttonList
         }]
       }
