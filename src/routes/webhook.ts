@@ -48,6 +48,86 @@ import { incrementAIUsage, incrementTalkTalkUsage, incrementImageAnalysisUsage }
 // ============ [XIVIX WATCHDOG] 이벤트 타입 정의 ============
 type NaverTalkTalkEventType = 'open' | 'leave' | 'friend' | 'send' | 'echo' | 'profile';
 
+// ============ [V3.0.14] 다국어 번역 헬퍼 ============
+const LANG_NAMES: Record<string, string> = {
+  ko: '한국어', en: 'English', ja: '日本語', zh: '中文(简体)',
+  tw: '中文(繁體)', th: 'ภาษาไทย', vi: 'Tiếng Việt', mn: 'Монгол'
+};
+const LANG_FLAGS: Record<string, string> = {
+  ko: '🇰🇷', en: '🇺🇸', ja: '🇯🇵', zh: '🇨🇳', tw: '🇹🇼', th: '🇹🇭', vi: '🇻🇳', mn: '🇲🇳'
+};
+
+/**
+ * [V3.0.14] Gemini를 사용한 빠른 번역
+ * 사장님 한국어 메시지 → 고객 외국어, 또는 그 반대
+ */
+async function translateWithGemini(
+  env: Env,
+  text: string,
+  targetLang: string
+): Promise<string | null> {
+  try {
+    const langName = LANG_NAMES[targetLang] || 'English';
+    const prompt = `Translate the following message to ${langName}. Output ONLY the translation, no explanation:\n\n${text}`;
+    const messages = [{ role: 'user' as const, parts: [{ text: prompt }] }];
+    const result = await getGeminiResponse(env, messages, 'You are a professional translator. Output only the translated text.', 'gemini');
+    return result || null;
+  } catch (e) {
+    console.error('[V3.0.14] Translation error:', e);
+    return null;
+  }
+}
+
+/**
+ * [V3.0.14] AI 응답에 이중언어 포맷이 포함되어 있는지 체크
+ */
+function hasBilingualFormat(text: string): boolean {
+  return text.includes('━━━━━━━━━━') || text.includes('🇰🇷');
+}
+
+/**
+ * [V3.0.14] AI 자유 응답 이중언어 보장 — AI가 이중언어 포맷을 안 따라도 후처리로 보장
+ * 외국어 고객: AI 응답(외국어) + 한국어 번역 → 사장님이 읽을 수 있음
+ * 한국어 고객: 그대로 반환
+ */
+async function ensureBilingual(
+  env: Env,
+  aiResponse: string,
+  customerLang: string
+): Promise<string> {
+  // 한국어 고객이거나 언어 미설정이면 그대로
+  if (!customerLang || customerLang === 'ko') return aiResponse;
+  // 이미 이중언어 포맷이면 그대로
+  if (hasBilingualFormat(aiResponse)) return aiResponse;
+  
+  try {
+    // AI 응답이 한국어인지 외국어인지 판단
+    const koreanChars = (aiResponse.match(/[가-힣]/g) || []).length;
+    const totalChars = aiResponse.replace(/\s/g, '').length;
+    const koreanRatio = totalChars > 0 ? koreanChars / totalChars : 0;
+    
+    const flag = LANG_FLAGS[customerLang] || '🌐';
+    
+    if (koreanRatio > 0.3) {
+      // 한국어 응답 → 고객 언어로 번역 추가 (위: 고객언어, 아래: 한국어 원문)
+      const translated = await translateWithGemini(env, aiResponse, customerLang);
+      if (translated) {
+        return `${flag} ${translated}\n\n━━━━━━━━━━\n🇰🇷 한국어:\n${aiResponse}`;
+      }
+    } else {
+      // 외국어 응답 → 한국어 번역 추가 (위: 외국어 원문, 아래: 한국어 번역)
+      const koreanTranslation = await translateWithGemini(env, aiResponse, 'ko');
+      if (koreanTranslation) {
+        return `${flag} ${aiResponse}\n\n━━━━━━━━━━\n🇰🇷 한국어:\n${koreanTranslation}`;
+      }
+    }
+  } catch (e) {
+    console.warn('[V3.0.14] ensureBilingual error:', e);
+  }
+  
+  return aiResponse; // 번역 실패 시 원본
+}
+
 // ============ [매장별 환영 메시지 생성] ============
 function generateWelcomeMessage(store: Store | null): string {
   if (!store) {
@@ -226,8 +306,27 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       return c.json({ success: true, event: 'leave', store_id: storeId });
     }
     
-    // [echo] 본인 메시지 에코 - 무시
+    // [echo] 파트너(사장님) 메시지 에코 → 외국어 고객에게 번역 발송
+    // V3.0.14: 사장님이 한국어로 답변 → 고객 언어로 자동 번역
     if (eventType === 'echo') {
+      const ownerMessage = textContent?.trim();
+      if (ownerMessage && env.KV) {
+        try {
+          const savedLang = await env.KV.get(`lang:${storeId}:${customerId}`);
+          if (savedLang && savedLang !== 'ko' && ['en', 'ja', 'zh', 'tw', 'th', 'vi', 'mn'].includes(savedLang)) {
+            const translated = await translateWithGemini(env, ownerMessage, savedLang);
+            if (translated) {
+              const flag = LANG_FLAGS[savedLang] || '🌐';
+              const bilingualMsg = `${flag} ${translated}\n\n━━━━━━━━━━\n🇰🇷 원문(Original):\n${ownerMessage}`;
+              await sendTextMessage(env, customerId, bilingualMsg, storeId);
+              console.log(`[V3.0.14] Echo translated: ko → ${savedLang} for customer ${customerId?.slice(0, 8)}`);
+              return c.json({ success: true, event: 'echo', translated: true, lang: savedLang });
+            }
+          }
+        } catch (echoErr) {
+          console.warn('[V3.0.14] Echo translation error:', echoErr);
+        }
+      }
       return c.json({ success: true, event: 'echo', ignored: true });
     }
     
@@ -681,25 +780,30 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     const koreanTextPattern = /[가-힣]/; // 한글 포함 여부
     const isKoreanMessage = koreanTextPattern.test(userMessage);
     
-    // 한국어 메시지면 언어를 한국어로 강제 설정
-    if (isKoreanMessage && customerLang !== 'ko') {
+    // V3.0.14: 한국어 메시지가 오더라도 외국인 고객 세션이면 언어 리셋 안 함
+    // → 사장님이 한국어로 입력할 수 있으므로, AI가 이중언어로 응답하도록 유지
+    // (언어 리셋은 명시적으로 "한국어", "KO" 입력 시에만)
+    const isExplicitKoreanSwitch = /^(ko|kr|korean|한국어|한글)$/i.test(userMessage.trim());
+    if (isExplicitKoreanSwitch && customerLang !== 'ko') {
       customerLang = 'ko';
-      // KV에도 한국어로 저장
       if (env.KV) {
         try { await env.KV.put(`lang:${storeId}:${customerId}`, 'ko', { expirationTtl: 86400 }); }
         catch (e) { console.warn('[Lang] KV write error:', e); }
       }
     }
     
+    // V3.0.14: 언어 감지 패턴 수정 — 명시적 코드/키워드만 매칭
+    // ⚠️ 이전: 일본어 문자 포함 시 전부 "언어 선택"으로 인식 → 자유 질문 차단
+    // ⭐ 수정: 짧은 명시적 코드(JP, EN 등)와 인사말만 매칭. 자유 텍스트는 AI로 넘김
     const langPatterns: Record<string, RegExp> = {
-      ko: /^(ko|kr|korean|한국어|한글|안녕|반가워|처음|감사|네|예|아니)$/i,
-      en: /^(en|eng|english|영어|hi|hello|yes|thanks?|ok(ay)?|please|help)/i,
-      ja: /^(jp|japanese|日本語|일본어|일어|こんにちは|はい|お願い|ありがとう)|[\u3040-\u309F\u30A0-\u30FF]/,
-      zh: /^(cn|chinese|中文|简体|중국어|중문|你好|是的?|好的?|谢谢)/,
-      tw: /^(tw|繁體|繁体|台灣|台湾|번체|대만)/i,
-      th: /^(th|thai|ภาษาไทย|태국어|สวัสดี|ขอบคุณ)|[\u0E00-\u0E7F]/,
-      vi: /^(vn|vietnamese|tiếng việt|베트남어|xin chào|cảm ơn)/i,
-      mn: /^(mn|mongol|монгол|몽골어|сайн байна уу|баярлалаа)|[\u1800-\u18AF]/
+      ko: /^(ko|kr|korean|한국어|한글)$/i,
+      en: /^(en|eng|english|영어)$/i,
+      ja: /^(jp|japanese|日本語|일본어|일어)$/i,
+      zh: /^(cn|chinese|中文|简体|중국어|중문)$/i,
+      tw: /^(tw|繁體|繁体|台灣|台湾|번체|대만)$/i,
+      th: /^(th|thai|ภาษาไทย|태국어)$/i,
+      vi: /^(vn|vietnamese|tiếng việt|베트남어)$/i,
+      mn: /^(mn|mongol|монгол|몽골어)$/i
     };
     
     // ============ [번역 기능] ============
@@ -795,6 +899,17 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     }
 
     // ============ [메뉴 번호 선택 처리 - 다국어 지원] ============
+    // V3.0.14: 이중언어 응답 헬퍼 — 외국어 고객이면 "외국어 + 한국어" 이중 표시
+    // 목적: 사장님이 톡톡에서 외국어 대화 내용을 한국어로 파악 가능
+    const makeBilingual = (foreignText: string, koreanText: string, lang: string): string => {
+      if (lang === 'ko') return koreanText; // 한국어 고객은 한국어만
+      const flagMap: Record<string, string> = {
+        en: '🇺🇸', ja: '🇯🇵', zh: '🇨🇳', tw: '🇹🇼', th: '🇹🇭', vi: '🇻🇳', mn: '🇲🇳'
+      };
+      const flag = flagMap[lang] || '🌐';
+      return `${foreignText}\n\n━━━━━━━━━━\n🇰🇷 한국어:\n${koreanText}`;
+    };
+
     // 환영 인사말의 번호(1~5)는 AI 없이 직접 처리
     // KV에서 저장된 언어 사용 (이미 위에서 customerLang에 로드됨)
     const menuNumber = userMessage.trim();
@@ -892,7 +1007,11 @@ ${menuData.trim()}`;
         priceResponse = (noMenuTexts[menuLang] || noMenuTexts.ko) + langText.footer;
       }
       
-      await sendTextMessage(env, customerId, priceResponse, storeId);
+      // V3.0.14: 이중언어 — 외국어 고객이면 한국어 원본도 함께 표시
+      const koreanPriceResponse = menuData && menuData.trim()
+        ? (menuTexts.ko.header + menuData.trim() + menuTexts.ko.footer)
+        : `📋 ${storeName} 메뉴/가격\n\n정확한 메뉴와 가격은 상담 후 안내드립니다.\n\n예약하시면 자세한 상담 받으실 수 있어요!` + menuTexts.ko.footer;
+      await sendTextMessage(env, customerId, makeBilingual(priceResponse, koreanPriceResponse, menuLang), storeId);
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
@@ -909,6 +1028,7 @@ ${menuData.trim()}`;
       const businessType = storeResult?.business_type || 'BEAUTY_HAIR';
       
       let styleResponse = '';
+      let koreanStyleResponse = ''; // V3.0.14: 이중언어용
       
       if (businessType === 'BEAUTY_SKIN') {
         // 피부관리샵용 템플릿
@@ -923,6 +1043,7 @@ ${menuData.trim()}`;
           mn: `✨ Арьсны зөвлөгөө\n\nЗөв зөвлөгөө авахын тулд:\n\n📸 Арьсны [зураг] илгээнэ үү\n\n✍️ Эсвэл арьсны [асуудлаа] тайлбарлана уу\n\n━━━━━━━━━━\n20 жилийн туршлагатай мэргэжилтэн\nзөвлөгөө өгнө! 😊`
         };
         styleResponse = skinTemplates[menuLang] || skinTemplates.ko;
+        koreanStyleResponse = skinTemplates.ko;
       } else {
         // 헤어샵용 템플릿 (기본)
         const hairTemplates: Record<string, string> = {
@@ -936,9 +1057,11 @@ ${menuData.trim()}`;
           mn: `💇 Загвар зөвлөгөө\n\nЗөв зөвлөгөө авахын тулд:\n\n📸 Одоогийн үсний [зураг] илгээнэ үү\n\n✍️ Эсвэл хүссэн [загвараа] тайлбарлана уу\n\n━━━━━━━━━━\n15 жилийн туршлагатай мэргэжилтэн\nзөвлөгөө өгнө! 😊`
         };
         styleResponse = hairTemplates[menuLang] || hairTemplates.ko;
+        koreanStyleResponse = hairTemplates.ko;
       }
       
-      await sendTextMessage(env, customerId, styleResponse, storeId);
+      // V3.0.14: 이중언어 
+      await sendTextMessage(env, customerId, makeBilingual(styleResponse, koreanStyleResponse, menuLang), storeId);
       
       const responseTime = Date.now() - startTime;
       const logMessage = businessType === 'BEAUTY_SKIN' ? '[menu-2] 피부 상담 안내' : '[menu-2] 스타일 상담 안내';
@@ -964,7 +1087,8 @@ ${menuData.trim()}`;
         mn: `💬 Захиралд мессеж\n\nБид таны мессежийг шууд дамжуулна!\n\nХолбоо барих болон\nзөвлөгөөний дэлгэрэнгүйг үлдээнэ үү 📝\n\n━━━━━━━━━━\nЖишээ:\n+82-10-1234-5678\nСүвэрхэгийн талаар зөвлөгөө авмаар байна`
       };
       const messageResponse = msgTemplates[menuLang] || msgTemplates.ko;
-      await sendTextMessage(env, customerId, messageResponse, storeId);
+      // V3.0.14: 이중언어
+      await sendTextMessage(env, customerId, makeBilingual(messageResponse, msgTemplates.ko, menuLang), storeId);
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
@@ -989,10 +1113,11 @@ ${menuData.trim()}`;
         mn: { msg: `📅 Боломжтой цаг шалгах\n\nNaver дээр\nцаг шалгана уу!`, select: '🗓️ Огноо, цаг сонгоно уу!', btn1: '📱 Naver захиалга', btn2: '💬 Утасны лавлагаа', noBooking: `📅 Захиалгын мэдээлэл\n\nУтсаар захиалах\n\n📞 ${storePhone}\n\n━━━━━━━━━━\nХолбох уу?` }
       };
       const bt = bookingTemplates[menuLang] || bookingTemplates.ko;
+      const btKo = bookingTemplates.ko; // V3.0.14: 이중언어용
       
       if (naverReservationId) {
         const bookingUrl = getNaverBookingUrl(naverReservationId);
-        await sendTextMessage(env, customerId, bt.msg, storeId);
+        await sendTextMessage(env, customerId, makeBilingual(bt.msg, btKo.msg, menuLang), storeId);
         await sendButtonMessage(env, customerId, bt.select, [
           { type: 'LINK', title: bt.btn1, linkUrl: bookingUrl },
           { type: 'TEXT', title: bt.btn2, value: '전화번호알려주세요' }
@@ -1000,7 +1125,7 @@ ${menuData.trim()}`;
             storeId
           );
       } else {
-        await sendTextMessage(env, customerId, bt.noBooking, storeId);
+        await sendTextMessage(env, customerId, makeBilingual(bt.noBooking, btKo.noBooking, menuLang), storeId);
       }
       
       const responseTime = Date.now() - startTime;
@@ -1026,8 +1151,10 @@ ${menuData.trim()}`;
         mn: { addr: 'Хаяг', phone: 'Утас', hours: 'Ажлын цаг', book: 'Захиалах уу?' }
       };
       const lt = locTemplates[menuLang] || locTemplates.ko;
+      const ltKo = locTemplates.ko; // V3.0.14: 이중언어용
       const locationResponse = `📍 ${storeName}\n\n🏠 ${lt.addr}\n${storeAddress}\n\n📞 ${lt.phone}\n${storePhone}\n\n⏰ ${lt.hours}\n${operatingHours}\n\n━━━━━━━━━━\n${lt.book}`;
-      await sendTextMessage(env, customerId, locationResponse, storeId);
+      const koreanLocationResponse = `📍 ${storeName}\n\n🏠 ${ltKo.addr}\n${storeAddress}\n\n📞 ${ltKo.phone}\n${storePhone}\n\n⏰ ${ltKo.hours}\n${operatingHours}\n\n━━━━━━━━━━\n${ltKo.book}`;
+      await sendTextMessage(env, customerId, makeBilingual(locationResponse, koreanLocationResponse, menuLang), storeId);
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
@@ -1315,6 +1442,9 @@ ${eventsText.trim()}`;
       aiModel = result.model;
       verified = result.verified || false;
       
+      // V3.0.14: 이중언어 후처리 — 외국어 고객이면 한국어 번역 추가
+      aiResponse = await ensureBilingual(env, aiResponse, customerLang);
+      
       // 응답 전송
       await sendTextMessage(env, customerId, aiResponse, storeId);
       
@@ -1397,6 +1527,9 @@ ${eventsText.trim()}`;
           aiResponse = '죄송합니다. 잠시 후 다시 문의해주세요.';
         }
       }
+      
+      // V3.0.14: 이중언어 후처리 — 외국어 고객이면 한국어 번역 추가
+      aiResponse = await ensureBilingual(env, aiResponse, customerLang);
       
       await sendTextMessage(env, customerId, aiResponse, storeId);
     }
@@ -1529,8 +1662,32 @@ webhook.post('/v1/naver/callback', async (c) => {
       return c.json({ success: true, event: 'leave' });
     }
     
-    // [echo] 본인 메시지 에코 - 무시
+    // [echo] 파트너(사장님) 메시지 에코 → 외국어 고객에게 번역 발송
+    // V3.0.14: 범용 핸들러 (storeId 없음 → DB에서 활성 매장 조회)
     if (eventType === 'echo') {
+      const ownerMessage = textContent?.trim();
+      if (ownerMessage && env.KV) {
+        try {
+          // 활성 매장 중 이 고객의 언어 설정이 있는지 확인
+          const stores = await env.DB.prepare(
+            'SELECT id FROM xivix_stores WHERE is_active = 1'
+          ).all<{ id: number }>();
+          for (const s of stores.results || []) {
+            const savedLang = await env.KV.get(`lang:${s.id}:${customerId}`);
+            if (savedLang && savedLang !== 'ko' && ['en', 'ja', 'zh', 'tw', 'th', 'vi', 'mn'].includes(savedLang)) {
+              const translated = await translateWithGemini(env, ownerMessage, savedLang);
+              if (translated) {
+                const flag = LANG_FLAGS[savedLang] || '🌐';
+                await sendTextMessage(env, customerId, `${flag} ${translated}\n\n━━━━━━━━━━\n🇰🇷 원문(Original):\n${ownerMessage}`);
+                console.log(`[V3.0.14] Echo translated (generic): ko → ${savedLang}`);
+              }
+              break;
+            }
+          }
+        } catch (echoErr) {
+          console.warn('[V3.0.14] Echo translation error (generic):', echoErr);
+        }
+      }
       return c.json({ success: true, event: 'echo', ignored: true });
     }
     
@@ -1586,6 +1743,15 @@ webhook.post('/v1/naver/callback', async (c) => {
     // 대화 컨텍스트 조회
     const context = await getConversationContext(env.KV, storeId, customerId);
     
+    // V3.0.14: 범용 핸들러에서도 고객 언어 확인
+    let genericLang = 'ko';
+    if (env.KV) {
+      try {
+        const savedLang = await env.KV.get(`lang:${storeId}:${customerId}`);
+        if (savedLang) genericLang = savedLang;
+      } catch {}
+    }
+    
     // Gemini 메시지 구성
     const messages = buildGeminiMessages(context, userMessage, imageBase64, imageMimeType);
     const systemInstruction = buildSystemInstruction(storeResult ? {
@@ -1598,7 +1764,7 @@ webhook.post('/v1/naver/callback', async (c) => {
       ai_tone: storeResult.ai_tone,
       system_prompt: storeResult.system_prompt,
       greeting_message: storeResult.greeting_message
-    } : undefined, 'ko'); // 기본 경로는 한국어
+    } : undefined, genericLang); // V3.0.14: 고객 언어 전달
     
     // AI 응답 생성 (스트리밍 또는 일반)
     let aiResponse = '';
@@ -1606,6 +1772,8 @@ webhook.post('/v1/naver/callback', async (c) => {
     // 짧은 메시지는 일반 응답, 긴 메시지는 스트리밍
     if (userMessage.length < 20 && !imageBase64) {
       aiResponse = await getGeminiResponse(env, messages, systemInstruction);
+      // V3.0.14: 이중언어 후처리
+      aiResponse = await ensureBilingual(env, aiResponse, genericLang);
       await sendTextMessage(env, customerId, aiResponse, storeId);
     } else {
       // 스트리밍 응답 (청크 단위 전송)

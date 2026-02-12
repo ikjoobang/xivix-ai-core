@@ -95,51 +95,86 @@ export function buildSystemInstruction(store?: {
   system_prompt?: string;
   greeting_message?: string;
 }, language?: string): string {
-  // 다국어 응답 지시 (언어 코드에 따라)
+  // 다국어 응답 지시 (언어 코드에 따라) — V3.0.14 이중언어 시스템
+  // 외국어 응답 + 한국어 번역을 함께 출력 (사장님이 톡톡에서 내용 확인 가능)
   const languageInstructions: Record<string, string> = {
     ko: '', // 한국어는 기본값이므로 추가 지시 불필요
-    en: `\n\n## 🌐 CRITICAL: RESPOND IN ENGLISH ONLY
-- You MUST respond in English for this customer
-- Translate all Korean content to English
-- Keep prices in Korean Won (원) format
-- Menu names can remain in Korean with English translation in parentheses
-- Example: "커트 (Haircut) - 18,000원"`,
-    ja: `\n\n## 🌐 重要: 日本語で回答してください
-- このお客様には必ず日本語で回答してください
-- 韓国語の内容はすべて日本語に翻訳してください
-- 価格は韓国ウォン(원)のままで大丈夫です
-- メニュー名は韓国語のまま、括弧内に日本語訳を追加
-- 例: "커트 (カット) - 18,000원"`,
-    zh: `\n\n## 🌐 重要: 请用中文回复
-- 您必须用中文回复此客户
-- 将所有韩语内容翻译成中文
-- 价格保持韩元(원)格式
-- 菜单名称可保留韩语，括号内添加中文翻译
-- 例如: "커트 (剪发) - 18,000원"`,
-    tw: `\n\n## 🌐 重要: 請用繁體中文回覆
-- 您必須用繁體中文回覆此客戶
-- 將所有韓語內容翻譯成繁體中文
-- 價格保持韓元(원)格式
-- 菜單名稱可保留韓語，括號內添加中文翻譯
-- 例如: "커트 (剪髮) - 18,000원"`,
-    th: `\n\n## 🌐 สำคัญ: ตอบเป็นภาษาไทย
-- คุณต้องตอบลูกค้าเป็นภาษาไทย
-- แปลเนื้อหาภาษาเกาหลีทั้งหมดเป็นภาษาไทย
-- ราคาเก็บเป็นวอนเกาหลี (원)
-- ชื่อเมนูสามารถเก็บเป็นภาษาเกาหลี พร้อมคำแปลในวงเล็บ
-- ตัวอย่าง: "커트 (ตัดผม) - 18,000원"`,
-    vi: `\n\n## 🌐 QUAN TRỌNG: TRẢ LỜI BẰNG TIẾNG VIỆT
-- Bạn PHẢI trả lời khách hàng bằng tiếng Việt
-- Dịch tất cả nội dung tiếng Hàn sang tiếng Việt
-- Giữ nguyên giá bằng Won Hàn Quốc (원)
-- Tên món có thể giữ tiếng Hàn, thêm bản dịch trong ngoặc
-- Ví dụ: "커트 (Cắt tóc) - 18,000원"`,
-    mn: `\n\n## 🌐 ЧУХАЛ: МОНГОЛ ХЭЛЭЭР ХАРИУЛНА УУ
-- Та энэ үйлчлүүлэгчид заавал монгол хэлээр хариулах ёстой
-- Бүх солонгос агуулгыг монгол хэл рүү орчуулна уу
-- Үнийг Солонгос вон (원) хэлбэрээр хадгална уу
-- Цэсний нэрийг солонгос хэлээр үлдээж, хаалтанд монгол орчуулга нэмнэ
-- Жишээ: "커트 (Үс засалт) - 18,000원"`
+    en: `\n\n## 🌐 CRITICAL: BILINGUAL RESPONSE (English + Korean)
+You MUST respond in BOTH English AND Korean in every message.
+FORMAT (strictly follow this):
+[English response here]
+
+━━━━━━━━━━
+🇰🇷 한국어 번역:
+[Korean translation here]
+
+RULES:
+- English section FIRST (for the customer)
+- Korean translation AFTER the separator (for the store owner to read)
+- Keep prices in Korean Won (원)
+- Menu: "커트 (Haircut) - 18,000원"
+- Both sections must contain the SAME information`,
+    ja: `\n\n## 🌐 重要: 二言語応答 (日本語 + 韓国語)
+すべてのメッセージで日本語と韓国語の両方で回答してください。
+形式 (必ずこの形式に従ってください):
+[日本語の回答]
+
+━━━━━━━━━━
+🇰🇷 한국어 번역:
+[韓国語翻訳]
+
+ルール:
+- 日本語セクションを最初に (お客様向け)
+- 区切り線の後に韓国語翻訳 (店長が読むため)
+- 価格は韓国ウォン(원)のまま
+- メニュー: "커트 (カット) - 18,000원"
+- 両方のセクションに同じ情報を含める`,
+    zh: `\n\n## 🌐 重要: 双语回复 (中文 + 韩语)
+每条消息必须同时用中文和韩语回复。
+格式 (严格遵守):
+[中文回复]
+
+━━━━━━━━━━
+🇰🇷 한국어 번역:
+[韩语翻译]
+
+规则:
+- 中文部分在前 (给顾客看)
+- 分隔线后韩语翻译 (给店长看)
+- 价格保持韩元(원)
+- 两部分包含相同信息`,
+    tw: `\n\n## 🌐 重要: 雙語回覆 (繁體中文 + 韓語)
+每條訊息必須同時用繁體中文和韓語回覆。
+格式:
+[繁體中文回覆]
+
+━━━━━━━━━━
+🇰🇷 한국어 번역:
+[韓語翻譯]`,
+    th: `\n\n## 🌐 สำคัญ: ตอบสองภาษา (ไทย + เกาหลี)
+ทุกข้อความต้องตอบทั้งภาษาไทยและเกาหลี
+รูปแบบ:
+[คำตอบภาษาไทย]
+
+━━━━━━━━━━
+🇰🇷 한국어 번역:
+[คำแปลภาษาเกาหลี]`,
+    vi: `\n\n## 🌐 QUAN TRỌNG: TRẢ LỜI HAI NGÔN NGỮ (Tiếng Việt + Tiếng Hàn)
+Mọi tin nhắn phải trả lời bằng cả tiếng Việt và tiếng Hàn.
+Định dạng:
+[Câu trả lời tiếng Việt]
+
+━━━━━━━━━━
+🇰🇷 한국어 번역:
+[Bản dịch tiếng Hàn]`,
+    mn: `\n\n## 🌐 ЧУХАЛ: ХОЁР ХЭЛЭЭР ХАРИУЛНА (Монгол + Солонгос)
+Бүх мессежийг монгол болон солонгос хэлээр хариулна уу.
+Формат:
+[Монгол хэлээр хариулт]
+
+━━━━━━━━━━
+🇰🇷 한국어 번역:
+[Солонгос орчуулга]`
   };
   
   const langInstruction = language && language !== 'ko' ? (languageInstructions[language] || languageInstructions.en) : '';
