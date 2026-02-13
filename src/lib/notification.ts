@@ -104,7 +104,7 @@ async function sendSMS(
           from: normalizedFrom,
           text: text,
           type: messageType,  // 90바이트 초과 시 LMS 자동 전환
-          ...(messageType === 'LMS' && { subject: '[XIVIX AI]' })
+          ...(messageType === 'LMS' && { subject: '[네이버톡톡]' })
         }
       })
     });
@@ -170,7 +170,7 @@ async function sendLMS(
           to: normalizedTo,
           from: normalizedFrom,
           text: text,
-          subject: subject || 'XIVIX AI 알림',
+          subject: subject || '[네이버톡톡]',
           type: 'LMS'
         }
       })

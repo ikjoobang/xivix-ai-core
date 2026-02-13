@@ -570,7 +570,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         const customerPhone = customerPhoneMatch[0].replace(/[-\s]/g, '-');
         
         // SMS 내용 구성
-        const smsText = `[${storeName}] 고객 콜백 요청\n\n📞 고객 연락처: ${customerPhone}\n💬 메시지: ${originalMessage.slice(0, 40)}${originalMessage.length > 40 ? '...' : ''}\n\n⏰ ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`;
+        const smsText = `[네이버톡톡] ${storeName} 고객메세지\n\n📞 고객 연락처: ${customerPhone}\n💬 메시지: ${originalMessage.slice(0, 60)}\n\n⏰ ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`;
         
         try {
           // 1. 원장님께 SMS 전송
@@ -677,11 +677,20 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       // 전화번호를 제외한 메시지 내용 추출
       const messageContent = originalMessage.replace(flexiblePhonePattern, '').trim();
       
-      // SMS 내용 구성
-      const smsText = `[${storeName2}] 고객 상담 요청\n\n` +
+      // ★ 이전 대화에서 고객 요청사항 추출 (전달사항)
+      const contextMessages = Array.isArray(context?.messages) ? context.messages : [];
+      const recentUserMessages = contextMessages
+        .filter((c: {role: string; content: string}) => c.role === 'user')
+        .slice(-3)
+        .map((c: {role: string; content: string}) => c.content)
+        .join(' / ');
+      
+      // SMS 내용 구성 - 전달사항 포함
+      const smsText = `[네이버톡톡] ${storeName2} 고객메세지\n\n` +
         `📞 연락처: ${customerPhone}\n` +
-        `💬 내용: ${messageContent || '상담 요청'}\n\n` +
-        `⏰ ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`;
+        `👤 내용: ${messageContent || '상담 요청'}\n` +
+        (recentUserMessages ? `💬 전달사항: ${recentUserMessages.slice(0, 60)}\n` : '') +
+        `\n⏰ ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`;
       
       try {
         // 원장님께 SMS 전송
@@ -1717,6 +1726,33 @@ ${eventsText.trim()}`;
       aiResponse = await ensureBilingual(env, aiResponse, customerLang);
       
       await sendSmartMessage(env, customerId, aiResponse, storeId);
+      
+      // ★ V3.0.16: AI 응답에 상담 연결 키워드 → 전화/카톡 클릭 버튼 자동 추가
+      const contactKeywords = /상담.*연결|직접.*상담|예약.*도와|연락.*드리|전화.*버튼|카톡.*버튼|버튼.*눌러|바로.*연결/;
+      if (contactKeywords.test(aiResponse || '')) {
+        const contactOwnerPhone = storeResult?.owner_phone || storeResult?.phone;
+        const kakaoMatch = storeResult?.system_prompt?.match(/https:\/\/open\.kakao\.com\/[^\s"\\]+/);
+        const kakaoUrl = kakaoMatch ? kakaoMatch[0] : null;
+        
+        const contactButtons: any[] = [];
+        if (contactOwnerPhone) {
+          const cleanPhone = contactOwnerPhone.replace(/[-\s]/g, '');
+          contactButtons.push({ 
+            type: 'LINK', 
+            data: { title: '📞 전화 상담', url: `tel:${cleanPhone}`, mobileUrl: `tel:${cleanPhone}` }
+          });
+        }
+        if (kakaoUrl) {
+          contactButtons.push({ 
+            type: 'LINK', 
+            data: { title: '💬 카카오톡 상담', url: kakaoUrl, mobileUrl: kakaoUrl }
+          });
+        }
+        
+        if (contactButtons.length > 0) {
+          await sendButtonMessage(env, customerId, '바로 연결하실 수 있어요! 😊', contactButtons, storeId);
+        }
+      }
     }
     
     // 대화 컨텍스트 저장
