@@ -1635,7 +1635,11 @@ ${eventsText.trim()}`;
     else {
       // 매장에서 설정한 AI 모델 사용 (gpt-4o, gemini-pro, gemini)
       const selectedModel = storeResult?.ai_model || 'gemini';
-      console.log(`[Webhook] Using ${selectedModel} for simple consultation (store setting)`);
+      const storeAiOptions = {
+        temperature: (storeResult?.ai_temperature as number) || 0.7,
+        maxTokens: (storeResult?.max_tokens as number) || 800
+      };
+      console.log(`[Webhook] Using ${selectedModel} for simple consultation (store setting), temp=${storeAiOptions.temperature}, maxTokens=${storeAiOptions.maxTokens}`);
       aiModel = selectedModel;
       
       // Gemini 메시지 구성
@@ -1659,7 +1663,7 @@ ${eventsText.trim()}`;
         const openAIApiKey = env.OPENAI_API_KEY;
         if (!openAIApiKey) {
           console.warn('[Webhook] OpenAI API key not set, falling back to Gemini');
-          aiResponse = await getGeminiResponse(env, messages, systemInstruction, 'gemini');
+          aiResponse = await getGeminiResponse(env, messages, systemInstruction, 'gemini', storeAiOptions);
         } else {
           // 다국어 지시 (GPT-4o용)
           const gptLangInstructions: Record<string, string> = {
@@ -1688,22 +1692,22 @@ ${eventsText.trim()}`;
           const conversationHistory = Array.isArray(context?.messages) ? context.messages : [];
           const openAIMessages = buildOpenAIMessages(openAISystemPrompt, conversationHistory, userMessage);
           try {
-            aiResponse = await getOpenAIResponse(openAIApiKey, openAIMessages) || '응답을 생성할 수 없습니다.';
+            aiResponse = await getOpenAIResponse(openAIApiKey, openAIMessages, { temperature: storeAiOptions.temperature, maxTokens: storeAiOptions.maxTokens }) || '응답을 생성할 수 없습니다.';
           } catch (gptError: any) {
             console.error('[Webhook] GPT-4o error, falling back to Gemini:', gptError.message);
-            aiResponse = await getGeminiResponse(env, messages, systemInstruction, 'gemini');
+            aiResponse = await getGeminiResponse(env, messages, systemInstruction, 'gemini', storeAiOptions);
             aiModel = 'gemini-flash (fallback)';
           }
         }
       } else {
         // Gemini 모델 사용 (gemini-pro 또는 gemini/gemini-flash)
-        aiResponse = await getGeminiResponse(env, messages, systemInstruction, selectedModel);
+        aiResponse = await getGeminiResponse(env, messages, systemInstruction, selectedModel, storeAiOptions);
       }
       
       // AI 응답이 null이면 재시도 또는 기본 응답
       if (!aiResponse) {
         console.error('[Webhook] AI response is null, retrying...');
-        aiResponse = await getGeminiResponse(env, messages, systemInstruction, 'gemini-2.5-flash');
+        aiResponse = await getGeminiResponse(env, messages, systemInstruction, 'gemini-2.5-flash', storeAiOptions);
         if (!aiResponse) {
           aiResponse = '죄송합니다. 잠시 후 다시 문의해주세요.';
         }

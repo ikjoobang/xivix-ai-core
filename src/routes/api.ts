@@ -5795,6 +5795,7 @@ api.put('/stores/:id/settings', async (c) => {
         personal_youtube = COALESCE(?, personal_youtube),
         ai_temperature = COALESCE(?, ai_temperature),
         forbidden_keywords = COALESCE(?, forbidden_keywords),
+        max_tokens = COALESCE(?, max_tokens),
         updated_at = datetime('now')
       WHERE id = ?
     `).bind(
@@ -5825,6 +5826,7 @@ api.put('/stores/:id/settings', async (c) => {
       nullIfEmpty(settings.personal_youtube),
       settings.temperature !== undefined ? settings.temperature : null,
       nullIfEmpty(settings.forbidden_keywords),
+      settings.max_tokens !== undefined ? settings.max_tokens : null,
       id
     ).run();
 

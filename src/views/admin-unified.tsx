@@ -433,9 +433,9 @@ export function renderUnifiedAdmin(storeId: number): string {
       document.getElementById('naver-reservation-id').value = store.naver_reservation_id || '';
       document.getElementById('greeting-message').value = store.greeting_message || '';
       document.getElementById('forbidden-keywords').value = store.forbidden_keywords || '';
-      document.getElementById('temperature').value = store.temperature || 0.7;
-      document.getElementById('temp-value').textContent = store.temperature || 0.7;
-      document.getElementById('max-tokens').value = store.max_tokens || 1024;
+      document.getElementById('temperature').value = store.ai_temperature || 0.7;
+      document.getElementById('temp-value').textContent = store.ai_temperature || 0.7;
+      document.getElementById('max-tokens').value = store.max_tokens || 800;
       
       // 봇 상태
       const isActive = store.is_active === 1 || store.is_active === true;
@@ -443,7 +443,7 @@ export function renderUnifiedAdmin(storeId: number): string {
       document.getElementById('bot-status').className = 'status-dot ' + (isActive ? 'status-active' : 'status-paused');
       
       // AI 모델
-      selectModel(store.ai_model || 'gpt-4o');
+      selectModel(store.ai_model || 'gemini-2.5-flash');
       
       // 톡톡 토큰 로드
       loadNaverToken();

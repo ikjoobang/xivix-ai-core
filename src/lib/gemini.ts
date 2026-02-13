@@ -347,7 +347,8 @@ export async function* streamGeminiResponse(
   env: Env,
   messages: GeminiMessage[],
   systemInstruction: string,
-  modelOverride?: string  // 매장별 모델 설정 지원
+  modelOverride?: string,  // 매장별 모델 설정 지원
+  options?: { temperature?: number; maxTokens?: number }  // 매장별 생성 설정
 ): AsyncGenerator<string, void, unknown> {
   const apiKey = env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -357,7 +358,7 @@ export async function* streamGeminiResponse(
   
   const modelSetting = modelOverride || env.AI_MODEL || 'gemini-2.5-flash';
   const model = getGeminiModelId(modelSetting);
-  console.log(`[Gemini] Using model: ${model} (setting: ${modelSetting})`);
+  console.log(`[Gemini] Using model: ${model} (setting: ${modelSetting}), temp: ${options?.temperature ?? 0.7}, maxTokens: ${options?.maxTokens ?? 800}`);
   const url = `${GEMINI_API_BASE}/${model}:streamGenerateContent?key=${apiKey}&alt=sse`;
   
   const request: GeminiRequest = {
@@ -366,10 +367,10 @@ export async function* streamGeminiResponse(
       parts: [{ text: systemInstruction }]
     },
     generationConfig: {
-      temperature: 0.7,
+      temperature: options?.temperature ?? 0.7,
       topP: 0.9,
       topK: 40,
-      maxOutputTokens: 4096
+      maxOutputTokens: options?.maxTokens ?? 800
     },
     // Google Search grounding — 실시간 정보 질문 시 자동 검색
     tools: [{
@@ -438,7 +439,8 @@ export async function getGeminiResponse(
   env: Env,
   messages: GeminiMessage[],
   systemInstruction: string,
-  modelOverride?: string  // 매장별 모델 설정 지원
+  modelOverride?: string,  // 매장별 모델 설정 지원
+  options?: { temperature?: number; maxTokens?: number }  // 매장별 생성 설정
 ): Promise<string | null> {
   const apiKey = env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -447,7 +449,7 @@ export async function getGeminiResponse(
   
   const modelSetting = modelOverride || env.AI_MODEL || 'gemini-2.5-flash';
   const model = getGeminiModelId(modelSetting);
-  console.log(`[Gemini] Using model: ${model} (setting: ${modelSetting})`);
+  console.log(`[Gemini] Using model: ${model} (setting: ${modelSetting}), temp: ${options?.temperature ?? 0.7}, maxTokens: ${options?.maxTokens ?? 800}`);
   const url = `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`;
   
   const request: GeminiRequest = {
@@ -456,10 +458,10 @@ export async function getGeminiResponse(
       parts: [{ text: systemInstruction }]
     },
     generationConfig: {
-      temperature: 0.7,
+      temperature: options?.temperature ?? 0.7,
       topP: 0.9,
       topK: 40,
-      maxOutputTokens: 4096
+      maxOutputTokens: options?.maxTokens ?? 800
     },
     tools: [{
       googleSearch: {}
