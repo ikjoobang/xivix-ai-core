@@ -753,6 +753,10 @@ export function renderSuperMasterDashboard(): string {
                       <i class="fas fa-magic"></i>
                       원클릭 AI 셋팅
                     </button>
+                    <a href="/admin/\${store.id}" class="btn-action px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2" style="background:rgba(99,102,241,0.8);color:#fff;text-decoration:none;">
+                      <i class="fas fa-cog"></i>
+                      수동 셋팅
+                    </a>
                     <button onclick="deleteStore(\${store.id}, '\${store.store_name}')" class="btn-action w-10 h-10 glass rounded-xl flex items-center justify-center hover:bg-red-500/20 hover:border-red-500/30 text-white/40 hover:text-red-400" title="삭제">
                       <i class="fas fa-trash-alt"></i>
                     </button>
@@ -950,7 +954,11 @@ export function renderSuperMasterDashboard(): string {
             loadStats();
           }, 1500);
         } else {
-          alert('셋팅 실패: ' + (data.error || '알 수 없는 오류'));
+          const goManual = confirm('셋팅 실패: ' + (data.error || '알 수 없는 오류') + '\\n\\n수동 셋팅 페이지로 이동하시겠습니까?');
+          if (goManual) {
+            window.location.href = '/admin/' + storeId;
+            return;
+          }
           if (btn) {
             btn.innerHTML = '<i class="fas fa-magic"></i> 원클릭 AI 셋팅';
             btn.disabled = false;
@@ -958,7 +966,11 @@ export function renderSuperMasterDashboard(): string {
         }
       } catch (e) {
         console.error('Quick setup error:', e);
-        alert('네트워크 오류: ' + e.message);
+        const goManual = confirm('네트워크 오류: ' + e.message + '\\n\\n수동 셋팅 페이지로 이동하시겠습니까?');
+        if (goManual) {
+          window.location.href = '/admin/' + storeId;
+          return;
+        }
         if (btn) {
           btn.innerHTML = '<i class="fas fa-magic"></i> 원클릭 AI 셋팅';
           btn.disabled = false;
