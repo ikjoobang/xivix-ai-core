@@ -1728,24 +1728,26 @@ ${eventsText.trim()}`;
       await sendSmartMessage(env, customerId, aiResponse, storeId);
       
       // ★ V3.0.16: AI 응답에 상담 연결 키워드 → 전화/카톡 클릭 버튼 자동 추가
-      const contactKeywords = /상담.*연결|직접.*상담|예약.*도와|연락.*드리|전화.*버튼|카톡.*버튼|버튼.*눌러|바로.*연결/;
+      const contactKeywords = /상담.*연결|직접.*상담|예약.*도와|연락.*드리|전화.*버튼|카톡.*버튼|버튼.*눌러|바로.*연결|상담.*받아보|메모.*남겨|연결.*드릴까|상담을.*시작/;
       if (contactKeywords.test(aiResponse || '')) {
         const contactOwnerPhone = storeResult?.owner_phone || storeResult?.phone;
         const kakaoMatch = storeResult?.system_prompt?.match(/https:\/\/open\.kakao\.com\/[^\s"\\]+/);
         const kakaoUrl = kakaoMatch ? kakaoMatch[0] : null;
         
-        const contactButtons: any[] = [];
+        const contactButtons: ButtonOption[] = [];
         if (contactOwnerPhone) {
           const cleanPhone = contactOwnerPhone.replace(/[-\s]/g, '');
           contactButtons.push({ 
-            type: 'LINK', 
-            data: { title: '📞 전화 상담', url: `tel:${cleanPhone}`, mobileUrl: `tel:${cleanPhone}` }
+            type: 'LINK' as const, 
+            title: '📞 전화 상담', 
+            linkUrl: `tel:${cleanPhone}`
           });
         }
         if (kakaoUrl) {
           contactButtons.push({ 
-            type: 'LINK', 
-            data: { title: '💬 카카오톡 상담', url: kakaoUrl, mobileUrl: kakaoUrl }
+            type: 'LINK' as const, 
+            title: '💬 카카오톡 상담', 
+            linkUrl: kakaoUrl
           });
         }
         
