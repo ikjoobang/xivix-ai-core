@@ -5755,6 +5755,7 @@ api.put('/stores/:id/settings', async (c) => {
       personal_instagram?: string;
       personal_blog?: string;
       personal_youtube?: string;
+      forbidden_keywords?: string;
     };
 
     // 빈 문자열을 null로 변환하는 헬퍼 함수 (COALESCE가 기존 값 유지하도록)
@@ -5792,6 +5793,8 @@ api.put('/stores/:id/settings', async (c) => {
         personal_instagram = COALESCE(?, personal_instagram),
         personal_blog = COALESCE(?, personal_blog),
         personal_youtube = COALESCE(?, personal_youtube),
+        ai_temperature = COALESCE(?, ai_temperature),
+        forbidden_keywords = COALESCE(?, forbidden_keywords),
         updated_at = datetime('now')
       WHERE id = ?
     `).bind(
@@ -5820,6 +5823,8 @@ api.put('/stores/:id/settings', async (c) => {
       nullIfEmpty(settings.personal_instagram),
       nullIfEmpty(settings.personal_blog),
       nullIfEmpty(settings.personal_youtube),
+      settings.temperature !== undefined ? settings.temperature : null,
+      nullIfEmpty(settings.forbidden_keywords),
       id
     ).run();
 
