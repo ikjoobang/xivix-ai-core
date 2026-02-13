@@ -377,15 +377,15 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       // 8개국어 안내 메시지 (환영 인사 바로 다음 - 요금제에 따라 표시)
       const openPlan = (storeResult?.plan || 'light') as PlanType;
       if (canUseFeature(openPlan, 'multiLanguage')) {
-        const languageMsg = `🌐 다른 언어가 필요하신가요?\n` +
-        `Need another language?\n\n` +
-        `🇺🇸 English → "EN"\n` +
-        `🇯🇵 日本語 → "JP"\n` +
-        `🇨🇳 简体中文 → "CN"\n` +
-        `🇹🇼 繁體中文 → "TW"\n` +
-        `🇹🇭 ภาษาไทย → "TH"\n` +
-        `🇻🇳 Tiếng Việt → "VN"\n` +
-        `🇲🇳 Монгол → "MN"`;
+        const languageMsg = `🌐 Need another language?\n\n` +
+        `EN  English\n` +
+        `JP  日本語\n` +
+        `CN  简体中文\n` +
+        `TW  繁體中文\n` +
+        `TH  ภาษาไทย\n` +
+        `VN  Tiếng Việt\n` +
+        `MN  Монгол\n\n` +
+        `위 코드를 입력해주세요 ✍️`;
       const langResult = await sendTextMessage(env, customerId, languageMsg, storeId);
       console.log(`[Webhook] Language message result:`, JSON.stringify(langResult));
       } // end multiLanguage check
