@@ -438,9 +438,9 @@ export function renderSuperMasterDashboard(): string {
 
   <!-- 업종 선택 모달 (원클릭 셋팅 전) -->
   <div id="industry-modal" class="fixed inset-0 bg-black/80 z-50 hidden items-center justify-center">
-    <div class="glass rounded-2xl w-full max-w-lg mx-4 p-6">
+    <div class="glass rounded-2xl w-full max-w-lg mx-4 p-6" style="background:rgba(20,20,30,0.97);color:#fff;">
       <div class="flex items-center justify-between mb-6">
-        <h3 class="text-xl font-bold">
+        <h3 class="text-xl font-bold" style="color:#fff;">
           <i class="fas fa-store gold mr-2"></i>
           업종을 선택해주세요
         </h3>
@@ -452,7 +452,7 @@ export function renderSuperMasterDashboard(): string {
       <p class="text-white/60 text-sm mb-4">선택한 업종에 맞는 AI 템플릿이 자동 적용됩니다.</p>
       
       <div class="grid grid-cols-2 gap-3" id="industry-grid">
-        <button onclick="selectIndustry('BEAUTY_HAIR')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+        <button onclick="selectIndustry('BEAUTY_HAIR')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" style="color:#fff;">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-pink-500/20 flex items-center justify-center">
               <i class="fas fa-cut text-pink-400"></i>
@@ -464,7 +464,7 @@ export function renderSuperMasterDashboard(): string {
           </div>
         </button>
         
-        <button onclick="selectIndustry('BEAUTY_SKIN')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+        <button onclick="selectIndustry('BEAUTY_SKIN')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" style="color:#fff;">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
               <i class="fas fa-spa text-purple-400"></i>
@@ -476,7 +476,7 @@ export function renderSuperMasterDashboard(): string {
           </div>
         </button>
         
-        <button onclick="selectIndustry('BEAUTY_NAIL')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+        <button onclick="selectIndustry('BEAUTY_NAIL')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" style="color:#fff;">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
               <i class="fas fa-hand-sparkles text-red-400"></i>
@@ -488,7 +488,7 @@ export function renderSuperMasterDashboard(): string {
           </div>
         </button>
         
-        <button onclick="selectIndustry('MEDICAL')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+        <button onclick="selectIndustry('MEDICAL')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" style="color:#fff;">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
               <i class="fas fa-hospital text-blue-400"></i>
@@ -500,7 +500,7 @@ export function renderSuperMasterDashboard(): string {
           </div>
         </button>
         
-        <button onclick="selectIndustry('RESTAURANT')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+        <button onclick="selectIndustry('RESTAURANT')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" style="color:#fff;">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center">
               <i class="fas fa-utensils text-orange-400"></i>
@@ -512,7 +512,7 @@ export function renderSuperMasterDashboard(): string {
           </div>
         </button>
         
-        <button onclick="selectIndustry('FITNESS')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+        <button onclick="selectIndustry('FITNESS')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" style="color:#fff;">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-lime-500/20 flex items-center justify-center">
               <i class="fas fa-dumbbell text-lime-400"></i>
@@ -524,7 +524,7 @@ export function renderSuperMasterDashboard(): string {
           </div>
         </button>
         
-        <button onclick="selectIndustry('INSURANCE')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+        <button onclick="selectIndustry('INSURANCE')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" style="color:#fff;">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
               <i class="fas fa-shield-alt text-green-400"></i>
@@ -536,7 +536,7 @@ export function renderSuperMasterDashboard(): string {
           </div>
         </button>
         
-        <button onclick="selectIndustry('MEDICAL')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+        <button onclick="selectIndustry('MEDICAL')" class="industry-option p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" style="color:#fff;">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
               <i class="fas fa-hospital text-blue-400"></i>
@@ -556,7 +556,7 @@ export function renderSuperMasterDashboard(): string {
           프리랜서 · 개인사업자
         </p>
         <div class="grid grid-cols-2 gap-3">
-          <button onclick="selectIndustry('FREELANCER_BLOG')" class="industry-option p-4 glass rounded-xl text-left hover:border-purple-500/50 transition-all border-purple-500/20">
+          <button onclick="selectIndustry('FREELANCER_BLOG')" class="industry-option p-4 glass rounded-xl text-left hover:border-purple-500/50 transition-all border-purple-500/20" style="color:#fff;">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
                 <i class="fas fa-blog text-emerald-400"></i>
@@ -568,7 +568,7 @@ export function renderSuperMasterDashboard(): string {
             </div>
           </button>
           
-          <button onclick="selectIndustry('FREELANCER_DESIGN')" class="industry-option p-4 glass rounded-xl text-left hover:border-purple-500/50 transition-all border-purple-500/20">
+          <button onclick="selectIndustry('FREELANCER_DESIGN')" class="industry-option p-4 glass rounded-xl text-left hover:border-purple-500/50 transition-all border-purple-500/20" style="color:#fff;">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-xl bg-pink-500/20 flex items-center justify-center">
                 <i class="fas fa-palette text-pink-400"></i>
@@ -580,7 +580,7 @@ export function renderSuperMasterDashboard(): string {
             </div>
           </button>
           
-          <button onclick="selectIndustry('FREELANCER_IT')" class="industry-option p-4 glass rounded-xl text-left hover:border-purple-500/50 transition-all border-purple-500/20">
+          <button onclick="selectIndustry('FREELANCER_IT')" class="industry-option p-4 glass rounded-xl text-left hover:border-purple-500/50 transition-all border-purple-500/20" style="color:#fff;">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
                 <i class="fas fa-laptop-code text-cyan-400"></i>
@@ -592,7 +592,7 @@ export function renderSuperMasterDashboard(): string {
             </div>
           </button>
           
-          <button onclick="selectIndustry('FREELANCER_TUTOR')" class="industry-option p-4 glass rounded-xl text-left hover:border-purple-500/50 transition-all border-purple-500/20">
+          <button onclick="selectIndustry('FREELANCER_TUTOR')" class="industry-option p-4 glass rounded-xl text-left hover:border-purple-500/50 transition-all border-purple-500/20" style="color:#fff;">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
                 <i class="fas fa-chalkboard-teacher text-amber-400"></i>
@@ -608,7 +608,7 @@ export function renderSuperMasterDashboard(): string {
       
       <!-- 기타 -->
       <div class="mt-3">
-        <button onclick="selectIndustry('CUSTOM_SECTOR')" class="industry-option w-full p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all">
+        <button onclick="selectIndustry('CUSTOM_SECTOR')" class="industry-option w-full p-4 glass rounded-xl text-left hover:border-yellow-500/50 transition-all" style="color:#fff;">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-gray-500/20 flex items-center justify-center">
               <i class="fas fa-cog text-gray-400"></i>
