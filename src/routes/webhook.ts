@@ -551,10 +551,12 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     console.log(`[Webhook] Consultation type: ${consultationType}, Business: ${businessType}`);
     
     // ============ [전화 문의 처리] ============
+    // ★ V3.0.19: 커스텀 프롬프트가 있는 매장은 AI가 처리 (전화번호 텍스트 노출 방지)
+    const hasCustomPrompt = storeResult?.system_prompt && storeResult.system_prompt.trim().length > 100;
     const phoneInquiryPatterns = /전화.*문의|전화번호|연락처|전화.*알려|전화.*뭐예요|전화.*뭔가요/;
-    if (phoneInquiryPatterns.test(userMessage)) {
+    if (phoneInquiryPatterns.test(userMessage) && !hasCustomPrompt) {
       const storeName = storeResult?.store_name || '매장';
-      const storePhone = storeResult?.phone || '031-235-5726';
+      const storePhone = storeResult?.phone || '';
       const storeAddress = storeResult?.address || '';
       
       await sendTextMessage(env, customerId, 
@@ -584,7 +586,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     // 원본 메시지로 패턴 매칭 (마스킹 전 전화번호 추출 필요)
     if (callbackRequestPatterns.test(originalMessage)) {
       const storeName = storeResult?.store_name || '매장';
-      const storePhone = storeResult?.phone || '031-235-5726'; // 매장 전화번호 (고객 안내용)
+      const storePhone = storeResult?.phone || ''; // 매장 전화번호 (고객 안내용)
       const ownerPhone = storeResult?.owner_phone || storePhone; // 원장님 휴대폰 (SMS 발송용)
       
       // 추가 관리자 연락처 파싱 (JSON 배열 형식: [{"name":"디자이너A","phone":"010-1234-5678"},...]
@@ -705,7 +707,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     
     if (phoneMatch) {
       const storeName2 = storeResult?.store_name || '매장';
-      const storePhone2 = storeResult?.phone || '031-235-5726';
+      const storePhone2 = storeResult?.phone || '';
       const ownerPhone = storeResult?.owner_phone || storePhone2;
       const customerPhone = phoneMatch[0].replace(/[\s\-]/g, '').replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
       
@@ -784,7 +786,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     const phoneOnlyPattern = /^(?:010|011|016|017|018|019)[-\s]?\d{3,4}[-\s]?\d{4}$/;
     if (phoneOnlyPattern.test(originalMessage.trim())) {
       const storeName = storeResult?.store_name || '매장';
-      const storePhone = storeResult?.phone || '031-235-5726'; // 매장 전화번호 (고객 안내용)
+      const storePhone = storeResult?.phone || ''; // 매장 전화번호 (고객 안내용)
       const ownerPhone = storeResult?.owner_phone || storePhone; // 원장님 휴대폰 (SMS 발송용)
       const customerPhone = originalMessage.trim().replace(/[-\s]/g, '-');
       
@@ -2078,9 +2080,9 @@ webhook.post('/v1/naver/callback', async (c) => {
       }
     }
     
-    // 예약 유도 메시지 (특정 키워드 감지)
-    const needsReservation = /예약|방문|언제|시간|가격/.test(userMessage);
-    if (needsReservation && storeResult) {
+    // 예약 유도 메시지 (특정 키워드 감지) — ★ V3.0.19: 네이버 예약 ID가 있는 매장만
+    const needsReservation = /예약|방문/.test(userMessage);
+    if (needsReservation && storeResult && storeResult.naver_reservation_id && !hasCustomPrompt) {
       await sendButtonMessage(env, customerId, 
         '바로 예약하시겠어요?',
         [
