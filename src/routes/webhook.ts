@@ -230,6 +230,41 @@ async function sendSmartMessage(
   }
 }
 
+// ★ V3.0.19: 모바일 가독성 후처리 — AI 응답에 줄바꿈 강제 삽입
+function formatForMobile(text: string): string {
+  if (!text || text.length < 50) return text;
+  
+  // 이미 충분한 줄바꿈이 있으면 패스
+  const lines = text.split('\n').filter(l => l.trim());
+  const avgLineLen = text.replace(/\n/g, '').length / Math.max(lines.length, 1);
+  if (avgLineLen < 60 && lines.length >= 3) return text; // 이미 잘 나뉨
+  
+  // 1단계: 마크다운 리스트(*, -, •) 앞에 줄바꿈 보장
+  let result = text.replace(/([^\n])([\*\-•])\s/g, '$1\n$2 ');
+  
+  // 2단계: 이모지 포인트(🎯💰📊 등) 앞에 줄바꿈
+  result = result.replace(/([^\n])([\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}])/gu, (match, before, emoji) => {
+    if (before === ' ' || before === '\n') return match;
+    return before + '\n\n' + emoji;
+  });
+  
+  // 3단계: 한국어 문장 종결 뒤 3문장 이상 붙어있으면 줄바꿈 삽입
+  // 패턴: ~다. / ~요. / ~요! / ~세요. / ~까요? 등
+  let sentenceCount = 0;
+  result = result.replace(/([\.\!\?])\s+/g, (match, punct) => {
+    sentenceCount++;
+    if (sentenceCount % 2 === 0 && !match.includes('\n')) {
+      return punct + '\n\n';
+    }
+    return match;
+  });
+  
+  // 4단계: 연속 3줄바꿈 이상은 2줄바꿈으로 정리
+  result = result.replace(/\n{3,}/g, '\n\n');
+  
+  return result.trim();
+}
+
 function generateWelcomeMessage(store: Store | null): string {
   if (!store) {
     return '안녕하세요! XIVIX AI 상담사입니다. 무엇을 도와드릴까요?';
@@ -1636,6 +1671,7 @@ ${eventsText.trim()}`;
       aiResponse = await ensureBilingual(env, aiResponse, customerLang);
       
       // 응답 전송
+      aiResponse = formatForMobile(aiResponse);
       await sendSmartMessage(env, customerId, aiResponse, storeId);
       
       console.log(`[Webhook] AI Response (${aiModel}, verified: ${verified}): ${String(aiResponse || '').slice(0, 50)}...`);
@@ -1725,6 +1761,7 @@ ${eventsText.trim()}`;
       // V3.0.14: 이중언어 후처리 — 외국어 고객이면 한국어 번역 추가
       aiResponse = await ensureBilingual(env, aiResponse, customerLang);
       
+      aiResponse = formatForMobile(aiResponse);
       await sendSmartMessage(env, customerId, aiResponse, storeId);
       
       // ★ V3.0.16: AI 응답에 상담 연결 키워드 → 전화/카톡 클릭 버튼 자동 추가
@@ -1997,6 +2034,7 @@ webhook.post('/v1/naver/callback', async (c) => {
       aiResponse = await getGeminiResponse(env, messages, systemInstruction);
       // V3.0.14: 이중언어 후처리
       aiResponse = await ensureBilingual(env, aiResponse, genericLang);
+      aiResponse = formatForMobile(aiResponse);
       await sendSmartMessage(env, customerId, aiResponse, storeId);
     } else {
       // 스트리밍 응답 (청크 단위 전송)
