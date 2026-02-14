@@ -202,7 +202,7 @@ ${JSON.stringify(existingData, null, 2)}` : ''}
     "vip_benefits": "예약금 면제"
   },
   "operating_hours": "10:00-19:00 (일요일 휴무)",
-  "phone": "031-235-5726",
+  "phone": "",
   "store_description": "매장 소개 문구"
 }
 
