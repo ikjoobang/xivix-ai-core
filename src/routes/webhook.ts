@@ -1124,8 +1124,12 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       const consultKey = `consult:${storeId}:${customerId}`;
       const pendingConsult = await env.KV.get(consultKey, 'json') as { pending: boolean; timestamp: number } | null;
       
-      if (pendingConsult?.pending && userMessage.trim() !== '5') {
-        // 고객이 문의 내용을 남겼다 → SMS 발송
+      // 일반 질문 패턴 (주차, 위치, 가격 등)은 상담 캡처 대신 일반 플로우로
+      const isGeneralQuestion = /주차|위치|주소|어디|가격|얼마|메뉴|예약|영업|몇시|시간|전화|번호/.test(userMessage);
+      const isMenuSelection = /^[1-5]$/.test(userMessage.trim());
+      
+      if (pendingConsult?.pending && !isGeneralQuestion && !isMenuSelection && userMessage.trim() !== '5') {
+        // 고객이 문의 내용(연락처+상담내용)을 남겼다 → SMS 발송
         const ownerPhone = storeResult?.owner_phone;
         const directorName = storeResult?.store_name || '담당자';
         
@@ -1475,8 +1479,38 @@ ${menuData.trim()}`;
     // ============ [키워드 기반 정보 제공 - AI 의존 제거] ============
     const lowerMessage = userMessage.toLowerCase();
     
-    // 위치/주소 관련 키워드
-    if (/위치|주소|어디|찾아가|오시는.*길|길.*안내/.test(lowerMessage)) {
+    // ★ V3.0.17: 주차 관련 키워드 (위치보다 먼저 체크)
+    if (/주차/.test(lowerMessage)) {
+      // 매장별 주차 정보: system_prompt에서 추출 시도, 없으면 기본 안내
+      const parkingInfo = storeResult?.system_prompt?.match(/주차[^.]*(?:\.|$)/)?.[0];
+      
+      // 매장별 커스텀 주차 안내 (DB에 parking_info 필드가 있으면 사용)
+      const customParking = (storeResult as any)?.parking_info;
+      
+      let parkingResponse: string;
+      if (customParking) {
+        parkingResponse = customParking;
+      } else if (storeResult?.address?.includes('연산')) {
+        // 위닛 연산점 전용 주차 안내
+        parkingResponse = `🚗 주차 안내\n\n📍 카카오T 연산동스마트주차장\n부산 연제구 연산동 1279-5\n매장에서 도보 1분!\n\n💰 시술 금액별\n최대 2시간 주차 지원\n(디렉터별 상이)\n\n━━━━━━━━━━\n예약하시면 더 편하게\n안내받으실 수 있어요! 😊`;
+      } else {
+        parkingResponse = `🚗 주차 안내\n\n매장 근처 주차장을\n이용하실 수 있어요!\n\n자세한 내용은\n방문 전 문의해주세요 📞\n${storePhone}`;
+      }
+      
+      await sendSmartMessage(env, customerId, parkingResponse, storeId);
+      
+      const responseTime = Date.now() - startTime;
+      await env.DB.prepare(`
+        INSERT INTO xivix_conversation_logs 
+        (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
+        VALUES (?, ?, 'text', ?, ?, ?, 0)
+      `).bind(storeId, customerId, userMessage.slice(0, 100), '[keyword] 주차 안내', responseTime).run();
+      
+      return c.json({ success: true, store_id: storeId, intent: 'parking' });
+    }
+    
+    // 위치/주소 관련 키워드 (주차 제외)
+    if (/위치|주소|어디(?!.*주차)|찾아가|오시는.*길|길.*안내/.test(lowerMessage)) {
       const locationResponse = `📍 ${storeName}\n\n` +
         `🏠 주소\n${storeAddress}\n\n` +
         `📞 전화\n${storePhone}\n\n` +
@@ -1757,15 +1791,23 @@ ${eventsText.trim()}`;
       
       console.log(`[Webhook] AI Response (${aiModel}, verified: ${verified}): ${String(aiResponse || '').slice(0, 50)}...`);
     } 
-    // 일반 문의: 관리자 설정 모델 사용 (기본값: gemini-flash)
+    // 일반 문의: ★ V3.0.17 하이브리드 모델 라우팅
     else {
-      // 매장에서 설정한 AI 모델 사용 (gpt-4o, gemini-pro, gemini)
-      const selectedModel = storeResult?.ai_model || 'gemini';
+      // 메시지 복잡도 분류 → Flash(단순) / Pro(상담)
+      const simplePatterns = /^(안녕|반갑|하이|hello|hi|hey|감사|고마워|ㅎㅇ|ㅎㅎ|네|넵|응|좋아|알겠|오케이|ok|yes|아니|ㄴㄴ|됐어|괜찮|bye|잘가)/i;
+      const infoPatterns = /주차|위치|주소|어디|찾아가|영업시간|몇시|언제.*열|언제.*닫|전화번호|번호.*알려|연락처|휴무|쉬는.*날|정기휴무|화장실|와이파이|wifi/;
+      const consultPatterns = /상담|추천|스타일|펌|염색|컬러|클리닉|탈색|매직|볼륨|커트|가격|얼마|비용|할인|이벤트|사진|머리|두피|손상|시술/;
+      const isSimpleMessage = !consultPatterns.test(userMessage) && (simplePatterns.test(userMessage.trim()) || infoPatterns.test(userMessage));
+      
+      const baseModel = storeResult?.ai_model || 'gemini';
+      // Pro 매장: 단순질문만 Flash, 나머지 Pro | Flash 매장: 전부 Flash
+      const selectedModel = (baseModel === 'gemini-pro' && isSimpleMessage) ? 'gemini' : baseModel;
+      
       const storeAiOptions = {
         temperature: (storeResult?.ai_temperature as number) || 0.7,
-        maxTokens: (storeResult?.max_tokens as number) || 800
+        maxTokens: isSimpleMessage ? 400 : ((storeResult?.max_tokens as number) || 800)
       };
-      console.log(`[Webhook] Using ${selectedModel} for simple consultation (store setting), temp=${storeAiOptions.temperature}, maxTokens=${storeAiOptions.maxTokens}`);
+      console.log(`[Webhook] Hybrid routing: "${userMessage.slice(0,20)}" → ${selectedModel} (simple=${isSimpleMessage}), temp=${storeAiOptions.temperature}, maxTokens=${storeAiOptions.maxTokens}`);
       aiModel = selectedModel;
       
       // Gemini 메시지 구성
