@@ -890,6 +890,22 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       } catch (e) {
         console.warn('[Lang] KV read error:', e);
       }
+      
+      // ★ V3.0.17: 한국어 메시지인데 KV가 외국어면 → 한국어로 자동 리셋
+      if (customerLang !== 'ko') {
+        const koreanChars = (userMessage.match(/[가-힣]/g) || []).length;
+        if (koreanChars >= 1 && userMessage.length <= 20) {
+          // 짧은 한국어 메시지 (네, 아니요, 주차는요 등)
+          customerLang = 'ko';
+          try { await env.KV.put(`lang:${storeId}:${customerId}`, 'ko', { expirationTtl: 86400 }); }
+          catch (e) { /* ignore */ }
+        } else if (koreanChars / Math.max(userMessage.replace(/\s/g, '').length, 1) > 0.5) {
+          // 긴 메시지에서 한국어 비율 50% 이상
+          customerLang = 'ko';
+          try { await env.KV.put(`lang:${storeId}:${customerId}`, 'ko', { expirationTtl: 86400 }); }
+          catch (e) { /* ignore */ }
+        }
+      }
     }
     
     // ============ [8개국어 지원 시스템] ============
@@ -1499,6 +1515,12 @@ ${menuData.trim()}`;
       
       await sendSmartMessage(env, customerId, parkingResponse, storeId);
       
+      // ★ KV 컨텍스트 저장 (후속 "네" 등 맥락 유지)
+      if (env.KV) {
+        try { await updateConversationContext(env.KV, storeId, customerId, userMessage, parkingResponse); }
+        catch (e) { console.warn('[Parking] KV context save error:', e); }
+      }
+      
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
         INSERT INTO xivix_conversation_logs 
@@ -1517,6 +1539,12 @@ ${menuData.trim()}`;
         `⏰ 영업시간\n${storeResult?.operating_hours || '10:00-19:00'}\n\n` +
         `━━━━━━━━━━\n방문 예약 도와드릴까요?`;
       await sendTextMessage(env, customerId, locationResponse, storeId);
+      
+      // ★ KV 컨텍스트 저장 (후속 맥락 유지)
+      if (env.KV) {
+        try { await updateConversationContext(env.KV, storeId, customerId, userMessage, locationResponse); }
+        catch (e) { console.warn('[Location] KV context save error:', e); }
+      }
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
