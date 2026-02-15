@@ -916,49 +916,49 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     const langMenus: Record<string, { flag: string; welcome: string; menu: string; logName: string }> = {
       ko: {
         flag: '🇰🇷',
-        welcome: `🇰🇷 ${storeName}에 오신 것을 환영합니다! ✨\n\n원하시는 서비스를 선택해 주세요:\n\n`,
+        welcome: `🇰🇷 ${storeName}에 오신 것을 환영합니다! ✨\n\n🎁 N페이 결제 시 30% 할인!\n\n원하시는 서비스를 선택해 주세요:\n\n`,
         menu: `1. 🎁 메뉴/가격 안내\n2. 💇 스타일 상담\n3. 💬 원장님께 상담 요청\n4. 📅 예약하기\n5. 📍 매장 위치 및 전화\n\n번호를 입력해주세요!`,
         logName: '[lang] Korean'
       },
       en: {
         flag: '🇺🇸',
-        welcome: `🇺🇸 Welcome to ${storeName}! ✨\n\nPlease select:\n\n`,
+        welcome: `🇺🇸 Welcome to ${storeName}! ✨\n\n🎁 30% OFF with Naver Pay!\n\nPlease select:\n\n`,
         menu: `1. 🎁 Menu & Prices\n2. 💇 Style Consultation\n3. 💬 Message to Director\n4. 📅 Book Appointment\n5. 📍 Location & Contact\n\nType a number!`,
         logName: '[lang] English'
       },
       ja: {
         flag: '🇯🇵',
-        welcome: `🇯🇵 ${storeName}へようこそ! ✨\n\n選択してください:\n\n`,
+        welcome: `🇯🇵 ${storeName}へようこそ! ✨\n\n🎁 Naver Pay決済で30% OFF!\n\n選択してください:\n\n`,
         menu: `1. 🎁 メニュー・料金\n2. 💇 スタイル相談\n3. 💬 院長へメッセージ\n4. 📅 予約\n5. 📍 住所・連絡先\n\n番号を入力!`,
         logName: '[lang] Japanese'
       },
       zh: {
         flag: '🇨🇳',
-        welcome: `🇨🇳 欢迎光临 ${storeName}! ✨\n\n请选择:\n\n`,
+        welcome: `🇨🇳 欢迎光临 ${storeName}! ✨\n\n🎁 Naver Pay支付享30%优惠!\n\n请选择:\n\n`,
         menu: `1. 🎁 菜单和价格\n2. 💇 发型咨询\n3. 💬 给院长留言\n4. 📅 预约\n5. 📍 地址和联系方式\n\n请输入数字!`,
         logName: '[lang] Chinese Simplified'
       },
       tw: {
         flag: '🇹🇼',
-        welcome: `🇹🇼 歡迎光臨 ${storeName}! ✨\n\n請選擇:\n\n`,
+        welcome: `🇹🇼 歡迎光臨 ${storeName}! ✨\n\n🎁 Naver Pay付款享30%優惠!\n\n請選擇:\n\n`,
         menu: `1. 🎁 菜單和價格\n2. 💇 髮型諮詢\n3. 💬 給院長留言\n4. 📅 預約\n5. 📍 地址和聯繫方式\n\n請輸入數字!`,
         logName: '[lang] Chinese Traditional'
       },
       th: {
         flag: '🇹🇭',
-        welcome: `🇹🇭 ยินดีต้อนรับสู่ ${storeName}! ✨\n\nกรุณาเลือก:\n\n`,
+        welcome: `🇹🇭 ยินดีต้อนรับสู่ ${storeName}! ✨\n\n🎁 ชำระผ่าน Naver Pay ลด 30%!\n\nกรุณาเลือก:\n\n`,
         menu: `1. 🎁 เมนูและราคา\n2. 💇 ปรึกษาทรงผม\n3. 💬 ฝากข้อความถึงผู้อำนวยการ\n4. 📅 จองคิว\n5. 📍 ที่ตั้งและติดต่อ\n\nพิมพ์ตัวเลข!`,
         logName: '[lang] Thai'
       },
       vi: {
         flag: '🇻🇳',
-        welcome: `🇻🇳 Chào mừng đến ${storeName}! ✨\n\nVui lòng chọn:\n\n`,
+        welcome: `🇻🇳 Chào mừng đến ${storeName}! ✨\n\n🎁 Giảm 30% khi thanh toán Naver Pay!\n\nVui lòng chọn:\n\n`,
         menu: `1. 🎁 Menu & Giá\n2. 💇 Tư vấn kiểu tóc\n3. 💬 Nhắn tin cho Giám đốc\n4. 📅 Đặt lịch hẹn\n5. 📍 Địa chỉ & Liên hệ\n\nNhập số!`,
         logName: '[lang] Vietnamese'
       },
       mn: {
         flag: '🇲🇳',
-        welcome: `🇲🇳 ${storeName}-д тавтай морил! ✨\n\nСонгоно уу:\n\n`,
+        welcome: `🇲🇳 ${storeName}-д тавтай морил! ✨\n\n🎁 Naver Pay-ээр төлбөр хийвэл 30% хөнгөлөлт!\n\nСонгоно уу:\n\n`,
         menu: `1. 🎁 Меню & Үнэ\n2. 💇 Үсний загвар зөвлөгөө\n3. 💬 Захиралд мессеж\n4. 📅 Цаг захиалга\n5. 📍 Хаяг & Холбоо барих\n\nТоо оруулна уу!`,
         logName: '[lang] Mongolian'
       }
@@ -1117,7 +1117,7 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
         INSERT INTO xivix_conversation_logs 
         (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
         VALUES (?, ?, 'text', ?, ?, ?, 0)
-      `).bind(storeId, customerId, userMessage, langData.logName, responseTime).run();
+      `).bind(storeId, customerId, userMessage, langMenus[detectedLang]?.logName || `[lang] ${detectedLang}`, responseTime).run();
       
       return c.json({ success: true, store_id: storeId, language: detectedLang });
     }
