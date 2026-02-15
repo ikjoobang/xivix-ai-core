@@ -1490,7 +1490,7 @@ ${menuData.trim()}`;
       let parkingResponse: string;
       if (customParking) {
         parkingResponse = customParking;
-      } else if (storeResult?.address?.includes('연산')) {
+      } else if (storeResult?.store_name?.includes('연산') || storeResult?.store_name?.includes('위닛')) {
         // 위닛 연산점 전용 주차 안내
         parkingResponse = `🚗 주차 안내\n\n📍 카카오T 연산동스마트주차장\n부산 연제구 연산동 1279-5\n매장에서 도보 1분!\n\n💰 시술 금액별\n최대 2시간 주차 지원\n(디렉터별 상이)\n\n━━━━━━━━━━\n예약하시면 더 편하게\n안내받으실 수 있어요! 😊`;
       } else {
