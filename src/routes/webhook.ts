@@ -1118,6 +1118,51 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
       return `${foreignText}\n\n━━━━━━━━━━\n🇰🇷 한국어:\n${koreanText}`;
     };
 
+    // ============ [V3.0.17] 디렉터 상담 대기 상태 체크 ============
+    // KV에서 "awaiting_director_consultation" 상태면 → 메시지 캡처 → SMS 발송
+    if (env.KV) {
+      const consultKey = `consult:${storeId}:${customerId}`;
+      const pendingConsult = await env.KV.get(consultKey, 'json') as { pending: boolean; timestamp: number } | null;
+      
+      if (pendingConsult?.pending && userMessage.trim() !== '5') {
+        // 고객이 문의 내용을 남겼다 → SMS 발송
+        const ownerPhone = storeResult?.owner_phone;
+        const directorName = storeResult?.store_name || '담당자';
+        
+        if (ownerPhone) {
+          try {
+            const { sendSMS, sendLMS } = await import('../lib/notification');
+            const smsText = `[XIVIX 톡톡 상담요청]\n${directorName}\n\n고객 메시지:\n${userMessage.slice(0, 200)}\n\n톡톡에서 확인해주세요.`;
+            
+            if (smsText.length > 80) {
+              await sendLMS(env, ownerPhone, smsText);
+            } else {
+              await sendSMS(env, ownerPhone, smsText);
+            }
+            console.log(`[Webhook] Director consultation SMS sent to ${ownerPhone.slice(0, 7)}...`);
+          } catch (smsErr) {
+            console.error('[Webhook] SMS send error:', smsErr);
+          }
+        }
+        
+        // 고객에게 확인 메시지
+        await sendSmartMessage(env, customerId, 
+          `감사합니다! 📝\n\n정다운 디렉터님께\n메시지를 전달했습니다 ✅\n\n시술 후 확인하시는 대로\n바로 연락드릴 거예요!\n\n다른 궁금한 점이 있으시면\n언제든 물어봐주세요 😊`, storeId);
+        
+        // 상태 클리어
+        await env.KV.delete(consultKey);
+        
+        const responseTime = Date.now() - startTime;
+        await env.DB.prepare(`
+          INSERT INTO xivix_conversation_logs 
+          (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
+          VALUES (?, ?, 'text', ?, ?, ?, 1)
+        `).bind(storeId, customerId, userMessage.slice(0, 100), '[director-consultation] SMS 발송 완료', responseTime).run();
+        
+        return c.json({ success: true, store_id: storeId, intent: 'director_consultation_captured' });
+      }
+    }
+
     // 환영 인사말의 번호(1~5)는 AI 없이 직접 처리
     // KV에서 저장된 언어 사용 (이미 위에서 customerLang에 로드됨)
     const menuNumber = userMessage.trim();
@@ -1125,7 +1170,10 @@ webhook.post('/v1/naver/callback/:storeId', async (c) => {
     
     // ★ 메뉴 기반 업종만 번호(1~5) 가로채기 — 비메뉴 업종은 AI에게 전달
     const menuGateBusinessType = storeResult?.business_type || 'OTHER';
-    if (isMenuBasedBusiness(menuGateBusinessType) && ['1','2','3','4','5'].includes(menuNumber)) {
+    // ★ V3.0.17: 커스텀 시스템 프롬프트가 있는 매장은 1/2/3을 AI에게 넘김 (4/5만 하드코딩)
+    const hasCustomMenuFlow = storeResult?.system_prompt && storeResult.system_prompt.includes('[A]');
+    const menuNumbersToIntercept = hasCustomMenuFlow ? ['4', '5'] : ['1', '2', '3', '4', '5'];
+    if (isMenuBasedBusiness(menuGateBusinessType) && menuNumbersToIntercept.includes(menuNumber)) {
     
     if (menuNumber === '1') {
       // 1. 🎁 메뉴/가격 (DB에서 매장별 데이터 사용, 다국어 지원)
@@ -1341,15 +1389,33 @@ ${menuData.trim()}`;
       const bt = bookingTemplates[menuLang] || bookingTemplates.ko;
       const btKo = bookingTemplates.ko; // V3.0.14: 이중언어용
       
-      if (naverReservationId) {
-        const bookingUrl = getNaverBookingUrl(naverReservationId);
-        await sendTextMessage(env, customerId, makeBilingual(bt.msg, btKo.msg, menuLang), storeId);
-        await sendButtonMessage(env, customerId, bt.select, [
-          { type: 'LINK', title: bt.btn1, linkUrl: bookingUrl },
-          { type: 'TEXT', title: bt.btn2, value: '전화번호알려주세요' }
-        ],
-            storeId
-          );
+      // ★ V3.0.17: personal_website(인포크 등) 우선 사용 → 네이버 예약 → 전화 폴백
+      const personalLink = storeResult?.personal_website;
+      const kakaoMatch = storeResult?.system_prompt?.match(/https:\/\/open\.kakao\.com\/[^\s"\\]+/);
+      const kakaoUrl = kakaoMatch ? kakaoMatch[0] : null;
+      
+      if (personalLink || naverReservationId) {
+        const bookingButtons: ButtonOption[] = [];
+        
+        // 1순위: 인포크/개인 링크 (메뉴·예약·상담 올인원)
+        if (personalLink) {
+          bookingButtons.push({ type: 'LINK', title: '📋 메뉴 확인 & 예약하기', linkUrl: personalLink });
+        }
+        // 2순위: 네이버 예약 직접 링크
+        if (naverReservationId) {
+          const bookingUrl = getNaverBookingUrl(naverReservationId);
+          bookingButtons.push({ type: 'LINK', title: bt.btn1, linkUrl: bookingUrl });
+        }
+        // 3순위: 카카오톡 상담
+        if (kakaoUrl) {
+          bookingButtons.push({ type: 'LINK', title: '💬 카카오톡 상담', linkUrl: kakaoUrl });
+        }
+        
+        await sendButtonMessage(env, customerId, 
+          `📅 예약 안내\n\n아래 버튼으로\n편하게 예약하실 수 있어요! 😊`,
+          bookingButtons.slice(0, 4),
+          storeId
+        );
       } else {
         await sendTextMessage(env, customerId, makeBilingual(bt.noBooking, btKo.noBooking, menuLang), storeId);
       }
@@ -1365,29 +1431,42 @@ ${menuData.trim()}`;
     }
     
     if (menuNumber === '5') {
-      // 5. 📍 매장 위치 및 전화 연결 (8개국어 지원)
-      const locTemplates: Record<string, { addr: string; phone: string; hours: string; book: string }> = {
-        ko: { addr: '주소', phone: '전화', hours: '영업시간', book: '방문 예약 도와드릴까요?' },
-        en: { addr: 'Address', phone: 'Phone', hours: 'Hours', book: 'Would you like to book?' },
-        ja: { addr: '住所', phone: '電話', hours: '営業時間', book: 'ご予約しますか?' },
-        zh: { addr: '地址', phone: '电话', hours: '营业时间', book: '需要帮您预约吗?' },
-        tw: { addr: '地址', phone: '電話', hours: '營業時間', book: '需要幫您預約嗎?' },
-        th: { addr: 'ที่อยู่', phone: 'โทรศัพท์', hours: 'เวลาเปิด', book: 'ต้องการจองไหมคะ?' },
-        vi: { addr: 'Địa chỉ', phone: 'Điện thoại', hours: 'Giờ mở cửa', book: 'Bạn muốn đặt lịch không?' },
-        mn: { addr: 'Хаяг', phone: 'Утас', hours: 'Ажлын цаг', book: 'Захиалах уу?' }
-      };
-      const lt = locTemplates[menuLang] || locTemplates.ko;
-      const ltKo = locTemplates.ko; // V3.0.14: 이중언어용
-      const locationResponse = `📍 ${storeName}\n\n🏠 ${lt.addr}\n${storeAddress}\n\n📞 ${lt.phone}\n${storePhone}\n\n⏰ ${lt.hours}\n${operatingHours}\n\n━━━━━━━━━━\n${lt.book}`;
-      const koreanLocationResponse = `📍 ${storeName}\n\n🏠 ${ltKo.addr}\n${storeAddress}\n\n📞 ${ltKo.phone}\n${storePhone}\n\n⏰ ${ltKo.hours}\n${operatingHours}\n\n━━━━━━━━━━\n${ltKo.book}`;
-      await sendTextMessage(env, customerId, makeBilingual(locationResponse, koreanLocationResponse, menuLang), storeId);
+      // 5. ★ V3.0.17: 디렉터/담당자 직접 상담 요청 (문의 수집 → SMS 발송)
+      const ownerTitle = storeResult?.business_type?.startsWith('BEAUTY') ? '디렉터' : '담당자';
+      const personalKakao = storeResult?.system_prompt?.match(/https:\/\/open\.kakao\.com\/[^\s"\\]+/);
+      const kakaoUrl = personalKakao ? personalKakao[0] : null;
+      const ownerPhone = storeResult?.owner_phone;
+      const storePhoneClean = storePhone?.replace(/[-\s]/g, '');
+      
+      // 상담 연결 옵션 메시지
+      const consultMsg = `💬 정다운 ${ownerTitle}님께\n상담을 요청해드릴게요! ✨\n\n궁금하신 내용과 연락처를\n함께 남겨주세요 📝\n\n예시)\n010-1234-5678\n에어랩펌 상담 받고 싶어요\n\n${ownerTitle}님 시술 후\n바로 연락드릴 수 있도록\n전달해드리겠습니다! 😊`;
+      
+      await sendTextMessage(env, customerId, consultMsg, storeId);
+      
+      // 전화/카톡 즉시 연결 버튼도 제공
+      const consultButtons: ButtonOption[] = [];
+      if (storePhoneClean) {
+        consultButtons.push({ type: 'LINK', title: '📞 전화로 바로 연결', linkUrl: `tel:${storePhoneClean}` });
+      }
+      if (kakaoUrl) {
+        consultButtons.push({ type: 'LINK', title: '💬 카카오톡 상담', linkUrl: kakaoUrl });
+      }
+      if (consultButtons.length > 0) {
+        await sendButtonMessage(env, customerId, '바로 연결도 가능해요! 😊', consultButtons, storeId);
+      }
+      
+      // KV에 상담 대기 상태 저장 (30분 TTL)
+      if (env.KV) {
+        const consultKey = `consult:${storeId}:${customerId}`;
+        await env.KV.put(consultKey, JSON.stringify({ pending: true, timestamp: Date.now() }), { expirationTtl: 1800 });
+      }
       
       const responseTime = Date.now() - startTime;
       await env.DB.prepare(`
         INSERT INTO xivix_conversation_logs 
         (store_id, customer_id, message_type, customer_message, ai_response, response_time_ms, converted_to_reservation)
-        VALUES (?, ?, 'text', ?, ?, ?, 0)
-      `).bind(storeId, customerId, '5', '[menu-5] 위치/전화 안내', responseTime).run();
+        VALUES (?, ?, 'text', ?, ?, ?, 1)
+      `).bind(storeId, customerId, '5', '[menu-5] 디렉터 상담 요청', responseTime).run();
       
       return c.json({ success: true, store_id: storeId, menu_selected: 5 });
     }
