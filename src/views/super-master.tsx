@@ -912,10 +912,11 @@ export function renderSuperMasterDashboard(): string {
       });
       event.currentTarget.classList.add('border-yellow-500', 'bg-yellow-500/10');
       
-      // 잠시 후 셋팅 진행
+      // 잠시 후 셋팅 진행 (closeIndustryModal이 pendingSetupStoreId를 null로 만들기 전에 저장)
+      const storeId = pendingSetupStoreId;
       setTimeout(async () => {
         closeIndustryModal();
-        await executeQuickSetup(pendingSetupStoreId, industryType);
+        await executeQuickSetup(storeId, industryType);
       }, 300);
     }
     
