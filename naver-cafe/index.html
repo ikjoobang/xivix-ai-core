@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XIVIX Tower Control — 네이버 카페 자동화</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/pretendard/1.3.9/static/pretendard.min.css" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --surface2: #1a1a26;
+  --border: #2a2a3a;
+  --text: #e8e8f0;
+  --text2: #8888a0;
+  --accent: #00d4aa;
+  --accent2: #00b894;
+  --naver: #03c75a;
+  --danger: #ff4757;
+  --warning: #ffa502;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Pretendard', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* ═══ Header ═══ */
+.header {
+  padding: 20px 32px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--surface);
+}
+
+.logo {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.logo span { color: var(--accent); }
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text2);
+}
+
+.user-info .badge {
+  background: var(--naver);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ═══ Main Layout ═══ */
+.main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+/* ═══ Login Section ═══ */
+.login-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 24px;
+}
+
+.login-section h1 {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+
+.login-section p {
+  color: var(--text2);
+  font-size: 16px;
+  text-align: center;
+  max-width: 400px;
+}
+
+.btn-naver {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--naver);
+  color: #fff;
+  border: none;
+  padding: 14px 32px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-naver:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+.btn-naver svg { width: 20px; height: 20px; }
+
+/* ═══ Dashboard ═══ */
+.dashboard { display: none; }
+.dashboard.active { display: block; }
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 768px) {
+  .grid-2 { grid-template-columns: 1fr; }
+  .main { padding: 16px; }
+}
+
+/* ═══ Cards ═══ */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-title .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* ═══ Form Elements ═══ */
+label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text2);
+  margin-bottom: 6px;
+}
+
+input, select, textarea {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  margin-bottom: 14px;
+  transition: border-color 0.2s;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+textarea { resize: vertical; min-height: 120px; line-height: 1.7; }
+
+/* ═══ Buttons ═══ */
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.btn-primary:hover { filter: brightness(1.1); }
+
+.btn-secondary {
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover { border-color: var(--accent); }
+
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn-group {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+/* ═══ Queue List ═══ */
+.queue-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--surface2);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.queue-item:hover { border-left: 3px solid var(--accent); padding-left: 13px; }
+
+.queue-item .cat {
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.cat-암보험 { background: #ff475720; color: #ff6b81; }
+.cat-종합보험 { background: #2563eb20; color: #60a5fa; }
+.cat-태아보험 { background: #f59e0b20; color: #fbbf24; }
+.cat-간병보험 { background: #8b5cf620; color: #a78bfa; }
+.cat-실손보험 { background: #10b98120; color: #34d399; }
+.cat-기타 { background: #6b728020; color: #9ca3af; }
+
+/* ═══ Preview ═══ */
+.preview-box {
+  background: #fff;
+  color: #333;
+  border-radius: 8px;
+  padding: 24px;
+  font-size: 15px;
+  line-height: 2.2;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.preview-box h1 { font-size: 20px; color: #1a1a1a; margin-bottom: 12px; }
+.preview-box h2 { font-size: 17px; color: #2563eb; margin: 16px 0 8px; }
+.preview-box h3 { font-size: 15px; color: #555; margin: 12px 0 6px; }
+.preview-box hr { border: none; border-top: 1px solid #eee; margin: 16px 0; }
+
+/* ═══ Status/Log ═══ */
+.log-box {
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.8;
+  max-height: 300px;
+  overflow-y: auto;
+  color: var(--text2);
+}
+
+.log-box .success { color: var(--accent); }
+.log-box .error { color: var(--danger); }
+.log-box .warn { color: var(--warning); }
+.log-box .info { color: #60a5fa; }
+
+/* ═══ Stats ═══ */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 768px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+}
+
+.stat-card .number {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.stat-card .label {
+  font-size: 12px;
+  color: var(--text2);
+  margin-top: 4px;
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ Header ═══ -->
+<div class="header">
+  <div class="logo">XIVIX <span>Tower Control</span></div>
+  <div class="user-info" id="userInfo" style="display:none">
+    <span id="userName"></span>
+    <span class="badge">네이버 연결됨</span>
+    <button class="btn btn-secondary" onclick="logout()" style="padding:6px 12px;font-size:12px">로그아웃</button>
+  </div>
+</div>
+
+<!-- ═══ Login Section ═══ -->
+<div class="main">
+  <div class="login-section" id="loginSection">
+    <h1>네이버 카페 <span style="color:var(--accent)">자동화</span></h1>
+    <p>네이버 아이디로 로그인하면 가입된 카페에 자동으로 글을 발행할 수 있습니다.</p>
+    <button class="btn-naver" onclick="naverLogin()">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M13.5 10.5L6.2 0H0v20h6.5V9.5L13.8 20H20V0h-6.5z"/></svg>
+      네이버로 로그인
+    </button>
+    <p style="font-size:12px;color:var(--text2);margin-top:8px">
+      * 카페 글쓰기 권한이 필요합니다 (카페 가입 + 등업 필수)
+    </p>
+  </div>
+
+  <!-- ═══ Dashboard ═══ -->
+  <div class="dashboard" id="dashboard">
+    
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat-card">
+        <div class="number" id="statQueue">46</div>
+        <div class="label">발행 대기</div>
+      </div>
+      <div class="stat-card">
+        <div class="number" id="statPublished">0</div>
+        <div class="label">발행 완료</div>
+      </div>
+      <div class="stat-card">
+        <div class="number" id="statCafes">-</div>
+        <div class="label">연결 카페</div>
+      </div>
+      <div class="stat-card">
+        <div class="number" id="statTokenExp">-</div>
+        <div class="label">토큰 만료</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+
+      <!-- 카페 설정 -->
+      <div class="card">
+        <div class="card-title"><div class="dot"></div> 카페 설정</div>
+        
+        <label>카페 Club ID</label>
+        <input type="text" id="clubId" placeholder="예: 10347037 (카페 URL에서 확인)" />
+        
+        <label>게시판 Menu ID</label>
+        <input type="text" id="menuId" placeholder="예: 458 (게시판 URL에서 확인)" />
+        
+        <label>글 공개 설정</label>
+        <select id="openYn">
+          <option value="true">전체 공개</option>
+          <option value="false">멤버 공개</option>
+        </select>
+
+        <p style="font-size:12px;color:var(--text2);line-height:1.6;margin-top:8px">
+          💡 Club ID 확인: 카페 URL에서 숫자 부분<br>
+          예: cafe.naver.com/ca-fe/cafes/<b>10347037</b>/articles<br>
+          💡 Menu ID 확인: 게시판 URL의 menuid= 뒤 숫자
+        </p>
+      </div>
+
+      <!-- 콘텐츠 작성 -->
+      <div class="card">
+        <div class="card-title"><div class="dot"></div> 글 작성</div>
+        
+        <label>제목</label>
+        <input type="text" id="postSubject" placeholder="46세 남편 암보험 리모델링 고민중입니다" />
+        
+        <label>본문 (HTML 가능)</label>
+        <textarea id="postContent" rows="8" placeholder="카페 글 내용을 입력하세요..."></textarea>
+
+        <div class="btn-group">
+          <button class="btn btn-secondary" onclick="previewPost()">미리보기</button>
+          <button class="btn btn-primary" onclick="publishPost()">🚀 카페에 발행</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+
+      <!-- 발행 큐 -->
+      <div class="card">
+        <div class="card-title"><div class="dot"></div> 발행 큐 (PDF 기반)</div>
+        <div id="queueList" style="max-height:400px;overflow-y:auto">
+          <!-- 동적 생성 -->
+        </div>
+      </div>
+
+      <!-- 로그 / 미리보기 -->
+      <div class="card">
+        <div class="card-title"><div class="dot"></div> 실행 로그</div>
+        <div class="log-box" id="logBox">
+          <div class="info">▸ XIVIX Tower Control v3.0 준비됨</div>
+          <div class="info">▸ 네이버 카페 API 연결 대기중...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 미리보기 -->
+    <div class="card" id="previewCard" style="display:none;margin-top:20px">
+      <div class="card-title"><div class="dot"></div> 미리보기</div>
+      <div class="preview-box" id="previewBox"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// XIVIX Tower Control — 네이버 카페 API 클라이언트
+// ═══════════════════════════════════════════════════════════════
+
+const CONFIG = {
+  NAVER_CLIENT_ID: 'DpPhbVPOWrfZdCtYeL5U',
+  // Worker 배포 후 변경 필요
+  API_BASE: 'https://naver-cafe-api.ikjoobang.workers.dev',
+  CALLBACK_URL: window.location.origin + '/callback',
+};
+
+// ═══ State ═══
+let state = {
+  accessToken: localStorage.getItem('naver_access_token'),
+  refreshToken: localStorage.getItem('naver_refresh_token'),
+  userName: localStorage.getItem('naver_user_name'),
+  publishedCount: parseInt(localStorage.getItem('published_count') || '0'),
+};
+
+// ═══ 발행 큐 (PDF 메타데이터) ═══
+const PUBLISH_QUEUE = [
+  { id: 1, title: '20대 여자 종합보험 비갱신형 어떤지 봐주세요', cat: '종합보험', target: '20대 여성' },
+  { id: 2, title: '30대 3대질병보험 농협손해 제일 저렴한가요', cat: '기타', target: '30대' },
+  { id: 3, title: '30대 남자 비갱신형 종합보험 농협손해 진단비 설계', cat: '종합보험', target: '30대 남성' },
+  { id: 4, title: '30대 여자 직장인 종합보험 월 15만원대', cat: '종합보험', target: '30대 여성' },
+  { id: 5, title: '43세 여자 비갱신형 종합보험 어떤지 봐주세요', cat: '종합보험', target: '43세 여성' },
+  { id: 6, title: '50대 여자 KB암주요치료비 봐주세요', cat: '암보험', target: '50대 여성' },
+  { id: 7, title: '5세대실손 실비전환 종합보험 리모델링 30대 여자', cat: '실손보험', target: '30대 여성' },
+  { id: 8, title: '60대 남자 암진단금 비급여암치료비 유병자 암보험', cat: '암보험', target: '60대 남성' },
+  { id: 9, title: '70대 후반 여자 실손보험 유병자 실손 7만원', cat: '실손보험', target: '70대 여성' },
+  { id: 10, title: 'KB생명 적금보험 적금 대신 가입 어떨까요', cat: '기타', target: '30대' },
+  { id: 11, title: '간병보험', cat: '간병보험', target: '30대' },
+  { id: 12, title: '간병인보험 요양병원 제외 20만원 흥국', cat: '간병보험', target: '30대' },
+  { id: 13, title: '교보생명 고혈압보험 당뇨보험 500만원', cat: '기타', target: '30대' },
+  { id: 14, title: '다들 암진단비 얼마씩 해두셨어요 5천이면 충분?', cat: '암보험', target: '30대' },
+  { id: 15, title: '메리츠 암통합치료비가 암주요치료비보다 좋나요', cat: '암보험', target: '30대' },
+  { id: 16, title: '삼성화재 암통합치료비보험 어떤지 봐주세요', cat: '암보험', target: '30대' },
+  { id: 17, title: '사망보험 1억이면 충분할까요 40세 여자', cat: '암보험', target: '40세 여성' },
+  { id: 18, title: '태아보험 리모델링 종합보험 자녀 가입 고민', cat: '태아보험', target: '30대' },
+  { id: 19, title: '현대해상 태아보험 산모특약 구성문의', cat: '태아보험', target: '30대 여성' },
+  { id: 20, title: '흥국생명 다빈치로봇암수술보험 봐주세요', cat: '암보험', target: '30대' },
+];
+
+
+// ═══ 초기화 ═══
+function init() {
+  // OAuth 콜백 처리
+  const urlParams = new URLSearchParams(window.location.search);
+  const code = urlParams.get('code');
+  const authState = urlParams.get('state');
+  
+  if (code) {
+    handleOAuthCallback(code, authState);
+    return;
+  }
+
+  if (state.accessToken) {
+    showDashboard();
+  }
+  
+  renderQueue();
+}
+
+// ═══ 네이버 로그인 ═══
+function naverLogin() {
+  const authState = Math.random().toString(36).substring(2, 10);
+  const authUrl = 'https://nid.naver.com/oauth2.0/authorize'
+    + `?response_type=code`
+    + `&client_id=${CONFIG.NAVER_CLIENT_ID}`
+    + `&redirect_uri=${encodeURIComponent(window.location.origin + window.location.pathname)}`
+    + `&state=${authState}`;
+  
+  localStorage.setItem('oauth_state', authState);
+  window.location.href = authUrl;
+}
+
+// ═══ OAuth 콜백 처리 ═══
+async function handleOAuthCallback(code, authState) {
+  addLog('info', '네이버 로그인 처리 중...');
+  
+  try {
+    const redirectUri = window.location.origin + window.location.pathname;
+    const res = await fetch(
+      `${CONFIG.API_BASE}/auth/callback?code=${code}&state=${authState}&redirect_uri=${encodeURIComponent(redirectUri)}`
+    );
+    const data = await res.json();
+    
+    if (data.error) {
+      addLog('error', `로그인 실패: ${data.error} — ${data.description || ''}`);
+      return;
+    }
+    
+    state.accessToken = data.access_token;
+    state.refreshToken = data.refresh_token;
+    
+    localStorage.setItem('naver_access_token', data.access_token);
+    localStorage.setItem('naver_refresh_token', data.refresh_token || '');
+    
+    // URL 정리 (code 파라미터 제거)
+    window.history.replaceState({}, '', window.location.pathname);
+    
+    addLog('success', '✅ 네이버 로그인 성공!');
+    
+    // 프로필 조회
+    await fetchProfile();
+    
+    showDashboard();
+    
+  } catch (err) {
+    addLog('error', `로그인 에러: ${err.message}`);
+  }
+}
+
+// ═══ 프로필 조회 ═══
+async function fetchProfile() {
+  try {
+    const res = await fetch(`${CONFIG.API_BASE}/auth/profile`, {
+      headers: { 'Authorization': `Bearer ${state.accessToken}` },
+    });
+    const data = await res.json();
+    
+    if (data.response) {
+      state.userName = data.response.nickname || data.response.name || '사용자';
+      localStorage.setItem('naver_user_name', state.userName);
+      addLog('success', `프로필: ${state.userName}`);
+    }
+  } catch (err) {
+    addLog('warn', '프로필 조회 실패 (토큰은 유효)');
+  }
+}
+
+// ═══ 대시보드 표시 ═══
+function showDashboard() {
+  document.getElementById('loginSection').style.display = 'none';
+  document.getElementById('dashboard').classList.add('active');
+  document.getElementById('userInfo').style.display = 'flex';
+  document.getElementById('userName').textContent = state.userName || '연결됨';
+  
+  // 통계 업데이트
+  document.getElementById('statPublished').textContent = state.publishedCount;
+  document.getElementById('statTokenExp').textContent = '유효';
+  
+  addLog('info', '▸ 대시보드 로드 완료');
+  addLog('info', `▸ 발행 큐: ${PUBLISH_QUEUE.length}개`);
+}
+
+// ═══ 로그아웃 ═══
+function logout() {
+  localStorage.removeItem('naver_access_token');
+  localStorage.removeItem('naver_refresh_token');
+  localStorage.removeItem('naver_user_name');
+  state.accessToken = null;
+  state.refreshToken = null;
+  state.userName = null;
+  
+  document.getElementById('loginSection').style.display = 'flex';
+  document.getElementById('dashboard').classList.remove('active');
+  document.getElementById('userInfo').style.display = 'none';
+}
+
+// ═══ 발행 큐 렌더링 ═══
+function renderQueue() {
+  const container = document.getElementById('queueList');
+  if (!container) return;
+  
+  container.innerHTML = PUBLISH_QUEUE.map(item => {
+    const catClass = `cat-${item.cat}`;
+    return `
+      <div class="queue-item" onclick="selectQueueItem(${item.id})">
+        <div>
+          <span class="cat ${catClass}">${item.cat}</span>
+          <span style="margin-left:8px;font-size:13px">${item.title.substring(0, 40)}${item.title.length > 40 ? '...' : ''}</span>
+        </div>
+        <span style="font-size:12px;color:var(--text2)">${item.target}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+// ═══ 큐 항목 선택 → 제목/본문 자동 채움 ═══
+function selectQueueItem(id) {
+  const item = PUBLISH_QUEUE.find(q => q.id === id);
+  if (!item) return;
+  
+  document.getElementById('postSubject').value = item.title;
+  
+  // 기본 본문 템플릿 생성
+  const content = generateCafeContent(item);
+  document.getElementById('postContent').value = content;
+  
+  addLog('info', `▸ #${id} 선택: ${item.title.substring(0, 30)}...`);
+}
+
+// ═══ 카페 콘텐츠 생성 (기본 템플릿) ═══
+function generateCafeContent(item) {
+  return `안녕하세요, ${item.target} ${item.cat} 관련해서 질문드립니다.
+
+${item.title}
+
+요즘 보험 리모델링 관련해서 많이 알아보고 있는데, 
+혹시 비슷한 경험 있으신 분들 조언 좀 부탁드려요!
+
+제가 원하는 건:
+- 보험료 대비 보장 범위가 넓은 구성
+- 갱신형보다 비갱신형 선호
+- 월 보험료 합리적인 선에서
+
+경험담이나 조언 감사합니다 :)
+
+#${item.cat} #보험비교 #보험상담 #${item.target.replace(' ', '')}`;
+}
+
+// ═══ 미리보기 ═══
+function previewPost() {
+  const subject = document.getElementById('postSubject').value;
+  const content = document.getElementById('postContent').value;
+  
+  if (!subject || !content) {
+    addLog('warn', '제목과 본문을 입력하세요');
+    return;
+  }
+  
+  const previewCard = document.getElementById('previewCard');
+  const previewBox = document.getElementById('previewBox');
+  
+  previewBox.innerHTML = `<h1>${subject}</h1><hr>${content.replace(/\n/g, '<br>')}`;
+  previewCard.style.display = 'block';
+  previewCard.scrollIntoView({ behavior: 'smooth' });
+}
+
+// ═══ 카페 발행 ═══
+async function publishPost() {
+  const clubId = document.getElementById('clubId').value.trim();
+  const menuId = document.getElementById('menuId').value.trim();
+  const subject = document.getElementById('postSubject').value.trim();
+  const content = document.getElementById('postContent').value.trim();
+  const openYn = document.getElementById('openYn').value;
+  
+  if (!clubId || !menuId) {
+    addLog('error', '카페 Club ID와 Menu ID를 입력하세요');
+    return;
+  }
+  
+  if (!subject || !content) {
+    addLog('error', '제목과 본문을 입력하세요');
+    return;
+  }
+  
+  if (!state.accessToken) {
+    addLog('error', '네이버 로그인이 필요합니다');
+    return;
+  }
+  
+  addLog('info', `▸ 발행 중... [${clubId}/${menuId}]`);
+  
+  try {
+    const res = await fetch(`${CONFIG.API_BASE}/cafe/write`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.accessToken}`,
+      },
+      body: JSON.stringify({
+        clubid: clubId,
+        menuid: menuId,
+        subject: subject,
+        content: content,
+        openyn: openYn === 'true',
+      }),
+    });
+    
+    const data = await res.json();
+    
+    if (res.ok && !data.error) {
+      state.publishedCount++;
+      localStorage.setItem('published_count', state.publishedCount.toString());
+      document.getElementById('statPublished').textContent = state.publishedCount;
+      
+      addLog('success', `✅ 발행 성공! Article ID: ${data.articleId || JSON.stringify(data)}`);
+      
+      // 다음 카페 URL 표시
+      const cafeUrl = `https://cafe.naver.com/ca-fe/cafes/${clubId}/articles/${data.articleId || ''}`;
+      addLog('success', `📎 ${cafeUrl}`);
+    } else {
+      addLog('error', `발행 실패: ${data.error_description || data.message || JSON.stringify(data)}`);
+      
+      if (res.status === 401) {
+        addLog('warn', '토큰 만료. 다시 로그인 해주세요.');
+      }
+    }
+  } catch (err) {
+    addLog('error', `네트워크 에러: ${err.message}`);
+  }
+}
+
+// ═══ 로그 ═══
+function addLog(type, message) {
+  const logBox = document.getElementById('logBox');
+  if (!logBox) return;
+  
+  const time = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const div = document.createElement('div');
+  div.className = type;
+  div.textContent = `[${time}] ${message}`;
+  logBox.appendChild(div);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+// ═══ 초기화 실행 ═══
+document.addEventListener('DOMContentLoaded', init);
+</script>
+
+</body>
+</html>
