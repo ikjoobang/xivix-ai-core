@@ -606,7 +606,7 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === "/healthz") {
-      return json({ status: "ok", version: "v2.1" });
+      return json({ status: "ok", version: "v2.2" });
     }
 
     // CORS preflight
@@ -697,7 +697,7 @@ async function apiStatus(env) {
   const aiEngine = cfg.zai_api_key ? "GLM-5" : (cfg.openai_api_key ? "GPT-4o" : "없음");
 
   return json({
-    version: "v2.1",
+    version: "v2.2",
     ai_engine: aiEngine,
     api_keys: {
       "네이버카페": !!(cfg.naver_client_id && cfg.naver_client_secret),
