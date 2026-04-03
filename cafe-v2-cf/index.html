@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XIVIX 카페 자동화 v21.0</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Segoe UI', -apple-system, sans-serif; background:#0f172a; color:#e2e8f0; min-height:100vh; }
+
+.nav { background:#1e293b; border-bottom:1px solid #334155; padding:0 24px; display:flex; align-items:center; gap:4px; overflow-x:auto; }
+.nav .logo { font-size:18px; font-weight:700; color:#38bdf8; padding:16px 12px 16px 0; border-right:1px solid #334155; margin-right:8px; white-space:nowrap; }
+.nav .ver { font-size:11px; color:#64748b; margin-left:4px; }
+.nav button { background:none; border:none; color:#94a3b8; padding:12px 14px; cursor:pointer; font-size:13px; border-bottom:2px solid transparent; transition:all .2s; white-space:nowrap; }
+.nav button:hover { color:#e2e8f0; }
+.nav button.active { color:#38bdf8; border-bottom-color:#38bdf8; }
+
+.main { max-width:1100px; margin:0 auto; padding:24px; }
+.tab { display:none; }
+.tab.active { display:block; }
+
+.card { background:#1e293b; border:1px solid #334155; border-radius:12px; padding:24px; margin-bottom:20px; }
+.card h2 { font-size:16px; color:#38bdf8; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+
+.status-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px; }
+.status-item { background:#0f172a; border-radius:8px; padding:14px; text-align:center; }
+.status-item .icon { font-size:24px; margin-bottom:6px; }
+.status-item .label { font-size:11px; color:#94a3b8; }
+.status-item .value { font-size:16px; font-weight:600; margin-top:4px; }
+.status-item .value.ok { color:#4ade80; }
+.status-item .value.fail { color:#f87171; }
+
+.form-group { margin-bottom:16px; }
+.form-group label { display:block; font-size:13px; color:#94a3b8; margin-bottom:6px; }
+.form-group input, .form-group select, .form-group textarea {
+  width:100%; padding:10px 14px; background:#0f172a; border:1px solid #334155;
+  border-radius:8px; color:#e2e8f0; font-size:14px; outline:none;
+}
+.form-group input:focus, .form-group textarea:focus, .form-group select:focus { border-color:#38bdf8; }
+.form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.form-row-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+
+.btn { padding:10px 20px; border:none; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; transition:all .2s; }
+.btn-primary { background:#2563eb; color:white; }
+.btn-primary:hover { background:#3b82f6; }
+.btn-success { background:#16a34a; color:white; }
+.btn-success:hover { background:#22c55e; }
+.btn-warning { background:#d97706; color:white; }
+.btn-warning:hover { background:#f59e0b; }
+.btn-danger { background:#dc2626; color:white; }
+.btn-sm { padding:6px 14px; font-size:13px; }
+.btn:disabled { opacity:.5; cursor:not-allowed; }
+.btn-group { display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+
+.trend-bar { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid #1e293b; }
+.trend-bar:last-child { border:none; }
+.trend-rank { width:28px; height:28px; background:#2563eb; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex-shrink:0; }
+.trend-name { flex:1; font-weight:600; }
+.trend-change { font-weight:600; min-width:70px; text-align:right; }
+.trend-change.up { color:#4ade80; }
+.trend-change.down { color:#f87171; }
+.trend-meter { width:120px; height:8px; background:#1e293b; border-radius:4px; overflow:hidden; }
+.trend-meter-fill { height:100%; background:#38bdf8; border-radius:4px; transition:width .5s; }
+
+.plan-item { display:flex; align-items:center; gap:12px; padding:12px; background:#0f172a; border-radius:8px; margin-bottom:8px; }
+.plan-day { padding:4px 10px; border-radius:6px; font-size:13px; font-weight:600; min-width:50px; text-align:center; }
+.plan-day.today { background:#f59e0b; color:#000; }
+.plan-day.other { background:#7c3aed; color:white; }
+.plan-kw { color:#38bdf8; font-weight:600; min-width:80px; }
+.plan-topic { color:#cbd5e1; flex:1; }
+
+.preview { background:#0f172a; border:1px solid #334155; border-radius:8px; padding:20px; margin-top:16px; white-space:pre-wrap; font-size:14px; line-height:1.7; max-height:500px; overflow-y:auto; }
+.preview-title { font-size:18px; font-weight:700; color:#f1f5f9; margin-bottom:12px; }
+.preview-summary { color:#38bdf8; margin-bottom:16px; padding:12px; background:#1e293b; border-radius:8px; }
+
+.history-table { width:100%; border-collapse:collapse; }
+.history-table th { text-align:left; padding:10px 12px; color:#94a3b8; font-size:13px; border-bottom:1px solid #334155; }
+.history-table td { padding:10px 12px; font-size:13px; border-bottom:1px solid #1e293b; }
+.badge { padding:2px 8px; border-radius:4px; font-size:12px; font-weight:600; }
+.badge-ok { background:#16a34a33; color:#4ade80; }
+.badge-fail { background:#dc262633; color:#f87171; }
+
+/* SEO 스코어 */
+.score-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin:16px 0; }
+.score-box { background:#0f172a; border-radius:8px; padding:16px; text-align:center; }
+.score-box .name { font-size:12px; color:#94a3b8; margin-bottom:4px; }
+.score-box .num { font-size:28px; font-weight:700; }
+.score-box .num.A { color:#4ade80; }
+.score-box .num.B { color:#38bdf8; }
+.score-box .num.C { color:#f59e0b; }
+.score-box .num.D { color:#f87171; }
+.suggestion { background:#0f172a; padding:10px 14px; border-radius:6px; margin:4px 0; font-size:13px; color:#fbbf24; border-left:3px solid #f59e0b; }
+
+/* Cron 로그 */
+.cron-log { max-height:400px; overflow-y:auto; }
+.cron-entry { padding:10px; border-bottom:1px solid #1e293b; font-size:13px; }
+.cron-entry.success { border-left:3px solid #4ade80; }
+.cron-entry.fail { border-left:3px solid #f87171; }
+.cron-entry.skip { border-left:3px solid #94a3b8; }
+
+.loading { text-align:center; padding:40px; color:#94a3b8; }
+.toast { position:fixed; top:20px; right:20px; padding:14px 20px; border-radius:8px; font-size:14px; z-index:9999; animation:slideIn .3s; max-width:400px; }
+.toast-ok { background:#16a34a; color:white; }
+.toast-err { background:#dc2626; color:white; }
+@keyframes slideIn { from{transform:translateX(100px);opacity:0} to{transform:none;opacity:1} }
+
+::-webkit-scrollbar { width:6px; }
+::-webkit-scrollbar-track { background:#1e293b; }
+::-webkit-scrollbar-thumb { background:#475569; border-radius:3px; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="logo">XIVIX <span class="ver">v21.0</span></div>
+  <button class="active" onclick="showTab('dashboard')">대시보드</button>
+  <button onclick="showTab('generate')">글 생성</button>
+  <button onclick="showTab('seo')">SEO 분석</button>
+  <button onclick="showTab('trend')">트렌드</button>
+  <button onclick="showTab('plan')">주간 플랜</button>
+  <button onclick="showTab('cron')">자동발행</button>
+  <button onclick="showTab('history')">이력</button>
+  <button onclick="showTab('settings')">설정</button>
+</nav>
+
+<div class="main">
+
+<!-- ===== 대시보드 ===== -->
+<div id="tab-dashboard" class="tab active">
+  <div class="card">
+    <h2>시스템 상태</h2>
+    <div class="status-grid" id="status-grid"><div class="loading">로딩 중...</div></div>
+  </div>
+  <div class="card">
+    <h2>빠른 실행</h2>
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="quickGenerate()">AI 글 자동 생성</button>
+      <button class="btn btn-warning" onclick="triggerCron()">Cron 수동 실행</button>
+      <button class="btn btn-success" onclick="showTab('trend')">트렌드 확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 글 생성 ===== -->
+<div id="tab-generate" class="tab">
+  <div class="card">
+    <h2>콘텐츠 생성</h2>
+    <div class="form-row-3">
+      <div class="form-group">
+        <label>카테고리</label>
+        <select id="gen-category">
+          <option value="info">정보성 (70%)</option>
+          <option value="review">후기성 (20%)</option>
+          <option value="promo">제품홍보성 (10%)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>키워드 (비우면 랜덤)</label>
+        <select id="gen-keyword">
+          <option value="">랜덤 선택</option>
+          <option value="실손보험">실손보험</option>
+          <option value="암보험">암보험</option>
+          <option value="자동차보험">자동차보험</option>
+          <option value="연금보험">연금보험</option>
+          <option value="태아보험">태아보험</option>
+          <option value="치매보험">치매보험</option>
+          <option value="간병보험">간병보험</option>
+          <option value="건강보험">건강보험</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>주제 (비우면 자동)</label>
+        <input type="text" id="gen-topic" placeholder="예: 2026년 실손 갱신 가이드">
+      </div>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-primary" id="btn-generate" onclick="generateContent()">AI 글 생성 (GLM-4.7-Flash)</button>
+      <button class="btn btn-warning" id="btn-gen-image" onclick="generateImage()" disabled>이미지 생성 (Gemini)</button>
+      <button class="btn btn-success" id="btn-publish" onclick="publishContent()" disabled>카페 발행</button>
+      <button class="btn btn-primary btn-sm" id="btn-analyze" onclick="analyzeSEO()" disabled>SEO 분석</button>
+    </div>
+  </div>
+
+  <div class="card" id="preview-card" style="display:none">
+    <h2>미리보기</h2>
+    <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+      <span id="compliance-badge"></span>
+      <span id="engine-badge" style="font-size:12px; color:#94a3b8;"></span>
+    </div>
+    <div class="preview">
+      <div class="preview-title" id="preview-title"></div>
+      <div class="preview-summary" id="preview-summary"></div>
+      <div id="preview-body"></div>
+    </div>
+    <div style="margin-top:12px; color:#94a3b8; font-size:13px;">
+      글자수: <span id="preview-length">0</span>자 |
+      키워드: <span id="preview-keyword"></span> |
+      카테고리: <span id="preview-category"></span> |
+      해시태그: <span id="preview-hashtags"></span>
+    </div>
+    <div id="preview-image" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+<!-- ===== SEO 분석 ===== -->
+<div id="tab-seo" class="tab">
+  <div class="card">
+    <h2>SEO/C-RANK/DIA 분석</h2>
+    <p style="color:#94a3b8; font-size:13px; margin-bottom:16px;">글 생성 후 자동 분석되거나, 직접 입력하세요.</p>
+    <div id="seo-result">
+      <p style="color:#64748b;">글을 먼저 생성하세요.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 트렌드 ===== -->
+<div id="tab-trend" class="tab">
+  <div class="card">
+    <h2>보험 키워드 트렌드</h2>
+    <button class="btn btn-primary btn-sm" onclick="loadTrend()">새로고침</button>
+    <div id="trend-list" style="margin-top:16px"><div class="loading">트렌드 로딩 중...</div></div>
+  </div>
+</div>
+
+<!-- ===== 주간 플랜 ===== -->
+<div id="tab-plan" class="tab">
+  <div class="card">
+    <h2>이번 주 콘텐츠 플랜</h2>
+    <div id="plan-list"><div class="loading">플랜 로딩 중...</div></div>
+  </div>
+</div>
+
+<!-- ===== 자동발행 (Cron) ===== -->
+<div id="tab-cron" class="tab">
+  <div class="card">
+    <h2>자동발행 관리</h2>
+    <div class="btn-group" style="margin-bottom:16px;">
+      <button class="btn btn-warning" onclick="triggerCron()">수동 1회 실행</button>
+      <button class="btn btn-primary btn-sm" onclick="loadCronLog()">로그 새로고침</button>
+    </div>
+    <p style="color:#94a3b8; font-size:13px; margin-bottom:16px;">
+      외부 Cron 서비스(cron-job.org 등)에서 <code style="background:#0f172a; padding:2px 6px; border-radius:4px;">/api/cron-publish</code> 를 호출하면 자동 발행됩니다.
+    </p>
+    <div class="cron-log" id="cron-log"><div class="loading">로그 로딩 중...</div></div>
+  </div>
+</div>
+
+<!-- ===== 이력 ===== -->
+<div id="tab-history" class="tab">
+  <div class="card">
+    <h2>발행 이력</h2>
+    <table class="history-table">
+      <thead><tr><th>시간</th><th>키워드</th><th>카테고리</th><th>제목</th><th>상태</th><th>링크</th></tr></thead>
+      <tbody id="history-body"><tr><td colspan="6" class="loading">로딩 중...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ===== 설정 ===== -->
+<div id="tab-settings" class="tab">
+  <div class="card">
+    <h2>API 키 설정</h2>
+    <p style="color:#94a3b8; font-size:13px; margin-bottom:16px;">마스킹(****)된 값은 변경하지 않으면 유지됩니다.</p>
+
+    <h3 style="color:#f59e0b; font-size:14px; margin:20px 0 12px;">AI 엔진</h3>
+    <div class="form-row-3">
+      <div class="form-group"><label>Z.ai API Key (GLM-4.7-Flash)</label><input id="cfg-zai_api_key" type="password"></div>
+      <div class="form-group"><label>OpenAI API Key (폴백)</label><input id="cfg-openai_api_key" type="password"></div>
+      <div class="form-group"><label>Gemini API Key (이미지)</label><input id="cfg-gemini_api_key" type="password"></div>
+    </div>
+
+    <h3 style="color:#f59e0b; font-size:14px; margin:20px 0 12px;">네이버 카페 API</h3>
+    <div class="form-row">
+      <div class="form-group"><label>Client ID</label><input id="cfg-naver_client_id"></div>
+      <div class="form-group"><label>Client Secret</label><input id="cfg-naver_client_secret" type="password"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>카페 ID (숫자)</label><input id="cfg-naver_cafe_id" placeholder="예: 31153299"></div>
+      <div class="form-group"><label>메뉴 ID</label><input id="cfg-naver_menu_id" placeholder="예: 4"></div>
+    </div>
+
+    <h3 style="color:#f59e0b; font-size:14px; margin:20px 0 12px;">네이버 데이터랩 API</h3>
+    <div class="form-row">
+      <div class="form-group"><label>Client ID</label><input id="cfg-datalab_client_id"></div>
+      <div class="form-group"><label>Client Secret</label><input id="cfg-datalab_client_secret" type="password"></div>
+    </div>
+
+    <h3 style="color:#f59e0b; font-size:14px; margin:20px 0 12px;">운영 설정</h3>
+    <div class="form-row">
+      <div class="form-group"><label>발행 간격 (분)</label><input id="cfg-post_interval_minutes" type="number" value="60"></div>
+      <div class="form-group"><label>일일 발행 한도</label><input id="cfg-daily_post_limit" type="number" value="24"></div>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn btn-success" onclick="saveConfig()">설정 저장</button>
+      <button class="btn btn-primary" onclick="naverAuth()">네이버 인증</button>
+      <button class="btn btn-warning btn-sm" onclick="refreshToken()">토큰 갱신</button>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+const TAB_MAP = {dashboard:0, generate:1, seo:2, trend:3, plan:4, cron:5, history:6, settings:7};
+let currentContent = null;
+
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  const btns = document.querySelectorAll('.nav button');
+  if (TAB_MAP[name] !== undefined) btns[TAB_MAP[name]].classList.add('active');
+  if (name === 'dashboard') loadStatus();
+  if (name === 'trend') loadTrend();
+  if (name === 'plan') loadPlan();
+  if (name === 'history') loadHistory();
+  if (name === 'settings') loadConfig();
+  if (name === 'cron') loadCronLog();
+}
+
+function toast(msg, ok = true) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + (ok ? 'toast-ok' : 'toast-err');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+async function api(url, opts = {}) {
+  try {
+    const resp = await fetch(url, opts);
+    return await resp.json();
+  } catch (e) {
+    toast('서버 연결 실패: ' + e.message, false);
+    return null;
+  }
+}
+
+// ===== 대시보드 =====
+async function loadStatus() {
+  const d = await api('/api/status');
+  if (!d) return;
+  const grid = document.getElementById('status-grid');
+  const items = [
+    { icon: d.api_keys['GLM-4.7-Flash (Z.ai)'] ? '$$' : 'X', label: 'GLM-4.7 (글)', value: d.api_keys['GLM-4.7-Flash (Z.ai)'] ? '연결됨' : '미설정', ok: d.api_keys['GLM-4.7-Flash (Z.ai)'] },
+    { icon: d.api_keys['Gemini (이미지)'] ? '$$' : 'X', label: 'Gemini (이미지)', value: d.api_keys['Gemini (이미지)'] ? '연결됨' : '미설정', ok: d.api_keys['Gemini (이미지)'] },
+    { icon: d.api_keys['네이버카페'] ? '$$' : 'X', label: '네이버 카페', value: d.api_keys['네이버카페'] ? '연결됨' : '미설정', ok: d.api_keys['네이버카페'] },
+    { icon: d.cafe_auth ? '$$' : 'X', label: '카페 인증', value: d.cafe_auth ? '인증됨' : '미인증', ok: d.cafe_auth },
+    { icon: '#', label: '오늘 발행', value: d.today_count + '/' + d.daily_limit, ok: d.today_count < d.daily_limit },
+    { icon: 'V', label: '버전', value: d.version || 'v21.0', ok: true },
+  ];
+  grid.innerHTML = items.map(i => `
+    <div class="status-item">
+      <div class="icon">${i.icon}</div>
+      <div class="label">${i.label}</div>
+      <div class="value ${i.ok ? 'ok' : 'fail'}">${i.value}</div>
+    </div>
+  `).join('');
+}
+
+// ===== 트렌드 =====
+async function loadTrend() {
+  const d = await api('/api/trend');
+  if (!d) return;
+  const el = document.getElementById('trend-list');
+  if (!d.ok || !d.trends.length) {
+    el.innerHTML = '<p style="color:#94a3b8">트렌드 데이터 없음</p>';
+    return;
+  }
+  const maxR = Math.max(...d.trends.map(t => t.recent), 1);
+  el.innerHTML = d.trends.map((t, i) => `
+    <div class="trend-bar">
+      <div class="trend-rank">${i+1}</div>
+      <div class="trend-name">${t.keyword}</div>
+      <div class="trend-meter"><div class="trend-meter-fill" style="width:${(t.recent/maxR*100).toFixed(0)}%"></div></div>
+      <div class="trend-change ${t.change > 0 ? 'up' : 'down'}">${t.change > 0 ? '+' : ''}${t.change.toFixed(1)}%</div>
+    </div>
+  `).join('');
+}
+
+// ===== 주간 플랜 =====
+async function loadPlan() {
+  const d = await api('/api/plan');
+  if (!d || !d.ok) return;
+  document.getElementById('plan-list').innerHTML = d.plan.map(p => `
+    <div class="plan-item">
+      <span class="plan-day ${p.isToday ? 'today' : 'other'}">${p.day}${p.isToday ? ' (오늘)' : ''}</span>
+      <span class="plan-kw">${p.keyword}</span>
+      <span class="plan-topic">${p.topic}</span>
+      <button class="btn btn-primary btn-sm" onclick="useForGenerate('${p.keyword}','${p.topic.replace(/'/g,"\\'")}')">생성</button>
+    </div>
+  `).join('');
+}
+
+function useForGenerate(kw, topic) {
+  document.getElementById('gen-keyword').value = kw;
+  document.getElementById('gen-topic').value = topic;
+  showTab('generate');
+}
+
+// ===== 글 생성 =====
+async function generateContent() {
+  const btn = document.getElementById('btn-generate');
+  btn.disabled = true;
+  btn.textContent = '생성 중...';
+
+  const d = await api('/api/generate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      keyword: document.getElementById('gen-keyword').value,
+      topic: document.getElementById('gen-topic').value,
+      category: document.getElementById('gen-category').value,
+    })
+  });
+
+  btn.disabled = false;
+  btn.textContent = 'AI 글 생성 (GLM-4.7-Flash)';
+
+  if (!d || !d.ok) {
+    toast(d ? d.error || '생성 실패' : '서버 오류', false);
+    return;
+  }
+
+  currentContent = d;
+  document.getElementById('preview-card').style.display = 'block';
+  document.getElementById('preview-title').textContent = d.title;
+  document.getElementById('preview-summary').textContent = d.summary ? '한줄요약: ' + d.summary : '';
+  document.getElementById('preview-body').textContent = d.body;
+  document.getElementById('preview-length').textContent = d.length;
+  document.getElementById('preview-keyword').textContent = d.keyword;
+  document.getElementById('preview-category').textContent = d.category;
+  document.getElementById('preview-hashtags').textContent = d.hashtags;
+  document.getElementById('engine-badge').textContent = 'AI: ' + d.ai_engine;
+  document.getElementById('compliance-badge').innerHTML = d.compliance_ok
+    ? '<span class="badge badge-ok">금소법 통과</span>'
+    : '<span class="badge badge-fail">금소법 필터링: ' + d.filtered_words.join(', ') + '</span>';
+
+  document.getElementById('btn-gen-image').disabled = false;
+  document.getElementById('btn-publish').disabled = false;
+  document.getElementById('btn-analyze').disabled = false;
+
+  toast('콘텐츠 생성 완료! (' + d.ai_engine + ')');
+}
+
+async function generateImage() {
+  if (!currentContent) return;
+  const btn = document.getElementById('btn-gen-image');
+  btn.disabled = true;
+  btn.textContent = '이미지 생성 중...';
+
+  const d = await api('/api/generate-image', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ keyword: currentContent.keyword, type: 'thumbnail' })
+  });
+
+  btn.disabled = false;
+  btn.textContent = '이미지 생성 (Gemini)';
+
+  if (d && d.ok) {
+    currentContent.image_key = d.image_key;
+    document.getElementById('preview-image').innerHTML = `<img src="${d.image_url}" style="max-width:400px; border-radius:8px; border:1px solid #334155;">`;
+    toast('이미지 생성 완료!');
+  } else {
+    toast(d ? d.error : '이미지 생성 실패', false);
+  }
+}
+
+async function publishContent() {
+  if (!currentContent) return;
+  if (!confirm('카페에 발행하시겠습니까?')) return;
+
+  const btn = document.getElementById('btn-publish');
+  btn.disabled = true;
+  btn.textContent = '발행 중...';
+
+  const d = await api('/api/publish', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      title: currentContent.title,
+      html_body: currentContent.html_body,
+      body: currentContent.body,
+      keyword: currentContent.keyword,
+      hashtags: currentContent.hashtags,
+      category: currentContent.category,
+      image_key: currentContent.image_key || null,
+    })
+  });
+
+  btn.disabled = false;
+  btn.textContent = '카페 발행';
+
+  if (d && d.ok) {
+    toast('카페 발행 완료!');
+    if (d.articleUrl) {
+      document.getElementById('preview-card').innerHTML += `<div style="margin-top:12px;"><a href="${d.articleUrl}" target="_blank" style="color:#38bdf8;">발행된 글 보기</a></div>`;
+    }
+  } else {
+    toast(d ? d.error : '발행 실패', false);
+  }
+}
+
+function quickGenerate() {
+  showTab('generate');
+  generateContent();
+}
+
+// ===== SEO 분석 =====
+async function analyzeSEO() {
+  if (!currentContent) return;
+  const d = await api('/api/analyze-seo', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      title: currentContent.title,
+      body: currentContent.body,
+      keyword: currentContent.keyword,
+    })
+  });
+
+  if (!d || !d.ok) { toast('분석 실패', false); return; }
+
+  const gc = (s) => s >= 80 ? 'A' : s >= 60 ? 'B' : s >= 40 ? 'C' : 'D';
+  const el = document.getElementById('seo-result');
+  el.innerHTML = `
+    <div style="text-align:center; margin-bottom:20px;">
+      <span style="font-size:48px; font-weight:700;" class="${d.grade}">${d.total}점 (${d.grade})</span>
+    </div>
+    <div class="score-grid">
+      <div class="score-box"><div class="name">C-RANK</div><div class="num ${gc(d.scores.crank)}">${d.scores.crank}</div></div>
+      <div class="score-box"><div class="name">DIA</div><div class="num ${gc(d.scores.dia)}">${d.scores.dia}</div></div>
+      <div class="score-box"><div class="name">SEO</div><div class="num ${gc(d.scores.seo)}">${d.scores.seo}</div></div>
+      <div class="score-box"><div class="name">AEO</div><div class="num ${gc(d.scores.aeo)}">${d.scores.aeo}</div></div>
+      <div class="score-box"><div class="name">GEO</div><div class="num ${gc(d.scores.geo)}">${d.scores.geo}</div></div>
+    </div>
+    <div style="font-size:13px; color:#94a3b8; margin:12px 0;">
+      글자수: ${d.details.length}자 | 키워드밀도: ${d.details.keyword_density}% | Q&A: ${d.details.qa_count}개 | 소제목: ${d.details.subheadings}개
+    </div>
+    ${d.suggestions.length ? '<h3 style="color:#f59e0b; font-size:14px; margin:16px 0 8px;">수정 제안</h3>' + d.suggestions.map(s => `<div class="suggestion">${s}</div>`).join('') : '<p style="color:#4ade80;">수정 사항 없음</p>'}
+  `;
+
+  showTab('seo');
+}
+
+// ===== Cron =====
+async function triggerCron() {
+  toast('Cron 실행 중...');
+  const d = await api('/api/cron-publish');
+  if (d && d.ok) {
+    toast('자동발행 성공: ' + (d.title || d.keyword));
+  } else {
+    toast(d ? (d.error || d.reason || '실패') : '서버 오류', false);
+  }
+  loadCronLog();
+}
+
+async function loadCronLog() {
+  const d = await api('/api/cron-log');
+  if (!d || !d.ok) return;
+  const el = document.getElementById('cron-log');
+  if (!d.logs.length) {
+    el.innerHTML = '<p style="color:#94a3b8; padding:20px;">로그 없음</p>';
+    return;
+  }
+  el.innerHTML = d.logs.map(l => `
+    <div class="cron-entry ${l.status}">
+      <span style="color:#64748b;">${(l.time||'').slice(0,16).replace('T',' ')}</span>
+      <span class="badge ${l.status==='success'?'badge-ok':'badge-fail'}" style="margin:0 8px;">${l.status}</span>
+      <span>${l.keyword||''}</span> - <span>${l.title||l.reason||l.error||''}</span>
+      ${l.articleUrl ? ' <a href="'+l.articleUrl+'" target="_blank" style="color:#38bdf8;">보기</a>' : ''}
+    </div>
+  `).join('');
+}
+
+// ===== 이력 =====
+async function loadHistory() {
+  const d = await api('/api/history');
+  if (!d) return;
+  const el = document.getElementById('history-body');
+  if (!d.posts.length) {
+    el.innerHTML = '<tr><td colspan="6" style="color:#94a3b8; text-align:center; padding:24px;">발행 이력이 없습니다</td></tr>';
+    return;
+  }
+  el.innerHTML = d.posts.reverse().slice(0, 50).map(p => `
+    <tr>
+      <td>${(p.timestamp||'').slice(0,16).replace('T',' ')}</td>
+      <td>${p.keyword||''}</td>
+      <td>${p.category||'info'}</td>
+      <td style="max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${p.title||''}</td>
+      <td><span class="badge ${p.status==='success' ? 'badge-ok' : 'badge-fail'}">${p.status}</span></td>
+      <td>${p.articleUrl ? '<a href="'+p.articleUrl+'" target="_blank" style="color:#38bdf8;">보기</a>' : (p.error||'').slice(0,30)}</td>
+    </tr>
+  `).join('');
+}
+
+// ===== 설정 =====
+const CFG_FIELDS = ['zai_api_key','openai_api_key','gemini_api_key','naver_client_id','naver_client_secret','naver_cafe_id','naver_menu_id','datalab_client_id','datalab_client_secret','post_interval_minutes','daily_post_limit'];
+
+async function loadConfig() {
+  const d = await api('/api/config');
+  if (!d) return;
+  CFG_FIELDS.forEach(f => {
+    const el = document.getElementById('cfg-' + f);
+    if (el) el.value = d[f] || '';
+  });
+}
+
+async function saveConfig() {
+  const data = {};
+  CFG_FIELDS.forEach(f => { data[f] = document.getElementById('cfg-' + f).value; });
+  const d = await api('/api/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data)
+  });
+  if (d && d.ok) { toast('설정 저장 완료!'); loadStatus(); }
+  else toast('저장 실패', false);
+}
+
+async function naverAuth() {
+  const d = await api('/api/auth-url');
+  if (d && d.ok) { window.open(d.url, '_blank'); toast('네이버 로그인 창 열림'); }
+  else toast(d ? d.error : '인증 URL 생성 실패', false);
+}
+
+async function refreshToken() {
+  const d = await api('/api/refresh-token');
+  if (d && d.ok) toast('토큰 갱신 성공!');
+  else toast(d ? d.error : '토큰 갱신 실패', false);
+}
+
+// 초기 로드
+loadStatus();
+</script>
+</body>
+</html>
